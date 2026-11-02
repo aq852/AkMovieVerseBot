@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Telegram MTProto session files (CRITICAL SECURITY - NEVER COMMIT)
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+
+# Environment Variables & Private Secrets
+.env
+*.env
+!*.env.sample
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Runtime downloads, temp buffers, and backups
+downloads/*
+!downloads/.gitkeep
+temp_downloads/
+temp_backup/
+scratch/
+*.tmp
+*.bak
+*.swp
+
+# Cookies & Credentials
+cookies.txt
+
+# Log files
+*.log
+logs/
+
+# Testing and Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# OS / Editor specific
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

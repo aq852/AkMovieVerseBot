@@ -1,0 +1,581 @@
+import re
+import time
+import uuid
+import random
+import humanize
+try:
+    from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+except ImportError:
+    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from config import Config
+
+def get_random_start_pic(pic_url: str = None) -> str:
+    """Return START_PIC URL with dynamic cache-busting query parameter to prevent Telegram DC caching.
+    Supports single URL, comma-separated URLs, or Telegram file_id.
+    """
+    raw_pic = pic_url or Config.START_PIC
+    if not raw_pic:
+        return ""
+
+    # Support multiple URLs separated by space or comma
+    if "," in raw_pic:
+        pics = [p.strip() for p in raw_pic.split(",") if p.strip()]
+        pic = random.choice(pics) if pics else raw_pic
+    elif " " in raw_pic and (raw_pic.startswith("http://") or raw_pic.startswith("https://")):
+        pics = [p.strip() for p in raw_pic.split() if p.strip()]
+        pic = random.choice(pics) if pics else raw_pic
+    else:
+        pic = raw_pic.strip()
+
+    if pic.startswith("http://") or pic.startswith("https://"):
+        sep = "&" if "?" in pic else "?"
+        return f"{pic}{sep}_t={int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+    return pic
+
+def get_chat_type_str(chat_or_message) -> str:
+    """Return normalized chat type string ('private', 'group', 'supergroup', 'channel')."""
+    if hasattr(chat_or_message, "chat"):
+        chat_type = chat_or_message.chat.type
+    elif hasattr(chat_or_message, "message") and hasattr(chat_or_message.message, "chat"):
+        chat_type = chat_or_message.message.chat.type
+    elif hasattr(chat_or_message, "type"):
+        chat_type = chat_or_message.type
+    else:
+        chat_type = chat_or_message
+
+    val = getattr(chat_type, "value", None)
+    if val:
+        return str(val).lower()
+    s = str(chat_type).lower()
+    if "." in s:
+        s = s.split(".")[-1]
+    return s
+
+
+def is_private_chat(chat_or_message) -> bool:
+    """Check if a chat, message, or callback query is a private PM."""
+    return get_chat_type_str(chat_or_message) == "private"
+
+
+NOISE_WORDS = {
+    "download", "movie", "movies", "series", "season", "episode",
+    "link", "links", "free", "full", "hd", "watch", "online"
+}
+
+def clean_search_query(query: str) -> str:
+    """Strip punctuation and common search noise words to optimize search precision."""
+    if not query:
+        return ""
+
+    clean = re.sub(r"[^\w\s]", " ", query)
+    tokens = [t for t in clean.split() if t.lower() not in NOISE_WORDS]
+    return " ".join(tokens) if tokens else query.strip()
+
+
+def get_readable_size(size_bytes: int) -> str:
+    """Format file size into clean representation (e.g., 454.47 MB, 2.68 GB)."""
+    try:
+        if size_bytes >= 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+        elif size_bytes >= 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.2f} MB"
+        elif size_bytes >= 1024:
+            return f"{size_bytes / 1024:.2f} KB"
+        return f"{size_bytes} B"
+    except Exception:
+        return humanize.naturalsize(size_bytes, binary=True)
+
+
+def format_clean_title(file_name: str) -> str:
+    """Format file title into a clean, readable name with dots removed."""
+    name = re.sub(r"[\._]", " ", file_name)
+    name = re.sub(r"\.(mkv|mp4|avi|webm|zip|rar)$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name or file_name
+
+
+_POSTER_CACHE: dict[str, str] = {}
+
+async def get_cached_poster_url(title: str) -> str:
+    """Fetch poster URL from TMDB with memory and persistent MongoDB caching.
+    Returns direct CDN image URL (e.g. https://image.tmdb.org/t/p/w500/...) or empty string.
+    Zero VPS disk or bandwidth usage - images stream straight from TMDB CDN to user browser.
+    """
+    import urllib.parse
+    import aiohttp
+    from config import Config
+
+    clean_q = re.sub(r"\s*\((?:19|20)\d{2}\).*", "", title).strip()
+    clean_q = re.sub(r"\s*Season.*", "", clean_q, flags=re.IGNORECASE).strip()
+    clean_q = re.sub(r"[\-_:\[\]\(\)]", " ", clean_q).strip()
+    clean_q = re.sub(r"\s+", " ", clean_q)
+    if not clean_q or len(clean_q) < 2:
+        return ""
+
+    # 1. Fast in-memory cache check
+    if clean_q in _POSTER_CACHE and _POSTER_CACHE[clean_q]:
+        return _POSTER_CACHE[clean_q]
+
+    # 2. Persistent MongoDB cache check
+    try:
+        from database.mongo import mongo
+        cached_doc = await mongo.db["poster_cache"].find_one({"title": clean_q})
+        if cached_doc and cached_doc.get("poster_url"):
+            url = cached_doc["poster_url"]
+            _POSTER_CACHE[clean_q] = url
+            return url
+    except Exception:
+        pass
+
+    # 3. Live TMDB fetch via high-speed worker proxy with official API Key & progressive fallback
+    api_key = getattr(Config, "TMDB_API_KEY", "") or "56b50689afe7438a51aab0d653679865"
+    key_param = f"api_key={api_key}&" if api_key else ""
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+
+    # Progressive queries: 1. Full clean title, 2. Truncate trailing subtitle/tag words (e.g. "Akka The Protectors" -> "Akka")
+    queries_to_try = [clean_q]
+    words = clean_q.split()
+    if len(words) >= 2:
+        for w_len in range(len(words) - 1, 0, -1):
+            sub_q = " ".join(words[:w_len]).strip()
+            if len(sub_q) >= 2 and sub_q not in queries_to_try:
+                queries_to_try.append(sub_q)
+
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4.0)) as session:
+            for q_term in queries_to_try:
+                encoded = urllib.parse.quote(q_term)
+                endpoint = f"https://tmdbapi.the-zake.workers.dev/3/search/multi?{key_param}query={encoded}"
+                async with session.get(endpoint, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        results = data.get("results", [])
+                        for r in results:
+                            poster_path = r.get("poster_path")
+                            if poster_path:
+                                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                                _POSTER_CACHE[clean_q] = poster_url
+                                _POSTER_CACHE[q_term] = poster_url
+                                # Persist asynchronously to MongoDB
+                                try:
+                                    from database.mongo import mongo
+                                    asyncio.create_task(
+                                        mongo.db["poster_cache"].update_one(
+                                            {"title": clean_q},
+                                            {"$set": {"poster_url": poster_url}},
+                                            upsert=True
+                                        )
+                                    )
+                                    if q_term != clean_q:
+                                        asyncio.create_task(
+                                            mongo.db["poster_cache"].update_one(
+                                                {"title": q_term},
+                                                {"$set": {"poster_url": poster_url}},
+                                                upsert=True
+                                            )
+                                        )
+                                except Exception:
+                                    pass
+                                return poster_url
+    except Exception:
+        pass
+
+    # Do NOT store empty string permanently on network hiccup/timeout, so next refresh can retry cleanly!
+    return ""
+
+
+def parse_media_metadata(filename: str) -> dict:
+    """Parse raw release filenames into clean titles, series/episode info, quality, and audio/codec badges."""
+    if not filename:
+        return {"title": "Movie Video", "quality": None, "badges": [], "is_dual_audio": False, "is_combined": False}
+
+    raw = filename.strip()
+    raw_no_ext = re.sub(r"\.(mkv|mp4|avi|webm|flv|mov|zip|rar)$", "", raw, flags=re.IGNORECASE).strip()
+    norm = re.sub(r"[\._]", " ", raw_no_ext)
+
+    # 1. Detect Quality
+    qual_match = re.search(r"\b(2160p|4k|1080p|720p|540p|480p|360p)\b", norm, re.IGNORECASE)
+    quality = qual_match.group(1).upper() if qual_match else None
+    if quality == "2160P":
+        quality = "4K"
+
+    # 2. Detect Codec
+    codec_match = re.search(r"\b(HEVC|H\.?265|x265|H\.?264|x264|AV1|10bit)\b", norm, re.IGNORECASE)
+    codec = codec_match.group(1).upper() if codec_match else None
+
+    # 3. Detect Source
+    src_match = re.search(r"\b(WEB-?DL|WEBRip|BluRay|BRRip|HDRip|HDTV|CAMRip|PreDVD|HDCam|HDTS|TeleSync|DVDScr)\b", norm, re.IGNORECASE)
+    src_map = {
+        "predvd": "PreDVD",
+        "hdcam": "HDCam",
+        "hdts": "HDTS",
+        "telesync": "TeleSync",
+        "dvdscr": "DVDScr",
+        "web-dl": "WEB-DL",
+        "webdl": "WEB-DL",
+        "webrip": "WEBRip",
+        "bluray": "BluRay",
+        "brrip": "BRRip",
+        "hdrip": "HDRip",
+        "hdtv": "HDTV",
+        "camrip": "CAMRip"
+    }
+    source = src_map.get(src_match.group(1).lower(), src_match.group(1)) if src_match else None
+
+    # 4. Detect Audio & Languages
+    audio_tags = []
+    languages = []
+    lang_patterns = [
+        ("Hindi", r"\b(Hindi|Hin)\b"),
+        ("English", r"\b(English|Eng)\b"),
+        ("Tamil", r"\b(Tamil|Tam)\b"),
+        ("Telugu", r"\b(Telugu|Tel)\b"),
+        ("Malayalam", r"\b(Malayalam|Mal)\b"),
+        ("Kannada", r"\b(Kannada|Kan)\b"),
+        ("Bengali", r"\b(Bengali|Ben|Bangla)\b"),
+        ("Punjabi", r"\b(Punjabi|Panjabi|Pun)\b"),
+        ("Marathi", r"\b(Marathi|Mar)\b"),
+        ("Korean", r"\b(Korean|Kor)\b"),
+        ("Japanese", r"\b(Japanese|Jap)\b"),
+        ("Chinese", r"\b(Chinese|Chi)\b")
+    ]
+    is_dual = bool(re.search(r"\b(Dual[\s\.\-_]?Audio|Dual)\b", norm, re.IGNORECASE))
+    is_multi = bool(re.search(r"\b(Multi[\s\.\-_]?Audio|Multi)\b", norm, re.IGNORECASE))
+
+    for l_name, l_pat in lang_patterns:
+        if re.search(l_pat, norm, re.IGNORECASE):
+            languages.append(l_name)
+
+    if is_multi or len(languages) >= 3:
+        audio_tags.append("Multi Audio")
+    elif is_dual or len(languages) >= 2:
+        audio_tags.append("Dual Audio")
+
+    for l in languages:
+        if l not in audio_tags:
+            audio_tags.append(l)
+
+    if re.search(r"\b(DDP?[\s\.\-_]?5\.1|5\.1|Dolby|Atmos)\b", norm, re.IGNORECASE):
+        audio_tags.append("Dolby 5.1")
+
+    # 5. Detect Combined / Series / Episode Range Patterns
+    range_m = re.search(r'\[\s*(?:E|EP)?\s*(\d{1,3})\s*[-–to]+\s*(?:E|EP)?\s*(\d{1,3})\s*\]', norm, re.IGNORECASE)
+    if not range_m:
+        range_m = re.search(r'\(?\s*(?:E|EP)\s*\(?\s*(\d{1,3})\s*[-–to]+\s*(?:E|EP)?\s*(\d{1,3})\s*\)?', norm, re.IGNORECASE)
+    if not range_m:
+        range_m = re.search(r'\b(?:E|EP)\s*(\d{1,3})\s*[-–to]+\s*(?:E|EP)?\s*(\d{1,3})\b', norm, re.IGNORECASE)
+    
+    has_combined_word = bool(re.search(r'\b(COMBINED|COMPLETE|PACK|ALL\s*EPISODES)\b', norm, re.IGNORECASE))
+    season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})(?:[\s._-]*(?:E|EP|Episode|x)[\s._-]*(\d{1,3}))?\b', norm, re.IGNORECASE)
+    if not season_m:
+        season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})\b', norm, re.IGNORECASE)
+
+    single_ep_m = re.search(r'\b(?:E|EP|Episode)[\s._-]*(\d{1,4})\b', norm, re.IGNORECASE)
+    has_single_ep = bool(single_ep_m or (season_m and season_m.group(2)))
+    year_m = re.search(r'\b(19\d{2}|20\d{2})\b', norm)
+
+    is_series = bool(season_m or single_ep_m or range_m or has_combined_word)
+    s_num = int(season_m.group(1)) if season_m else (1 if is_series else None)
+    
+    ep_num = None
+    if season_m and season_m.group(2):
+        ep_num = int(season_m.group(2))
+    elif single_ep_m:
+        ep_num = int(single_ep_m.group(1))
+
+    combined_badge = None
+    extra_title = ""
+    is_combined = False
+    start_ep = None
+    end_ep = None
+
+    if range_m and int(range_m.group(1)) < int(range_m.group(2)):
+        start_ep = int(range_m.group(1))
+        end_ep = int(range_m.group(2))
+        combined_badge = f"📦 Ep {start_ep:02d}–{end_ep:02d} (Combined)"
+        s_num = int(season_m.group(1)) if season_m else 1
+        extra_title = f" Season {s_num} (Ep {start_ep:02d}–{end_ep:02d})"
+        is_combined = True
+    elif has_combined_word and season_m:
+        s_num = int(season_m.group(1))
+        combined_badge = f"📁 Complete Season {s_num}"
+        extra_title = f" Season {s_num} [Complete]"
+        is_combined = True
+        start_ep = 1
+    elif season_m and not has_single_ep:
+        s_num = int(season_m.group(1))
+        combined_badge = f"📁 Season {s_num} Pack"
+        extra_title = f" Season {s_num}"
+        is_combined = True
+        start_ep = 1
+
+    # 5.b Detect Movie Multi-Part / CD / Disc (Part 1, Part 2, CD 1, CD 2, Disc 1, Disc 2, Pt 1, Pt 2, part001, part002, _001, _002)
+    part_regex = re.compile(r'(?:[\s._\-\(\[]|^)(?:part|pt|cd|disc|disk)[\s._\-]*0*([1-9]\d?)(?:[\s._\-\)\]]|$)', re.IGNORECASE)
+    segment_regex = re.compile(r'[_.-]00([1-9])\.(?:mkv|mp4|avi)$', re.IGNORECASE)
+
+    is_part = False
+    part_num = None
+    part_label = None
+    part_match_start = None
+
+    if not season_m and not single_ep_m and not range_m:
+        matches = list(part_regex.finditer(norm))
+        if matches:
+            last_m = matches[-1]
+            part_num = int(last_m.group(1))
+            matched_text = last_m.group(0)
+            prefix = "CD" if re.search(r'\bCD\b', matched_text, re.IGNORECASE) else ("Disc" if re.search(r'\bDisc\b', matched_text, re.IGNORECASE) else "Part")
+            part_label = f"{prefix} {part_num}"
+            is_part = True
+            part_match_start = last_m.start()
+        else:
+            seg_m = segment_regex.search(raw)
+            if seg_m:
+                part_num = int(seg_m.group(1))
+                part_label = f"Part {part_num}"
+                is_part = True
+                part_match_start = seg_m.start()
+
+    # 6. Extract Clean Base Title (Everything before Year / Season / Episode / Part / Resolution)
+    split_indices = []
+    if season_m:
+        split_indices.append(season_m.start())
+    if single_ep_m:
+        split_indices.append(single_ep_m.start())
+    if range_m:
+        split_indices.append(range_m.start())
+    if part_match_start is not None:
+        split_indices.append(part_match_start)
+    if year_m:
+        split_indices.append(year_m.start())
+    if qual_match:
+        split_indices.append(qual_match.start())
+    if src_match:
+        split_indices.append(src_match.start())
+
+    if split_indices:
+        base_title = norm[:min(split_indices)].strip(" -_~|:")
+    else:
+        base_title = norm.strip()
+
+    # Clean release group clutter, pirate websites, and punctuation from base title
+    from utils.title_cleaner import clean_movie_title
+    base_title = clean_movie_title(base_title, keep_year=False)
+
+    if not base_title or len(base_title) < 2:
+        base_title = clean_movie_title(raw_no_ext[:35], keep_year=False)
+
+    yr_str = f" ({year_m.group(1)})" if year_m and year_m.group(1) not in base_title else ""
+    part_suffix = f" [{part_label}]" if is_part and part_label else ""
+    clean_title = f"{base_title}{yr_str}{extra_title}{part_suffix}".strip()
+    clean_title = re.sub(r"\s+", " ", clean_title)
+
+    badges = []
+    if combined_badge:
+        badges.append(combined_badge)
+    if is_part and part_label:
+        badges.append(f"🧩 {part_label}")
+    if source:
+        if source in ["PreDVD", "HDCam", "HDTS", "TeleSync", "DVDScr"]:
+            badges.append(f"📹 {source}")
+        else:
+            badges.append(source)
+    if quality:
+        badges.append(quality)
+    if codec:
+        badges.append(codec)
+    for at in audio_tags[:2]:
+        if at not in badges:
+            badges.append(at)
+
+    return {
+        "title": clean_title or raw,
+        "clean_name": base_title,
+        "year": int(year_m.group(1)) if year_m else None,
+        "season": s_num,
+        "episode": ep_num,
+        "start_ep": start_ep,
+        "end_ep": end_ep,
+        "is_series": is_series,
+        "is_part": is_part,
+        "part": part_num,
+        "part_label": part_label,
+        "quality": quality,
+        "badges": badges,
+        "languages": languages,
+        "is_dual_audio": is_dual or "Dual Audio" in audio_tags or len(languages) >= 2,
+        "is_multi_audio": is_multi or "Multi Audio" in audio_tags or len(languages) >= 3,
+        "is_combined": is_combined
+    }
+
+
+def format_search_results_text(
+    results: list,
+    query: str,
+    total_files: int,
+    bot_username: str,
+    user_mention: str = "User",
+    elapsed_sec: str = None,
+    page: int = 1,
+    total_pages: int = 1
+) -> str:
+    """Format search results as clean numbered clickable text links with exact sizes (Image 2 style)."""
+    import html
+    import urllib.parse
+    lines = [
+        f"🏷️ <b>TITLE :</b> <code>{html.escape(query)}</code>",
+        f"📦 <b>TOTAL FILES :</b> <code>{total_files}</code>"
+    ]
+    if elapsed_sec:
+        lines.append(f"⏰ <b>RESULT IN :</b> <code>{elapsed_sec} SECONDS</code>")
+    lines.append("")
+    lines.append(f"📝 <b>REQUESTED BY :</b> {user_mention}")
+    lines.append(f"⚜️ <b>POWERED BY :</b> ⚡ @{bot_username}")
+    lines.append("")
+    lines.append("⏳ <i>This message will self-destruct in 5 minutes for privacy.</i>")
+    lines.append("")
+    lines.append("🧾 <u><b>Your Requested Files Are Here</b></u> 👇")
+    lines.append("")
+
+    for idx, item in enumerate(results, start=1):
+        f_id = item.get("file_unique_id")
+        raw_name = item.get("file_name", "File")
+        # Replace underscores with spaces so Telegram word-wraps cleanly without line breaks
+        clean_name = html.escape(raw_name.replace("_", " "))
+        size_str = get_readable_size(item.get("file_size", 0))
+        link = f"https://t.me/{bot_username}?start=file_{f_id}"
+
+        # Exact 2nd photo style: size is inside the clickable link right with title
+        lines.append(f"<b>{idx}.</b> <a href=\"{link}\">[{size_str}] {clean_name}</a>\n")
+
+    return "\n".join(lines).strip()
+
+
+def build_filter_buttons(
+    results: list,
+    page: int,
+    total_pages: int,
+    query: str,
+    bot_username: str,
+    is_pm: bool = False,
+    mode: str = "single",
+    quality: str = None,
+    language: str = None,
+    season: str = None
+) -> InlineKeyboardMarkup:
+    """Construct clean compact buttons with quick numbers, filter trigger, VIP, and pagination."""
+    keyboard = []
+    short_q = query[:20]
+
+    # Row 1: Single clean prominent Filter Button
+    keyboard.append([
+        InlineKeyboardButton("🔍 Filter Results", callback_data=f"snav:init:{short_q}")
+    ])
+
+    # Row 2: VIP / Remove Ads & Send All
+    btn_send_all = InlineKeyboardButton("📥 SEND ALL", callback_data=f"sendall_{short_q}_{page}")
+    if getattr(Config, "SHORTENER_ENABLED", True):
+        btn_label = "⚜️ Remove ads ⚜️"
+    else:
+        btn_label = "👑 VIP Plans 👑"
+
+    if is_pm:
+        btn_vip = InlineKeyboardButton(btn_label, callback_data="view_plans")
+    else:
+        plans_url = f"https://t.me/{bot_username}?start=plans"
+        btn_vip = InlineKeyboardButton(f"{btn_label} ↗️", url=plans_url)
+    keyboard.append([btn_vip, btn_send_all])
+
+    # Pagination navigation row
+    if total_pages <= 1:
+        keyboard.append([InlineKeyboardButton("↔️ NO MORE PAGES AVAILABLE ↔️", callback_data="noop_pages")])
+    else:
+        nav_row = []
+        if page > 1:
+            nav_row.append(InlineKeyboardButton("◀️ PREV", callback_data=f"page_{page - 1}_{short_q}"))
+
+        nav_row.append(InlineKeyboardButton(f"📄 {page} / {total_pages}", callback_data="noop_pages"))
+
+        if page < total_pages:
+            nav_row.append(InlineKeyboardButton("NEXT ▶️", callback_data=f"page_{page + 1}_{short_q}"))
+
+        keyboard.append(nav_row)
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+def build_category_keyboard(query: str, cat_type: str = "all") -> InlineKeyboardMarkup:
+    """Build sub-filter selection keyboard matching requested category."""
+    short_q = query[:20]
+
+    if cat_type == "quality":
+        keyboard = [
+            [
+                InlineKeyboardButton("🟠 480p", callback_data=f"setqual_480p_{short_q}"),
+                InlineKeyboardButton("🔵 720p", callback_data=f"setqual_720p_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🟢 1080p", callback_data=f"setqual_1080p_{short_q}"),
+                InlineKeyboardButton("🟡 4K (2160p)", callback_data=f"setqual_2160p_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🔄 Clear Quality Filter", callback_data=f"clearqual_{short_q}"),
+                InlineKeyboardButton("◀️ Back to Results", callback_data=f"backres_{short_q}")
+            ]
+        ]
+    elif cat_type == "language":
+        keyboard = [
+            [
+                InlineKeyboardButton("🇮🇳 Hindi", callback_data=f"setlang_hindi_{short_q}"),
+                InlineKeyboardButton("🇬🇧 English", callback_data=f"setlang_english_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🇮🇳 Tamil", callback_data=f"setlang_tamil_{short_q}"),
+                InlineKeyboardButton("🇮🇳 Telugu", callback_data=f"setlang_telugu_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🌐 Dual / Multi Audio", callback_data=f"setlang_dual_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🔄 Clear Language Filter", callback_data=f"clearlang_{short_q}"),
+                InlineKeyboardButton("◀️ Back to Results", callback_data=f"backres_{short_q}")
+            ]
+        ]
+    elif cat_type == "season":
+        keyboard = [
+            [
+                InlineKeyboardButton("Season 1", callback_data=f"setseas_s01_{short_q}"),
+                InlineKeyboardButton("Season 2", callback_data=f"setseas_s02_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("Season 3", callback_data=f"setseas_s03_{short_q}"),
+                InlineKeyboardButton("Season 4", callback_data=f"setseas_s04_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("Season 5", callback_data=f"setseas_s05_{short_q}"),
+                InlineKeyboardButton("Season 6", callback_data=f"setseas_s06_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🔄 Clear Season Filter", callback_data=f"clearseas_{short_q}"),
+                InlineKeyboardButton("◀️ Back to Results", callback_data=f"backres_{short_q}")
+            ]
+        ]
+    else:
+        keyboard = [
+            [
+                InlineKeyboardButton("QUALITY", callback_data=f"openqual_{short_q}"),
+                InlineKeyboardButton("LANGUAGE", callback_data=f"openlang_{short_q}"),
+                InlineKeyboardButton("SEASON", callback_data=f"openseas_{short_q}")
+            ],
+            [
+                InlineKeyboardButton("🔄 Reset All Filters", callback_data=f"resetfilter_{short_q}"),
+                InlineKeyboardButton("◀️ Back to Results", callback_data=f"backres_{short_q}")
+            ]
+        ]
+
+    return InlineKeyboardMarkup(keyboard)
