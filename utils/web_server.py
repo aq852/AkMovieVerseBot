@@ -2110,62 +2110,207 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
 </html>
 """
 
-SERIES_HUB_HTML = """<!DOCTYPE html>
+MEDIA_POST_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>{series_title} — AkMovieVerse Cinema</title>
+    <title>{post_title} — AkMovieVerse Cinema</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23e50914'><path d='M8 5v14l11-7z'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }}
         body {{
-            background: radial-gradient(circle at 50% 0%, #172033 0%, #090d16 60%, #05070c 100%);
+            background-color: #07090e;
             color: #f1f5f9;
             min-height: 100vh;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }}
-        .glass-panel {{
-            background: rgba(22, 27, 34, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+        .hero-banner {{
+            position: relative;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            padding: 16px 12px 32px 12px;
+        }}
+        .hero-backdrop {{
+            position: absolute;
+            inset: 0;
+            background-image: url('{backdrop_url}');
+            background-size: cover;
+            background-position: center top;
+            filter: blur(28px) brightness(0.35) saturate(1.3);
+            transform: scale(1.15);
+            z-index: 1;
+        }}
+        .hero-overlay {{
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(7, 9, 14, 0.4) 0%, rgba(7, 9, 14, 0.85) 60%, #07090e 100%);
+            z-index: 2;
+        }}
+        .hero-content {{
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 768px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }}
+        .navbar-card {{
+            width: 100%;
+            background: rgba(18, 24, 38, 0.75);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }}
-        .cbadge {{
-            font-size: 11px;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }}
-        .cbadge-qual {{ background: rgba(168, 85, 247, 0.9); color: #fff; }}
-        .cbadge-new {{ background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); font-weight: 800; }}
-        .cbadge-comb {{ background: rgba(234, 88, 12, 0.9); color: #fff; }}
-        .ep-card {{
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        .poster-wrapper {{
+            width: 250px;
+            max-width: 78%;
+            aspect-ratio: 2/3;
+            border-radius: 18px;
             overflow: hidden;
-            word-break: break-word;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(225, 29, 72, 0.25);
+            background: #0f172a;
+            position: relative;
+            margin-bottom: 16px;
         }}
-        .ep-card:hover {{
+        .poster-wrapper img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }}
+        .badge-pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(18, 24, 38, 0.85);
+            color: #e2e8f0;
+            backdrop-filter: blur(10px);
+        }}
+        .badge-source {{
+            background: rgba(159, 18, 57, 0.35);
+            border-color: rgba(244, 63, 94, 0.45);
+            color: #fda4af;
+            font-weight: 700;
+        }}
+        .badge-qual {{
+            background: rgba(12, 74, 110, 0.45);
+            border-color: rgba(56, 189, 248, 0.45);
+            color: #7dd3fc;
+            font-weight: 700;
+        }}
+        .badge-audio {{
+            background: rgba(120, 53, 15, 0.4);
+            border-color: rgba(245, 158, 11, 0.45);
+            color: #fcd34d;
+            font-weight: 700;
+        }}
+        .badge-rating {{
+            background: rgba(19, 78, 74, 0.45);
+            border-color: rgba(45, 212, 191, 0.45);
+            color: #5eead4;
+            font-weight: 700;
+        }}
+        .badge-cast {{
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+            font-size: 11.5px;
+        }}
+        .btn-play-primary {{
+            background: linear-gradient(135deg, #e50914 0%, #b80710 100%);
+            box-shadow: 0 10px 25px rgba(229, 9, 20, 0.4);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }}
+        .btn-play-primary:hover {{
             transform: translateY(-2px);
-            border-color: rgba(56, 189, 248, 0.4);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 14px 30px rgba(229, 9, 20, 0.55);
+            filter: brightness(1.08);
+        }}
+        .btn-bot-action {{
+            background: rgba(14, 165, 233, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: #38bdf8;
+            transition: all 0.2s ease;
+        }}
+        .btn-bot-action:hover {{
+            background: rgba(14, 165, 233, 0.25);
+            border-color: rgba(56, 189, 248, 0.6);
+            transform: translateY(-2px);
+        }}
+        .btn-vip-action {{
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            transition: all 0.2s ease;
+        }}
+        .btn-vip-action:hover {{
+            background: rgba(245, 158, 11, 0.22);
+            border-color: rgba(245, 158, 11, 0.55);
+            transform: translateY(-2px);
+        }}
+        .content-panel {{
+            background: rgba(18, 24, 38, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            backdrop-filter: blur(14px);
+        }}
+        .print-card, .ep-card {{
+            background: rgba(22, 30, 48, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            transition: all 0.2s ease;
+        }}
+        .print-card:hover, .ep-card:hover {{
+            background: rgba(30, 42, 68, 0.95);
+            border-color: rgba(56, 189, 248, 0.45);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
         }}
     </style>
 </head>
-<body class="p-3 sm:p-6 flex flex-col items-center">
-    <div class="w-full max-w-5xl space-y-5">
-        <!-- Header -->
-        <header class="flex items-center justify-between glass-panel px-4 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-xl">
+<body class="p-2 sm:p-5 flex flex-col items-center">
+    <div class="w-full max-w-4xl space-y-4">
+        <!-- Top Navigation Bar -->
+        <header class="flex items-center justify-between navbar-card">
             <div class="flex items-center space-x-3">
                 <a href="/browse" class="text-xl sm:text-2xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-2">
                     <span>🍿</span> <span>AkMovieVerse</span>
                 </a>
             </div>
             <div class="flex items-center gap-2">
-                <a href="/browse" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
+                <a href="{browse_url}" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
                     <span>◀</span> <span>Browse All</span>
                 </a>
                 <a href="{channel_url}" target="_blank" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl transition border border-sky-500/20 hidden sm:inline-flex">
@@ -2177,36 +2322,54 @@ SERIES_HUB_HTML = """<!DOCTYPE html>
             </div>
         </header>
 
-        <!-- Series Hero Banner -->
-        <div class="glass-panel p-4 sm:p-6 rounded-2xl flex flex-col sm:flex-row gap-5 items-center sm:items-start shadow-2xl relative overflow-hidden">
-            <div class="w-32 sm:w-44 flex-shrink-0 aspect-[2/3] rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-black/40">
-                <img src="{poster_url}" alt="{series_title}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="w-full h-full flex items-center justify-center text-4xl bg-slate-900" style="display:none;">🎬</div>
-            </div>
-            <div class="flex-1 space-y-3 text-center sm:text-left">
-                <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                    <span class="cbadge cbadge-qual">📺 TV SERIES</span>
-                    {badges_html}
+        <!-- Main Hero Banner Card (Screenshot exact layout) -->
+        <div class="hero-banner rounded-3xl border border-white/10 shadow-2xl relative">
+            <div class="hero-backdrop"></div>
+            <div class="hero-overlay"></div>
+            
+            <div class="hero-content">
+                <!-- Center Poster -->
+                <div class="poster-wrapper">
+                    <img src="{poster_url}" alt="{post_title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="w-full h-full flex items-center justify-center text-5xl bg-slate-900" style="display:none;">🎬</div>
                 </div>
-                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">{series_title}</h1>
-                <p class="text-xs sm:text-sm text-gray-300/80 leading-relaxed max-w-2xl">{overview_text}</p>
-                <div class="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                    <a href="/watch/{first_play_id}" class="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-lg shadow-red-600/30 flex items-center gap-2">
-                        <span>▶</span> <span>Watch {first_play_label}</span>
-                    </a>
-                    <a href="https://t.me/{bot_username}?start=search_{search_param}" target="_blank" class="px-4 py-2.5 bg-white/10 hover:bg-white/15 text-gray-200 font-semibold text-xs sm:text-sm rounded-xl transition border border-white/10 flex items-center gap-1.5">
-                        <span>💬</span> <span>Get Files in Bot ↗️</span>
-                    </a>
+
+                <!-- Big Title -->
+                <h1 class="text-2xl sm:text-3xl font-black text-white text-center tracking-tight mb-3 px-2">
+                    {post_title}
+                </h1>
+
+                <!-- Badges Row 1: Date, Type, Source, Rating -->
+                <div class="flex flex-wrap items-center justify-center gap-2 mb-2 px-2">
+                    {badges_row1_html}
                 </div>
+
+                <!-- Badges Row 2: Qualities, Audio -->
+                <div class="flex flex-wrap items-center justify-center gap-2 mb-2 px-2">
+                    {badges_row2_html}
+                </div>
+
+                <!-- Badges Row 3: Cast & Director -->
+                <div class="flex flex-wrap items-center justify-center gap-2 mb-4 px-2">
+                    {badges_row3_html}
+                </div>
+
+                <!-- Storyline Hook -->
+                <div class="content-panel p-4 rounded-xl text-center max-w-2xl mb-4 mx-2">
+                    <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">📖 Storyline Overview</div>
+                    <p class="text-xs sm:text-sm text-gray-300 leading-relaxed">{overview_text}</p>
+                </div>
+
+                <!-- Action Buttons (Safe & Monetized) -->
+                {action_buttons_html}
             </div>
         </div>
 
-        <!-- Section 1: Complete Season Packs -->
-        {combined_packs_section_html}
-
-        <!-- Section 2: Episodes Grid -->
-        {episodes_section_html}
+        <!-- Section: Movie Prints OR Series Episodes Grid -->
+        {prints_or_episodes_html}
     </div>
+
+    <!-- DevTools / Right Click Guard -->
     <script>
         document.addEventListener("contextmenu", function (e) {{
             e.preventDefault();
@@ -2222,6 +2385,9 @@ SERIES_HUB_HTML = """<!DOCTYPE html>
 </body>
 </html>
 """
+
+SERIES_HUB_HTML = MEDIA_POST_HTML
+
 
 CATALOG_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -3624,7 +3790,7 @@ def _group_file_docs(docs: list) -> list:
             group_key = f"movie:{norm_key}:{yr_str}"
             disp_title = f"{clean} ({yr})" if yr else clean
 
-        gen_time = d.get("_id").generation_time
+        gen_time = d.get("_id").generation_time if hasattr(d.get("_id"), "generation_time") else None
         if hasattr(gen_time, "replace"):
             gen_time = gen_time.replace(tzinfo=None)
         c_date = d.get("created_at") or gen_time
@@ -3830,247 +3996,266 @@ async def get_grouped_catalog() -> list:
     return sorted_catalog
 
 
-async def series_handler(request: web.Request):
-    """Serve responsive dedicated Series Hub displaying all episodes, complete packs, and qualities."""
-    slug_or_id = request.match_info.get("series_slug", "").strip()
+async def post_handler(request: web.Request):
+    """Serve responsive Netflix/EonMovies-style Media Post Page for both Movies and Web Series."""
+    slug_or_id = request.match_info.get("item_slug", "").strip() or request.match_info.get("series_slug", "").strip()
     base_url = get_stream_base_url(request)
     browse_url = f"{base_url}/browse"
     channel_url = getattr(Config, "CHANNEL_URL", None) or "https://t.me/AkMovieVerse"
     bot_username = Config.BOT_USERNAME or "bot"
-    enable_web_dl = await is_web_download_enabled()
 
     catalog = await get_grouped_catalog()
-    series_item = None
+    target_item = None
     for item in catalog:
         if item["slug"] == slug_or_id or item["key"] == slug_or_id or slug_or_id in item.get("aliases", []):
-            series_item = item
+            target_item = item
             break
-        # Also check if any file's unique_id matches
         for f in item["files"]:
             if (f.get("file_unique_id") == slug_or_id or str(f.get("_id")) == slug_or_id):
-                series_item = item
+                target_item = item
                 break
-        if series_item:
+        if target_item:
             break
 
-    if not series_item or not series_item.get("is_series"):
-        if series_item:
-            return web.HTTPFound(location=f"/watch/{series_item['primary_file_id']}")
-        return web.Response(text="Series not found in catalog", status=404)
+    # Smart slug prefix or clean name fallback
+    if not target_item and catalog:
+        norm_s = re.sub(r"[^\w]", "", slug_or_id.lower())
+        for item in catalog:
+            item_clean = re.sub(r"[^\w]", "", item.get("clean_name", "").lower())
+            item_slug_clean = re.sub(r"[^\w]", "", item.get("slug", "").lower())
+            if norm_s and (norm_s == item_clean or norm_s in item_slug_clean or item_clean in norm_s):
+                target_item = item
+                break
 
-    # Fetch official poster
-    clean_title = series_item["clean_name"]
-    poster = await get_cached_poster_url(clean_title)
-    poster_url = poster if isinstance(poster, str) and poster else ""
+    # If still not found in grouped catalog, try direct mongo file lookup
+    if not target_item:
+        file_doc = await resolve_file_from_param(slug_or_id)
+        if file_doc:
+            target_item = {
+                "key": f"single:{slug_or_id}",
+                "slug": slug_or_id,
+                "title": file_doc.get("file_name", "Movie Video"),
+                "clean_name": parse_media_metadata(file_doc.get("file_name", "")).get("clean_name") or file_doc.get("file_name", "Movie Video"),
+                "is_series": "season" in file_doc.get("file_name", "").lower(),
+                "year": parse_media_metadata(file_doc.get("file_name", "")).get("year"),
+                "files": [file_doc],
+                "primary_file_id": file_doc.get("file_unique_id") or str(file_doc.get("_id")),
+                "sorted_qualities": [parse_media_metadata(file_doc.get("file_name", "")).get("quality") or "HD"],
+                "languages_list": ["Hindi Dubbed"],
+                "episodes_map": {},
+                "combined_files": [],
+                "has_combined": False,
+                "has_parts": False,
+                "parts_map": {},
+                "total_size": int(file_doc.get("file_size", 0))
+            }
 
-    # Fetch Cinemeta overview & rating if possible
-    from utils.online_stream import search_online_meta
-    cinemeta_info = await search_online_meta(clean_title)
-    overview_text = ""
-    rating_text = ""
-    if cinemeta_info:
-        overview_text = cinemeta_info.get("overview", "")
-        if cinemeta_info.get("rating"):
-            rating_text = f'⭐ {cinemeta_info["rating"]}/10 IMDb'
+    if not target_item:
+        return web.Response(text="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#07090e] text-white flex flex-col items-center justify-center min-h-screen p-4 text-center"><div class="text-5xl mb-4">🔍</div><h1 class="text-2xl font-bold mb-2">Title Not Found</h1><p class="text-gray-400 mb-6">This media item was not found in the catalog.</p><a href="/browse" class="px-5 py-2.5 bg-red-600 rounded-xl text-white font-bold">Return to Browse Catalog</a></body></html>""", content_type="text/html", status=404)
+
+    is_series = bool(target_item.get("is_series"))
+    clean_title = target_item.get("clean_name") or target_item.get("title", "")
+    item_year = target_item.get("year")
+
+    # Fetch rich official TMDB metadata
+    tmdb_meta = {}
+    try:
+        from plugins.channel_post import fetch_tmdb_post_metadata
+        tmdb_meta = await fetch_tmdb_post_metadata(clean_title, year=item_year, is_series=is_series) or {}
+    except Exception as tmdb_e:
+        logger.debug(f"TMDB fetch error for post {clean_title}: {tmdb_e}")
+
+    poster_url = tmdb_meta.get("poster_url") or await get_cached_poster_url(clean_title)
+    if not poster_url:
+        poster_url = getattr(Config, "START_PIC", "https://api.aniwallpaper.workers.dev/random")
+
+    backdrop_url = tmdb_meta.get("backdrop_url") or poster_url
+    rating_val = tmdb_meta.get("rating")
+    rating_str = f"{rating_val}/10" if rating_val and float(rating_val) > 0 else ""
+
+    overview_text = tmdb_meta.get("overview")
     if not overview_text:
-        overview_text = f"Watch all available episodes and complete season packs of {series_item['title']} in multiple resolutions directly in high-definition."
+        overview_text = f"Watch full HD stream and get direct download access for {target_item['title']}. Available in multiple resolutions with fast playback."
 
-    # Build Badges HTML
-    badges_top = []
-    if rating_text:
-        badges_top.append(f'<span class="cbadge bg-amber-500/20 text-amber-300 border border-amber-500/30">{rating_text}</span>')
-    if series_item.get("year"):
-        badges_top.append(f'<span class="cbadge bg-red-600/20 text-red-400 border border-red-500/30">{series_item["year"]}</span>')
-    if series_item.get("sorted_qualities"):
-        badges_top.append(f'<span class="cbadge cbadge-qual">{" • ".join(series_item["sorted_qualities"])}</span>')
-    if series_item.get("languages_list"):
-        badges_top.append(f'<span class="cbadge bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🌐 {" • ".join(series_item["languages_list"])}</span>')
-    if series_item.get("is_recent"):
-        badges_top.append('<span class="cbadge cbadge-new">🔥 RECENTLY UPDATED</span>')
-    badges_html = " ".join(badges_top)
+    # Extract source (WEB-DL, BluRay, HDRip, etc.)
+    source_val = "WEB-DL"
+    if target_item.get("files"):
+        for f in target_item["files"]:
+            fn = f.get("file_name", "")
+            fmeta = parse_media_metadata(fn)
+            if fmeta.get("source"):
+                source_val = fmeta["source"]
+                break
 
-    # First Play ID & Label
-    first_play_id = series_item["primary_file_id"]
-    first_play_label = "Season 1"
-    if series_item["episodes_map"]:
-        min_ep = min(series_item["episodes_map"].keys())
-        first_ep_file = series_item["episodes_map"][min_ep][0]
-        first_play_id = first_ep_file.get("file_unique_id") or str(first_ep_file.get("_id"))
-        first_play_label = f"Episode {min_ep}"
-    elif series_item["combined_files"]:
-        first_pack = series_item["combined_files"][0]
-        first_play_id = first_pack.get("file_unique_id") or str(first_pack.get("_id"))
-        fp_meta = parse_media_metadata(first_pack.get("file_name", ""))
-        if fp_meta.get("start_ep") and fp_meta.get("end_ep"):
-            first_play_label = f"Ep {fp_meta['start_ep']:02d}–{fp_meta['end_ep']:02d}"
+    # Build Badges exactly matching user's screenshot
+    # Row 1: Date, Type, Source, Rating
+    row1_badges = []
+    rel_date = tmdb_meta.get("release_date") or (str(item_year) if item_year else "2026")
+    row1_badges.append(f'<span class="badge-pill">📅 {html_escape(str(rel_date))}</span>')
+    type_label = "🎬 Series" if is_series else "🎬 Movie"
+    row1_badges.append(f'<span class="badge-pill">{type_label}</span>')
+    row1_badges.append(f'<span class="badge-pill badge-source">★ {html_escape(source_val)}</span>')
+    if rating_str:
+        row1_badges.append(f'<span class="badge-pill badge-rating">⭐ {html_escape(rating_str)} IMDb</span>')
+    row1_html = "\n".join(row1_badges)
+
+    # Row 2: Qualities and Audio
+    row2_badges = []
+    qualities = target_item.get("sorted_qualities", [])
+    if not qualities:
+        qualities = ["HD"]
+    for q in qualities[:4]:
+        row2_badges.append(f'<span class="badge-pill badge-qual">🎬 {html_escape(q)}</span>')
+    
+    # Audio
+    audio_label = "🔊 Multi Audio"
+    if target_item.get("languages_list"):
+        langs = target_item["languages_list"]
+        if "Hindi" in langs:
+            audio_label = "🔊 Hindi Dubbed" if len(langs) > 1 else "🔊 Hindi"
+        elif "Dual Audio" in langs:
+            audio_label = "🔊 Dual Audio"
+        elif "Multi Audio" in langs:
+            audio_label = "🔊 Multi Audio"
         else:
-            first_play_label = "Complete Pack"
+            audio_label = f"🔊 {' • '.join(langs[:2])}"
+    row2_badges.append(f'<span class="badge-pill badge-audio">{html_escape(audio_label)}</span>')
+    row2_html = "\n".join(row2_badges)
 
-    # Render Combined Packs
-    combined_packs_html = ""
-    if series_item["combined_files"]:
-        pack_cards = []
-        for cf in series_item["combined_files"]:
-            cf_name = cf.get("file_name", "Season Complete Pack")
-            cf_meta = parse_media_metadata(cf_name)
-            cf_qual = cf_meta.get("quality") or "HD"
-            cf_size = get_readable_size(int(cf.get("file_size", 0)))
-            cf_id = cf.get("file_unique_id") or str(cf.get("_id"))
-            cf_display = cf_meta.get("title") or cf_name.replace("_", " ")
+    # Row 3: Cast / Director
+    cast_badges = []
+    cast_info = tmdb_meta.get("cast") or tmdb_meta.get("director")
+    if not cast_info and tmdb_meta.get("genres"):
+        cast_info = " • ".join(tmdb_meta["genres"][:3])
+    if cast_info:
+        cast_badges.append(f'<span class="badge-pill badge-cast">👤 {html_escape(str(cast_info))}</span>')
+    row3_html = "\n".join(cast_badges)
 
-            if cf_meta.get("start_ep") and cf_meta.get("end_ep"):
-                comb_badge_text = f"📦 Ep {cf_meta['start_ep']:02d}–{cf_meta['end_ep']:02d}"
-                watch_pack_btn_text = f"▶ Watch Ep {cf_meta['start_ep']:02d}–{cf_meta['end_ep']:02d}"
-            else:
-                comb_badge_text = "📦 COMPLETE PACK"
-                watch_pack_btn_text = "▶ Watch Pack"
+    # Search parameter for Telegram bot deep-link (100% Monetization & VIP protection!)
+    clean_search_param = urllib.parse.quote(re.sub(r"[^\w\s]", "", clean_title).strip().replace(" ", "_")[:30])
 
-            if enable_web_dl:
-                pack_dl_url = f"/download/{cf_id}"
-                pack_dl_text = "⬇️ Download"
-                pack_dl_target = ""
-            else:
-                pack_dl_url = f"https://t.me/{bot_username}?start=file_{cf_id}"
-                pack_dl_text = "✈️ In Bot"
-                pack_dl_target = 'target="_blank"'
+    # Action buttons:
+    primary_file_id = target_item.get("primary_file_id")
 
-            pack_cards.append(f"""
-                <div class="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/10 flex flex-col justify-between gap-3 ep-card overflow-hidden">
-                    <div class="flex items-start justify-between gap-2.5 min-w-0">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                <span class="cbadge cbadge-comb">{comb_badge_text}</span>
-                                <span class="cbadge cbadge-qual">{html_escape(cf_qual)}</span>
-                            </div>
-                            <div class="text-xs sm:text-sm font-bold text-white line-clamp-2 break-words" title="{html_escape(cf_name)}">{html_escape(cf_display)}</div>
-                        </div>
-                        <div class="text-xs font-semibold px-2 py-1 rounded bg-black/50 text-amber-300 border border-white/10 shrink-0 whitespace-nowrap self-start">
-                            {cf_size}
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 pt-2 border-t border-white/5">
-                        <a href="/watch/{cf_id}" class="flex-1 text-center py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-lg transition shadow-md shadow-red-600/20">
-                            {watch_pack_btn_text}
-                        </a>
-                        <a href="{pack_dl_url}" {pack_dl_target} class="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg transition border border-white/10">
-                            {pack_dl_text}
-                        </a>
-                        <a href="/player/vlc/{cf_id}" class="px-2.5 py-2 bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 text-xs rounded-lg border border-orange-500/20" title="Play in VLC">
-                            📺 VLC
-                        </a>
-                    </div>
-                </div>
-            """)
-        packs_grid = "\n".join(pack_cards)
-        combined_packs_html = f"""
-        <div class="space-y-3">
-            <div class="flex items-center justify-between px-1">
-                <h2 class="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2">
-                    <span>📦</span> <span>Combined Season Packs ({len(series_item['combined_files'])})</span>
-                </h2>
-                <span class="text-xs text-gray-400 font-medium">All episodes in a single combined video file</span>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {packs_grid}
-            </div>
-        </div>
-        """
+    # If series, pick first episode ID if available
+    first_stream_id = primary_file_id
+    if is_series and target_item.get("episodes_map"):
+        min_ep = min(target_item["episodes_map"].keys())
+        first_ep = target_item["episodes_map"][min_ep][0]
+        first_stream_id = first_ep.get("file_unique_id") or str(first_ep.get("_id"))
 
-    # Render Episodes List
-    episodes_html = ""
-    if series_item["episodes_map"]:
+    action_buttons_html = f'''
+    <div class="flex flex-col sm:flex-row gap-3 w-full justify-center pt-2">
+        <a href="/watch/{first_stream_id}" class="btn-play-primary py-3.5 px-7 rounded-xl font-bold text-sm sm:text-base text-white text-center flex items-center justify-center gap-2">
+            <span>▶️</span> <span>Watch Online (Fast Stream)</span>
+        </a>
+        <a href="https://t.me/{bot_username}?start=search_{clean_search_param}" target="_blank" class="btn-bot-action py-3 px-6 rounded-xl font-semibold text-xs sm:text-sm text-center flex items-center justify-center gap-2">
+            <span>🤖</span> <span>Get in Telegram Bot (VIP/Files)</span>
+        </a>
+        <a href="https://t.me/{bot_username}?start=plans" target="_blank" class="btn-vip-action py-3 px-5 rounded-xl font-semibold text-xs sm:text-sm text-center flex items-center justify-center gap-2">
+            <span>💎</span> <span>Get Ad-Free VIP Pass</span>
+        </a>
+    </div>
+    '''
+
+    # Prints / Quality Selector or Episodes Grid
+    prints_or_episodes_html = ""
+    if is_series:
+        # Episodes Grid
         ep_cards = []
-        for ep_num in sorted(series_item["episodes_map"].keys()):
-            ep_file_list = series_item["episodes_map"][ep_num]
-            ep_file = ep_file_list[0]
-            ep_name = ep_file.get("file_name", f"Episode {ep_num}")
-            ep_meta = parse_media_metadata(ep_name)
-            ep_title_clean = ep_meta.get("title") or f"Episode {ep_num}"
-            ep_size = get_readable_size(int(ep_file.get("file_size", 0)))
-            ep_id = ep_file.get("file_unique_id") or str(ep_file.get("_id"))
-
-            ep_date = ep_file.get("created_at") or ep_file.get("_id").generation_time
-            if hasattr(ep_date, "replace"):
-                ep_date = ep_date.replace(tzinfo=None)
-            diff_ep = (datetime.datetime.utcnow() - ep_date).total_seconds() if ep_date else 999999
-            new_window_ep = getattr(Config, "STREAM_NEW_TAG_DAYS", 2) * 86400
-            is_new_ep = (diff_ep <= new_window_ep)
-            new_tag = '<span class="cbadge cbadge-new">🔥 NEW</span>' if is_new_ep else ""
-
-            qual_pills = []
-            for ef in ep_file_list:
-                ef_meta = parse_media_metadata(ef.get("file_name", ""))
-                ef_q = ef_meta.get("quality") or "HD"
-                ef_id = ef.get("file_unique_id") or str(ef.get("_id"))
-                qual_pills.append(f'<a href="/watch/{ef_id}" class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10.5px] font-bold text-gray-200 border border-white/10 transition">{html_escape(ef_q)}</a>')
-            qual_html = " ".join(qual_pills)
-
-            if enable_web_dl:
-                ep_dl_url = f"/download/{ep_id}"
-                ep_dl_title = "Direct Download"
-                ep_dl_target = ""
-            else:
-                ep_dl_url = f"https://t.me/{bot_username}?start=file_{ep_id}"
-                ep_dl_title = "Get in Telegram Bot"
-                ep_dl_target = 'target="_blank"'
-
-            ep_cards.append(f"""
-                <div class="glass-panel p-3.5 rounded-xl border border-white/10 flex flex-col justify-between gap-3 ep-card overflow-hidden">
-                    <div class="space-y-1.5 min-w-0">
-                        <div class="flex items-center justify-between gap-1.5 min-w-0">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <span class="px-2 py-0.5 rounded font-extrabold text-xs bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0">EP {ep_num}</span>
-                                {new_tag}
-                            </div>
-                            <span class="text-[11px] font-semibold text-gray-400 shrink-0 whitespace-nowrap">{ep_size}</span>
+        if target_item.get("episodes_map"):
+            for ep_num in sorted(target_item["episodes_map"].keys()):
+                ep_file_list = target_item["episodes_map"][ep_num]
+                ep_file = ep_file_list[0]
+                ep_id = ep_file.get("file_unique_id") or str(ep_file.get("_id"))
+                ep_size = get_readable_size(int(ep_file.get("file_size", 0)))
+                ep_meta = parse_media_metadata(ep_file.get("file_name", ""))
+                ep_qual = ep_meta.get("quality") or "HD"
+                ep_cards.append(f'''
+                <div class="ep-card p-3.5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-sky-500/20 text-sky-400 border border-sky-500/30">EP {ep_num}</span>
+                        <div class="min-w-0">
+                            <div class="text-xs sm:text-sm font-bold text-white truncate">{html_escape(clean_title)} - Ep {ep_num}</div>
+                            <div class="text-[11px] text-gray-400 font-semibold">{ep_qual} • {ep_size}</div>
                         </div>
-                        <div class="text-xs sm:text-sm font-bold text-white line-clamp-1 break-words" title="{html_escape(ep_name)}">{html_escape(ep_title_clean)}</div>
-                        <div class="flex flex-wrap gap-1 pt-0.5">{qual_html}</div>
                     </div>
-                    <div class="flex items-center gap-2 pt-2 border-t border-white/5">
-                        <a href="/watch/{ep_id}" class="flex-1 text-center py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg transition shadow-md shadow-sky-600/20 flex items-center justify-center gap-1.5">
-                            <span>▶</span> <span>Watch EP {ep_num}</span>
-                        </a>
-                        <a href="{ep_dl_url}" {ep_dl_target} class="px-2.5 py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg border border-white/10" title="{ep_dl_title}">
-                            ⬇️
-                        </a>
-                        <a href="/player/vlc/{ep_id}" class="px-2.5 py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg border border-white/10" title="Play in VLC / MX Player">
-                            📱
-                        </a>
-                    </div>
+                    <a href="/watch/{ep_id}" class="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition flex items-center gap-1 shrink-0 shadow-md shadow-sky-600/30">
+                        <span>▶</span> <span>Watch</span>
+                    </a>
                 </div>
-            """)
-        eps_grid = "\n".join(ep_cards)
-        episodes_html = f"""
-        <div class="space-y-3">
-            <div class="flex items-center justify-between px-1">
-                <h2 class="text-base sm:text-lg font-bold text-sky-400 flex items-center gap-2">
-                    <span>📺</span> <span>Episodes List ({len(series_item['episodes_map'])})</span>
-                </h2>
-                <span class="text-xs text-gray-400 font-medium">Select quality or watch instantly</span>
+                ''')
+            prints_or_episodes_html = f'''
+            <div class="w-full mt-6 space-y-3">
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="text-base sm:text-lg font-bold text-sky-400 flex items-center gap-2">
+                        <span>📺</span> <span>Episodes List ({len(target_item['episodes_map'])})</span>
+                    </h2>
+                    <span class="text-xs text-gray-400 font-medium">Click to stream any episode</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {"".join(ep_cards)}
+                </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {eps_grid}
+            '''
+    else:
+        # Movie Prints Selector (if more than 1 file or multiple qualities)
+        if len(target_item.get("files", [])) > 1:
+            print_cards = []
+            for f in target_item["files"]:
+                fn = f.get("file_name", "Movie Print")
+                fmeta = parse_media_metadata(fn)
+                fq = fmeta.get("quality") or "HD"
+                fs = get_readable_size(int(f.get("file_size", 0)))
+                fid = f.get("file_unique_id") or str(f.get("_id"))
+                print_cards.append(f'''
+                <a href="/watch/{fid}" class="print-card p-3.5 flex items-center justify-between gap-3 group">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/30">{html_escape(fq)}</span>
+                        <div class="min-w-0">
+                            <div class="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition truncate">{html_escape(clean_title)}</div>
+                            <div class="text-[11px] text-gray-400 font-semibold">{fs} • {html_escape(source_val)}</div>
+                        </div>
+                    </div>
+                    <span class="px-3.5 py-1.5 rounded-lg bg-white/10 group-hover:bg-red-600 text-white font-bold text-xs transition flex items-center gap-1 shrink-0">
+                        <span>▶</span> <span>Stream</span>
+                    </span>
+                </a>
+                ''')
+            prints_or_episodes_html = f'''
+            <div class="w-full mt-6 space-y-3">
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2">
+                        <span>🎬</span> <span>Available Prints & Qualities ({len(target_item['files'])})</span>
+                    </h2>
+                    <span class="text-xs text-gray-400 font-medium">Select your preferred video print</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {"".join(print_cards)}
+                </div>
             </div>
-        </div>
-        """
+            '''
 
-    search_param = urllib.parse.quote(series_item["clean_name"][:25].strip().replace(" ", "_"))
-
-    html = SERIES_HUB_HTML.format(
-        series_title=html_escape(series_item["title"]),
-        poster_url=poster_url,
+    html = MEDIA_POST_HTML.format(
+        post_title=html_escape(target_item["title"]),
+        backdrop_url=html_escape(backdrop_url),
+        poster_url=html_escape(poster_url),
+        badges_row1_html=row1_html,
+        badges_row2_html=row2_html,
+        badges_row3_html=row3_html,
         overview_text=html_escape(overview_text),
-        badges_html=badges_html,
-        first_play_id=first_play_id,
-        first_play_label=first_play_label,
-        search_param=search_param,
-        combined_packs_section_html=combined_packs_html,
-        episodes_section_html=episodes_html,
-        channel_url=channel_url,
-        bot_username=bot_username
+        action_buttons_html=action_buttons_html,
+        prints_or_episodes_html=prints_or_episodes_html,
+        channel_url=html_escape(channel_url),
+        bot_username=html_escape(bot_username),
+        browse_url=browse_url
     )
     return web.Response(text=html, content_type="text/html")
+
+
+async def series_handler(request: web.Request):
+    """Alias for post_handler for backwards compatibility."""
+    return await post_handler(request)
 
 
 async def browse_handler(request: web.Request):
@@ -4185,20 +4370,19 @@ async def browse_handler(request: web.Request):
 
         badges_str = "\n".join(badges_top_html)
 
+        card_url = f"{base_url}/post/{item['slug']}"
         if item["is_series"]:
-            card_url = f"{base_url}/series/{item['slug']}"
             ep_c = item.get("episodes_count", 0)
-            btn_label = f"📺 View Episodes ({ep_c})" if ep_c > 0 else "📦 View Season Packs"
+            btn_label = f"📺 View Episodes ({ep_c})" if ep_c > 0 else "📦 View Series Post"
             btn_class = "card-series-btn"
         else:
-            card_url = f"{base_url}/watch/{item['primary_file_id']}"
             if item.get("has_parts"):
                 total_parts = len(item.get("parts_map", {}))
-                btn_label = f"▶ Watch (Part 1 of {total_parts})"
+                btn_label = f"▶ View Post (Part 1 of {total_parts})"
             elif total_files > 1:
-                btn_label = f"▶ Watch ({total_files} Prints)"
+                btn_label = f"▶ View Post ({total_files} Prints)"
             else:
-                btn_label = "▶ Watch Stream"
+                btn_label = "▶ View Post & Watch"
             btn_class = "card-stream-btn"
 
         movie_cards.append(f"""
@@ -5044,6 +5228,8 @@ async def run_web_server():
     app.router.add_get("/watch_online/{imdb_id}", watch_online_handler)
     app.router.add_get("/browse", browse_handler)
     app.router.add_get("/browse/", browse_handler)
+    app.router.add_get("/post/{item_slug}", post_handler)
+    app.router.add_get("/post/{item_slug}/", post_handler)
     app.router.add_get("/series/{series_slug}", series_handler)
     app.router.add_get("/series/{series_slug}/", series_handler)
     app.router.add_get("/playlist/{file_unique_id}.m3u", playlist_handler)
