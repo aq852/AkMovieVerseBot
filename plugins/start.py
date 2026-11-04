@@ -14,7 +14,7 @@ from database.files import get_file_by_id
 from database.verify import is_user_verified, create_verify_token, verify_user_token
 from utils.fsub import check_fsub, build_fsub_markup
 from utils.shortener import get_shortlink
-from utils.helpers import format_clean_title, get_readable_size, get_random_start_pic, is_private_chat
+from utils.helpers import format_clean_title, get_readable_size, get_random_start_pic, is_private_chat, resolve_channel_display_and_url
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +37,8 @@ async def deliver_file_with_copyright_warning(
     """Deliver file with AkVerseXBot-style clean title, backup channel button, and auto-delete warning."""
     clean_name = format_clean_title(file_doc.get("file_name", "Movie File"))
 
-    # Resolve backup/updates channel link
-    backup_name = "AkMovieVerse"
-    backup_url = Config.CHANNEL_URL or (f"https://t.me/{Config.BOT_USERNAME}" if Config.BOT_USERNAME else "https://t.me/AkMovieVerse")
-    if Config.FORCE_SUB_CHANNELS:
-        first_ch = str(Config.FORCE_SUB_CHANNELS[0]).lstrip("@")
-        backup_name = first_ch
-        backup_url = f"https://t.me/{first_ch}"
+    # Resolve backup/updates channel link (safe against raw channel IDs like -100...)
+    backup_name, backup_url = await resolve_channel_display_and_url(client)
 
     caption = (
         f"{clean_name}\n\n"

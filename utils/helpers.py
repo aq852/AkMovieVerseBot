@@ -2,6 +2,7 @@ import re
 import time
 import uuid
 import random
+import logging
 import humanize
 try:
     from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,6 +10,8 @@ except ImportError:
     from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import Config
+
+logger = logging.getLogger(__name__)
 
 def get_random_start_pic(pic_url: str = None) -> str:
     """Return START_PIC URL with dynamic cache-busting query parameter to prevent Telegram DC caching.
@@ -509,6 +512,7 @@ def build_filter_buttons(
     return InlineKeyboardMarkup(keyboard)
 
 
+
 def build_category_keyboard(query: str, cat_type: str = "all") -> InlineKeyboardMarkup:
     """Build sub-filter selection keyboard matching requested category."""
     short_q = query[:20]
@@ -579,3 +583,82 @@ def build_category_keyboard(query: str, cat_type: str = "all") -> InlineKeyboard
         ]
 
     return InlineKeyboardMarkup(keyboard)
+
+
+_RESOLVED_CHANNEL_CACHE: dict[str, tuple[str, str]] = {}
+
+async def resolve_channel_display_and_url(client, target=None) -> tuple[str, str]:
+    """
+    Safely resolve channel target into (display_name, clickable_telegram_url).
+    Never produces invalid URLs like 'https://t.me/-100...'.
+    Handles channel IDs, usernames, and invite links with caching.
+    """
+    bot_username = Config.BOT_USERNAME or (getattr(client, "me", None).username if getattr(client, "me", None) else "")
+    if not bot_username and hasattr(client, "get_me"):
+        try:
+            me = await client.get_me()
+            bot_username = me.username or ""
+        except Exception:
+            pass
+
+    default_fallback_url = f"https://t.me/{bot_username}" if bot_username else "https://t.me"
+    default_title = "Updates Channel"
+
+    # Candidates to inspect in priority order
+    candidates = []
+    if target is not None and str(target).strip():
+        candidates.append(str(target).strip())
+    if Config.CHANNEL_URL:
+        candidates.append(str(Config.CHANNEL_URL).strip())
+    if Config.FORCE_SUB_CHANNELS:
+        for ch in Config.FORCE_SUB_CHANNELS:
+            candidates.append(str(ch).strip())
+    if getattr(Config, "UPDATES_CHANNEL", None):
+        candidates.append(str(Config.UPDATES_CHANNEL).strip())
+
+    for cand in candidates:
+        if not cand:
+            continue
+
+        # 1. Already a full URL
+        if cand.startswith("http://") or cand.startswith("https://"):
+            # Check if someone passed a broken https://t.me/-100... URL
+            if re.search(r"t\.me/-100\d+", cand):
+                m = re.search(r"-100\d+", cand)
+                if m:
+                    cand = m.group(0)
+                else:
+                    continue
+            else:
+                name = cand.rstrip("/").split("/")[-1].lstrip("+").lstrip("@")
+                return (name or default_title, cand)
+
+        # 2. Public Channel username (e.g. @AkMovieVerse or AkMovieVerse)
+        if not cand.lstrip("-").isdigit():
+            clean_user = cand.lstrip("@").strip()
+            if clean_user:
+                return (clean_user, f"https://t.me/{clean_user}")
+
+        # 3. Numeric Channel ID (e.g. -1002779576540)
+        if cand in _RESOLVED_CHANNEL_CACHE:
+            return _RESOLVED_CHANNEL_CACHE[cand]
+
+        if cand.lstrip("-").isdigit():
+            try:
+                chat_id = int(cand)
+                chat = await client.get_chat(chat_id)
+                title = chat.title or default_title
+                if chat.username:
+                    url = f"https://t.me/{chat.username}"
+                elif chat.invite_link:
+                    url = chat.invite_link
+                else:
+                    url = await client.export_chat_invite_link(chat_id)
+                _RESOLVED_CHANNEL_CACHE[cand] = (title, url)
+                return (title, url)
+            except Exception as e:
+                logger.debug(f"Could not resolve channel id {cand}: {e}")
+                continue
+
+    return (default_title, default_fallback_url)
+

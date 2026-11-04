@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from dotenv import load_dotenv
 
@@ -48,7 +49,13 @@ class Config:
 
     VERIFY_EXPIRE = int(os.environ.get("VERIFY_EXPIRE", "86400"))  # Default 24 hours in seconds
     TUTORIAL_URL = os.environ.get("TUTORIAL_URL", "https://t.me/how_to_open_link_ak/17")
-    CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/AkMovieVerse").rstrip("/")
+    _raw_channel_url = os.environ.get("CHANNEL_URL", "https://t.me/AkMovieVerse").strip().rstrip("/")
+    if _raw_channel_url.startswith("http://") or _raw_channel_url.startswith("https://"):
+        CHANNEL_URL = "" if re.search(r"t\.me/-100\d+", _raw_channel_url) else _raw_channel_url
+    elif _raw_channel_url.startswith("@") or (_raw_channel_url and not _raw_channel_url.lstrip("-").isdigit()):
+        CHANNEL_URL = f"https://t.me/{_raw_channel_url.lstrip('@')}"
+    else:
+        CHANNEL_URL = ""
 
     # UI & Search Preferences
     ENABLE_IMDB = os.environ.get("ENABLE_IMDB", "True").lower() == "true"
