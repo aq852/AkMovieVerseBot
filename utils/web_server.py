@@ -269,9 +269,23 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -1697,8 +1711,8 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 {next_ep_btn_html}
                 {series_btn_html}
                 <a href="{chooser_intent}" onclick="handleAnyPlayer(event)" class="btn btn-chooser">📱 Open in Any Video Player (All Installed Apps)</a>
-                <a href="{mx_intent}" class="btn btn-mx">🍿 MX Player</a>
-                <a href="{vlc_intent}" class="btn btn-vlc">🧡 VLC Player</a>
+                <a href="{mx_intent}" onclick="handleMxPlayer(event)" class="btn btn-mx">🍿 MX Player</a>
+                <a href="{vlc_intent}" onclick="handleVlcPlayer(event)" class="btn btn-vlc">🧡 VLC Player</a>
                 {download_button_html}
                 <button onclick="copyStreamUrl()" class="btn btn-copy" id="copy-btn">📋 Copy Link</button>
                 <button onclick="shareMovie()" class="btn btn-share">📤 Share Movie</button>
@@ -1863,6 +1877,22 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             if (!isAndroid) {{
                 e.preventDefault();
                 window.open("{stream_url}", "_blank");
+            }}
+        }}
+
+        function handleMxPlayer(e) {{
+            const isAndroid = /Android/i.test(navigator.userAgent || '');
+            if (!isAndroid) {{
+                e.preventDefault();
+                window.location.href = "/player/mx/{file_unique_id}";
+            }}
+        }}
+
+        function handleVlcPlayer(e) {{
+            const isAndroid = /Android/i.test(navigator.userAgent || '');
+            if (!isAndroid) {{
+                e.preventDefault();
+                window.location.href = "/player/vlc/{file_unique_id}";
             }}
         }}
 
@@ -2282,9 +2312,23 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -2658,9 +2702,23 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -3273,9 +3331,23 @@ CATALOG_HTML = """<!DOCTYPE html>
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -5050,9 +5122,23 @@ async def mx_redirect_handler(request: web.Request):
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -5245,9 +5331,23 @@ async def chooser_redirect_handler(request: web.Request):
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -5452,9 +5552,23 @@ async def vlc_redirect_handler(request: web.Request):
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
@@ -5794,9 +5908,23 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 maskAll();
             }}
 
+            // Pre-emptively mask links before hover triggers the status bar
             document.addEventListener('mouseover', function (e) {{
                 const a = e.target && e.target.closest && e.target.closest('a[href]');
                 if (a) maskLink(a);
+            }}, true);
+
+            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            document.addEventListener('pointerdown', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                const url = el.getAttribute('data-target-url');
+                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                    el.setAttribute('href', url);
+                    setTimeout(() => {{
+                        el.removeAttribute('href');
+                    }}, 600);
+                }}
             }}, true);
 
             if (window.MutationObserver) {{
