@@ -86,6 +86,7 @@ ADMIN_COMMANDS = [
     BotCommand("stats", "System metrics, total files & users"),
     BotCommand("targetdb", "MongoDB multi-cluster write routing: /targetdb [1|2|auto]"),
     BotCommand("index", "Batch crawl channel: /index <channel_or_link>"),
+    BotCommand("indexall", "Multi-channel sequential crawl: /indexall <id1> <id2>"),
     BotCommand("checkpoints", "Indexing resume bookmarks: /checkpoints"),
     BotCommand("setskip", "Set message skip offset: /setskip <number>"),
     BotCommand("stopindex", "Stop active indexing crawl"),
