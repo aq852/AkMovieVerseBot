@@ -244,17 +244,17 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -2292,17 +2292,17 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -2683,17 +2683,17 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -3349,17 +3349,17 @@ CATALOG_HTML = """<!DOCTYPE html>
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -3519,12 +3519,23 @@ def get_stream_base_url(request: web.Request) -> str:
     return f"{proto}://{host}".rstrip("/")
 
 
+_file_doc_cache: dict[str, tuple[dict, float]] = {}
+
+
 async def resolve_file_from_param(param: str) -> dict | None:
-    """Find file document in MongoDB by file_unique_id, file_id, or ObjectId across storage and temp streams."""
+    """Find file document in MongoDB by file_unique_id, file_id, or ObjectId with in-memory caching."""
     clean_p = param.strip()
+    now_ts = time.time()
+    cached = _file_doc_cache.get(clean_p)
+    if cached and (now_ts - cached[1] < 3600):
+        return cached[0]
+
     # 1. Primary search index
     doc = await mongo.files.find_one({"file_unique_id": clean_p})
     if doc:
+        if len(_file_doc_cache) > 2000:
+            _file_doc_cache.clear()
+        _file_doc_cache[clean_p] = (doc, now_ts)
         return doc
     if mongo.has_secondary:
         doc = await mongo.files_secondary.find_one({"file_unique_id": clean_p})
@@ -3639,8 +3650,15 @@ async def stream_handler(request: web.Request):
 
     disposition_type = "attachment" if is_download else "inline"
 
-    # For in-browser streaming, ensure video/mp4 MIME type for universal browser compatibility
-    if not is_download and (mime_type.startswith("video/") or mime_type == "application/octet-stream"):
+    # Set accurate MIME type for video containers so external players (VLC, MX) initialize correct demuxers
+    lower_name = file_name.lower()
+    if lower_name.endswith(".mkv"):
+        stream_mime = "video/x-matroska"
+    elif lower_name.endswith(".webm"):
+        stream_mime = "video/webm"
+    elif lower_name.endswith(".mp4"):
+        stream_mime = "video/mp4"
+    elif not is_download and (mime_type.startswith("video/") or mime_type == "application/octet-stream"):
         stream_mime = "video/mp4"
     else:
         stream_mime = mime_type
@@ -3652,7 +3670,8 @@ async def stream_handler(request: web.Request):
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
         "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin",
-        "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges"
+        "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+        "Connection": "keep-alive"
     }
 
     if is_partial:
@@ -3667,7 +3686,9 @@ async def stream_handler(request: web.Request):
         return web.Response(status=status, headers=headers)
 
     try:
-        body_gen = TGCustomStreamer.yield_file_range(client, file_doc, byte_range)
+        # Use 1MB chunks for video files >= 10MB to double streaming throughput
+        chunk_size = 1024 * 1024 if file_size >= 10 * 1024 * 1024 else 512 * 1024
+        body_gen = TGCustomStreamer.yield_file_range(client, file_doc, byte_range, chunk_size=chunk_size)
         return web.Response(status=status, body=body_gen, headers=headers)
     except ServerBusyError:
         return web.Response(
@@ -5109,8 +5130,8 @@ async def mx_redirect_handler(request: web.Request):
     <script>
         document.addEventListener("DOMContentLoaded", function () {{
             const isAndroid = /Android/i.test(navigator.userAgent || "");
-            if (isAndroid) {{
-                window.location.href = "{mx_free_intent}";
+            if (!isAndroid) {{
+                window.location.href = "{stream_url}";
             }}
         }});
         // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
@@ -5142,17 +5163,17 @@ async def mx_redirect_handler(request: web.Request):
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -5317,9 +5338,7 @@ async def chooser_redirect_handler(request: web.Request):
     <script>
         document.addEventListener("DOMContentLoaded", function () {{
             const isAndroid = /Android/i.test(navigator.userAgent || "");
-            if (isAndroid) {{
-                window.location.href = "{android_chooser_intent}";
-            }} else {{
+            if (!isAndroid) {{
                 window.location.href = "{stream_url}";
             }}
         }});
@@ -5352,17 +5371,17 @@ async def chooser_redirect_handler(request: web.Request):
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -5523,7 +5542,8 @@ async def vlc_redirect_handler(request: web.Request):
         <h2 style="margin-bottom:8px;">🧡 Open in VLC Player</h2>
         <div class="title">{html_escape(file_name)}</div>
         
-        <a id="vlc-btn" href="{android_vlc_intent}" class="btn btn-vlc">🚀 Open in VLC Player</a>
+        <a id="vlc-btn" href="{android_vlc_intent}" class="btn btn-vlc">🚀 Open in VLC Player (App)</a>
+        <a href="vlc://{clean_url}" class="btn btn-vlc" style="background: linear-gradient(135deg, #f97316, #ea580c);">🧡 Direct VLC Link</a>
         <a href="{android_chooser_intent}" class="btn btn-chooser">📱 Open in Any Video Player</a>
         <a href="{m3u_url}" class="btn btn-m3u">📺 Download M3U (PC / TV)</a>
     </div>
@@ -5535,13 +5555,11 @@ async def vlc_redirect_handler(request: web.Request):
             const isIOS = /iPhone|iPad|iPod/i.test(ua);
             const vlcBtn = document.getElementById("vlc-btn");
 
-            if (isAndroid) {{
-                window.location.href = "{android_vlc_intent}";
-            }} else if (isIOS) {{
-                vlcBtn.href = "{ios_vlc_url}";
+            if (isIOS) {{
+                if (vlcBtn) vlcBtn.href = "{ios_vlc_url}";
                 window.location.href = "{ios_vlc_url}";
-            }} else {{
-                vlcBtn.href = "{m3u_url}";
+            }} else if (!isAndroid) {{
+                if (vlcBtn) vlcBtn.href = "{m3u_url}";
                 window.location.href = "{m3u_url}";
             }}
         }});
@@ -5574,17 +5592,17 @@ async def vlc_redirect_handler(request: web.Request):
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{
@@ -5931,17 +5949,17 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 }}
             }}, true);
 
-            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            // Stealth URL Cloaker: Masks href for desktop status bar, preserves native app & intent schemes
             function maskLink(el) {{
                 if (!el || !el.getAttribute) return;
                 const href = el.getAttribute('href');
-                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
-                    el.setAttribute('data-target-url', href);
-                    el.removeAttribute('href');
-                    el.style.cursor = 'pointer';
-                    el.setAttribute('role', 'link');
-                    el.setAttribute('tabindex', '0');
-                }}
+                if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+                if (href.startsWith('intent:') || href.startsWith('vlc:') || href.startsWith('vlc-x-callback:') || href.startsWith('tg:') || href.startsWith('market:') || href.startsWith('whatsapp:') || href.includes('/playlist/') || href.includes('/player/')) return;
+                el.setAttribute('data-target-url', href);
+                el.removeAttribute('href');
+                el.style.cursor = 'pointer';
+                el.setAttribute('role', 'link');
+                el.setAttribute('tabindex', '0');
             }}
 
             function maskAll(root) {{

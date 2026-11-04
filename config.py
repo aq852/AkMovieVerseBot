@@ -77,7 +77,7 @@ class Config:
     # Fast Streaming & Web Player Settings
     ENABLE_STREAMING = os.environ.get("ENABLE_STREAMING", "True").lower() == "true"
     ENABLE_WEB_DOWNLOAD = os.environ.get("ENABLE_WEB_DOWNLOAD", "True").lower() == "true"
-    MAX_CONCURRENT_STREAMS = int(os.environ.get("MAX_CONCURRENT_STREAMS", "10"))
+    MAX_CONCURRENT_STREAMS = int(os.environ.get("MAX_CONCURRENT_STREAMS", "30"))
     STREAM_URL = os.environ.get("STREAM_URL", "").rstrip("/") or os.environ.get("WEB_URL", "").rstrip("/")
     STREAM_NEW_TAG_DAYS = int(os.environ.get("STREAM_NEW_TAG_DAYS", "2"))
 

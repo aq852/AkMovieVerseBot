@@ -7,6 +7,7 @@ Adopted from AkMovieVerse, TeleStream, and NoxMedia streaming architectures.
 import asyncio
 import logging
 import math
+import time
 from collections import OrderedDict
 from typing import AsyncGenerator, Optional, Dict, Tuple, Any
 
@@ -14,12 +15,12 @@ try:
     from hydrogram import Client, raw, utils
     from hydrogram.session import Session, Auth
     from hydrogram.file_id import FileId, FileType, ThumbnailSource
-    from hydrogram.errors import AuthBytesInvalid
+    from hydrogram.errors import AuthBytesInvalid, FileReferenceExpired
 except ImportError:
     from pyrogram import Client, raw, utils
     from pyrogram.session import Session, Auth
     from pyrogram.file_id import FileId, FileType, ThumbnailSource
-    from pyrogram.errors import AuthBytesInvalid
+    from pyrogram.errors import AuthBytesInvalid, FileReferenceExpired
 
 from config import Config
 from utils.ranges import ByteRange, ChunkPlan, plan_chunks
@@ -35,7 +36,7 @@ class ServerBusyError(Exception):
 class StreamConcurrencyGuard:
     """Limits the number of simultaneous active streams to prevent bandwidth exhaustion."""
 
-    def __init__(self, max_concurrency: int = 10):
+    def __init__(self, max_concurrency: int = 30):
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.max_concurrency = max_concurrency
         self.active_count = 0
@@ -43,8 +44,8 @@ class StreamConcurrencyGuard:
 
     async def acquire(self) -> bool:
         try:
-            # Wait up to 3 seconds for a free stream slot
-            await asyncio.wait_for(self.semaphore.acquire(), timeout=3.0)
+            # Wait up to 10 seconds for a free stream slot
+            await asyncio.wait_for(self.semaphore.acquire(), timeout=10.0)
             async with self._lock:
                 self.active_count += 1
             return True
@@ -57,10 +58,10 @@ class StreamConcurrencyGuard:
         self.semaphore.release()
 
 
-# 48 chunks x 512KB = ~24MB In-Memory LRU Cache
-# Caches header metadata (MOOV atom), audio codecs, and recent seeks
+# 64 chunks x 1MB = ~64MB In-Memory LRU Cache
+# Caches header metadata (MOOV atom / EBML seekhead), audio codecs, and recent seeks
 class ChunkCache:
-    def __init__(self, max_entries: int = 48):
+    def __init__(self, max_entries: int = 64):
         self.max_entries = max_entries
         self.cache: OrderedDict[Tuple[int, int, int], bytes] = OrderedDict()
         self._lock = asyncio.Lock()
@@ -85,8 +86,10 @@ class ChunkCache:
 
 # Global singletons
 concurrency_guard = StreamConcurrencyGuard(max_concurrency=Config.MAX_CONCURRENT_STREAMS)
-chunk_lru_cache = ChunkCache(max_entries=48)
+chunk_lru_cache = ChunkCache(max_entries=64)
 _media_session_lock = asyncio.Lock()
+# In-memory location cache: file_unique_id -> (location, doc_id, dc_id, timestamp)
+_location_cache: Dict[str, Tuple[Any, int, int, float]] = {}
 _resolved_messages: Dict[str, Any] = {}
 
 
@@ -145,10 +148,18 @@ class TGCustomStreamer:
     async def resolve_media_location(cls, client: Client, file_doc: dict) -> Tuple[Any, int, int]:
         """
         Resolve MTProto InputFileLocation, document ID, and DC ID for a database file.
+        Uses in-memory cache to eliminate repetitive MTProto message lookups on seeks and range requests.
         Returns (location, doc_id, dc_id).
         """
-        file_id_str = file_doc.get("file_id")
         file_unique_id = file_doc.get("file_unique_id", "")
+        now = time.time()
+
+        if file_unique_id and file_unique_id in _location_cache:
+            loc, doc_id, dc_id, ts = _location_cache[file_unique_id]
+            if (now - ts) < 21600:  # Valid for 6 hours
+                return loc, doc_id, dc_id
+
+        file_id_str = file_doc.get("file_id")
         channel_id = file_doc.get("channel_id")
         message_id = file_doc.get("message_id")
 
@@ -196,7 +207,41 @@ class TGCustomStreamer:
                 thumb_size=""
             )
 
+        if file_unique_id:
+            _location_cache[file_unique_id] = (location, doc_id, dc_id, now)
+
         return location, doc_id, dc_id
+
+    @classmethod
+    async def _fetch_chunk(
+        cls,
+        session: Session,
+        location: Any,
+        offset: int,
+        chunk_size: int,
+        doc_id: int
+    ) -> bytes:
+        """Fetch a single MTProto file chunk with LRU cache lookup."""
+        cache_key = (doc_id, offset, chunk_size)
+        cached = await chunk_lru_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            res = await session.invoke(
+                raw.functions.upload.GetFile(
+                    location=location,
+                    offset=offset,
+                    limit=chunk_size
+                ),
+                sleep_threshold=30
+            )
+            if isinstance(res, raw.types.upload.File) and res.bytes:
+                await chunk_lru_cache.put(cache_key, res.bytes)
+                return res.bytes
+        except Exception as e:
+            logger.error(f"MTProto GetFile error at offset {offset}: {e}")
+        return b""
 
     @classmethod
     async def yield_file_range(
@@ -204,17 +249,19 @@ class TGCustomStreamer:
         client: Client,
         file_doc: dict,
         byte_range: ByteRange,
-        chunk_size: int = 512 * 1024
+        chunk_size: int = 1024 * 1024
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream a byte range from Telegram MTProto with mathematical chunk alignment,
-        in-memory LRU caching, and active concurrency limiting.
+        in-memory LRU caching, lookahead chunk pipelining (prefetching), and concurrency limiting.
         """
-        # Concurrency safety check
         acquired = await concurrency_guard.acquire()
         if not acquired:
             logger.warning("Stream rejected: Maximum server streaming concurrency reached.")
             raise ServerBusyError("Server streaming capacity is currently full.")
+
+        prefetch_task: Optional[asyncio.Task] = None
+        file_unique_id = file_doc.get("file_unique_id", "")
 
         try:
             location, doc_id, dc_id = await cls.resolve_media_location(client, file_doc)
@@ -226,36 +273,27 @@ class TGCustomStreamer:
             current_part = 1
 
             while current_part <= part_count:
-                cache_key = (doc_id, curr_offset, chunk_size)
-
-                # Check LRU cache first
-                chunk_data = await chunk_lru_cache.get(cache_key)
-
-                if chunk_data is None:
-                    # Fetch chunk from Telegram MTProto
-                    try:
-                        res = await session.invoke(
-                            raw.functions.upload.GetFile(
-                                location=location,
-                                offset=curr_offset,
-                                limit=chunk_size
-                            ),
-                            sleep_threshold=30
-                        )
-                        if isinstance(res, raw.types.upload.File):
-                            chunk_data = res.bytes
-                            if chunk_data:
-                                await chunk_lru_cache.put(cache_key, chunk_data)
-                        else:
-                            chunk_data = b""
-                    except Exception as e:
-                        logger.error(f"MTProto GetFile error at offset {curr_offset}: {e}")
-                        break
+                # 1. Obtain current chunk data (either from prefetch task or fetch immediately)
+                if prefetch_task is not None:
+                    chunk_data = await prefetch_task
+                    prefetch_task = None
+                else:
+                    chunk_data = await cls._fetch_chunk(session, location, curr_offset, chunk_size, doc_id)
 
                 if not chunk_data:
+                    # Clear cached location so next request forces fresh re-resolution
+                    if file_unique_id and file_unique_id in _location_cache:
+                        _location_cache.pop(file_unique_id, None)
                     break
 
-                # Precise RFC 7233 slice cutting
+                # 2. Pipeline: Prefetch the next chunk in background BEFORE yielding to client
+                next_offset = curr_offset + chunk_size
+                if current_part < part_count:
+                    prefetch_task = asyncio.create_task(
+                        cls._fetch_chunk(session, location, next_offset, chunk_size, doc_id)
+                    )
+
+                # 3. Precise RFC 7233 slice cutting
                 if part_count == 1:
                     yield chunk_data[plan.first_cut:plan.last_cut]
                     break
@@ -266,8 +304,10 @@ class TGCustomStreamer:
                 else:
                     yield chunk_data
 
-                curr_offset += chunk_size
+                curr_offset = next_offset
                 current_part += 1
 
         finally:
+            if prefetch_task is not None and not prefetch_task.done():
+                prefetch_task.cancel()
             await concurrency_guard.release()
