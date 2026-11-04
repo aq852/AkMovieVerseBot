@@ -275,18 +275,22 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -308,18 +312,14 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -1876,24 +1876,24 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
         function handleAnyPlayer(e) {{
             const isAndroid = /Android/i.test(navigator.userAgent || '');
             if (!isAndroid) {{
-                e.preventDefault();
-                window.open("{stream_url}", "_blank");
+                if (e) e.preventDefault();
+                window.location.href = "{stream_url}";
             }}
         }}
 
         function handleMxPlayer(e) {{
             const isAndroid = /Android/i.test(navigator.userAgent || '');
             if (!isAndroid) {{
-                e.preventDefault();
-                window.location.href = "/player/mx/{file_unique_id}";
+                if (e) e.preventDefault();
+                window.location.href = "{m3u_url}";
             }}
         }}
 
         function handleVlcPlayer(e) {{
             const isAndroid = /Android/i.test(navigator.userAgent || '');
             if (!isAndroid) {{
-                e.preventDefault();
-                window.location.href = "/player/vlc/{file_unique_id}";
+                if (e) e.preventDefault();
+                window.location.href = "{m3u_url}";
             }}
         }}
 
@@ -2319,18 +2319,22 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -2352,18 +2356,14 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -2710,18 +2710,22 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -2743,18 +2747,14 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -3340,18 +3340,22 @@ CATALOG_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -3373,18 +3377,14 @@ CATALOG_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -5133,18 +5133,22 @@ async def mx_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -5166,18 +5170,14 @@ async def mx_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -5343,18 +5343,22 @@ async def chooser_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -5376,18 +5380,14 @@ async def chooser_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -5565,18 +5565,22 @@ async def vlc_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -5598,18 +5602,14 @@ async def vlc_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{
@@ -5922,18 +5922,22 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
-            document.addEventListener('pointerdown', function (e) {{
-                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
-                if (!el) return;
-                const url = el.getAttribute('data-target-url');
-                if (url) {{
-                    el.setAttribute('href', url);
+            window.openSafeUrl = function (url, newTab) {{
+                if (!url) return;
+                if (newTab) {{
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
                     setTimeout(() => {{
-                        el.removeAttribute('href');
-                    }}, 400);
+                        try {{ document.body.removeChild(a); }} catch (e) {{}}
+                    }}, 250);
+                }} else {{
+                    window.location.href = url;
                 }}
-            }}, true);
+            }};
 
             if (window.MutationObserver) {{
                 new MutationObserver(function (mutations) {{
@@ -5955,18 +5959,14 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
-                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
                 if (!url) return;
 
                 const target = el.getAttribute('target');
-                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }} else {{
-                    window.location.href = url;
-                }}
+                const isNewTab = (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1);
+                window.openSafeUrl(url, isNewTab);
             }}, false);
 
             document.addEventListener('keydown', function (e) {{

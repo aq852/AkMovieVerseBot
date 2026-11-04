@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import logging
 from bson.objectid import ObjectId
+from pymongo import InsertOne
 from config import Config
 from database.mongo import mongo
 
@@ -190,6 +191,122 @@ async def save_file(media: dict) -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Error saving file to MongoDB: {e}")
         return False, str(e)
+
+
+async def save_files_bulk(media_list: list[dict]) -> dict:
+    """High-performance batch saver for channel indexer with duplicate prevention.
+    Returns: {'saved': int, 'duplicate': int, 'errors': int, 'saved_media': list[dict]}
+    """
+    res = {"saved": 0, "duplicate": 0, "errors": 0, "saved_media": []}
+    if not media_list:
+        return res
+
+    seen_uids = set()
+    seen_name_sizes = set()
+    valid_batch = []
+    batch_uids = []
+    name_size_queries = []
+
+    for m in media_list:
+        uid = m.get("file_unique_id")
+        if not uid:
+            res["errors"] += 1
+            continue
+
+        fname = m.get("file_name", "Untitled")
+        fsize = m.get("file_size", 0)
+
+        # In-batch duplicate check
+        if uid in seen_uids:
+            res["duplicate"] += 1
+            continue
+        if fsize > 0 and fname and fname != "Untitled" and (fname, fsize) in seen_name_sizes:
+            res["duplicate"] += 1
+            continue
+
+        seen_uids.add(uid)
+        if fsize > 0 and fname and fname != "Untitled":
+            seen_name_sizes.add((fname, fsize))
+            name_size_queries.append({"file_name": fname, "file_size": fsize})
+
+        valid_batch.append(m)
+        batch_uids.append(uid)
+
+    if not valid_batch:
+        return res
+
+    existing_uids = set()
+    existing_name_sizes = set()
+
+    # Query existing duplicates in MongoDB
+    query_conditions = [{"file_unique_id": {"$in": batch_uids}}]
+    if name_size_queries:
+        query_conditions.append({"$or": name_size_queries[:100]})
+
+    async def scan_existing(col):
+        try:
+            cursor = col.find({"$or": query_conditions}, {"_id": 0, "file_unique_id": 1, "file_name": 1, "file_size": 1})
+            async for doc in cursor:
+                u = doc.get("file_unique_id")
+                if u:
+                    existing_uids.add(u)
+                fn = doc.get("file_name")
+                fs = doc.get("file_size")
+                if fn and fs:
+                    existing_name_sizes.add((fn, fs))
+        except Exception as err:
+            logger.debug(f"Error querying existing files: {err}")
+
+    await scan_existing(mongo.files)
+    if mongo.has_secondary:
+        await scan_existing(mongo.files_secondary)
+
+    # Determine files to insert
+    target_col, _ = await get_active_target_collection()
+    operations = []
+    now_utc = datetime.datetime.utcnow()
+    ready_to_save = []
+
+    for m in valid_batch:
+        uid = m.get("file_unique_id")
+        fname = m.get("file_name", "Untitled")
+        fsize = m.get("file_size", 0)
+
+        if uid in existing_uids or (fname, fsize) in existing_name_sizes:
+            res["duplicate"] += 1
+            continue
+
+        file_doc = {
+            "file_id": m.get("file_id"),
+            "file_unique_id": uid,
+            "file_name": fname,
+            "file_size": fsize,
+            "file_type": m.get("file_type", "document"),
+            "mime_type": m.get("mime_type", ""),
+            "caption": m.get("caption", ""),
+            "channel_id": m.get("channel_id"),
+            "message_id": m.get("message_id"),
+            "created_at": now_utc
+        }
+        operations.append(InsertOne(file_doc))
+        ready_to_save.append(m)
+
+    if operations:
+        try:
+            bulk_res = await target_col.bulk_write(operations, ordered=False)
+            inserted = bulk_res.inserted_count
+            res["saved"] = inserted
+            res["saved_media"] = ready_to_save[:inserted]
+        except Exception as e:
+            logger.error(f"Error in bulk_write execution: {e}")
+            for op in operations:
+                try:
+                    await target_col.insert_one(op._doc)
+                    res["saved"] += 1
+                except Exception:
+                    res["errors"] += 1
+
+    return res
 
 
 async def clean_duplicate_files() -> tuple[int, int]:

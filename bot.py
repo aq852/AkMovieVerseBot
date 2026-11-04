@@ -128,6 +128,14 @@ class Bot(Client):
         except Exception as e:
             logger.warning(f"Could not launch storage health monitor: {e}")
 
+        # 10. Check for Interrupted Channel Indexing Checkpoints (Resume Alert)
+        try:
+            from plugins.channel_indexer import check_and_notify_interrupted_checkpoints
+            asyncio.create_task(check_and_notify_interrupted_checkpoints(self))
+            logger.info("Launched Interrupted Indexer Checkpoints detector.")
+        except Exception as e:
+            logger.warning(f"Could not launch indexer checkpoint checker: {e}")
+
     async def stop(self, *args):
         try:
             from utils.downloader import purge_stale_temp_downloads
