@@ -414,55 +414,58 @@ async def build_hidden_gem_content(bot_username: str) -> tuple[str, InlineKeyboa
             chosen_doc = file_docs[0]
             chosen_title = clean_media_title(chosen_doc.get("file_name", "Must Watch Movie"))
 
-        # Save to rotation
-        if chosen_title:
+        if not chosen_title:
+            # Fallback to first default gem if library is completely empty
+            gem = DEFAULT_GEMS[0]
+        else:
+            # Save to rotation
             last_shown_titles.append(chosen_title)
             if len(last_shown_titles) > 30:
                 last_shown_titles = last_shown_titles[-30:]
             await set_bot_setting("last_shown_gem_titles", last_shown_titles)
 
-        # Search query clean name
-        search_term = re.sub(r"\s*\(?(?:19|20)\d{2}\)?.*", "", chosen_title).strip()
+            # Search query clean name
+            search_term = re.sub(r"\s*\(?(?:19|20)\d{2}\)?.*", "", chosen_title).strip()
 
-        # Fetch official TMDB metadata
-        tmdb_meta = {}
-        try:
-            from plugins.channel_post import fetch_tmdb_post_metadata
-            tmdb_meta = await fetch_tmdb_post_metadata(search_term or chosen_title) or {}
-        except Exception as tmdb_e:
-            logger.debug(f"TMDB fetch error for gem {chosen_title}: {tmdb_e}")
-
-        rating_val = 8.2
-        if tmdb_meta.get("rating_str"):
-            m = re.search(r"(\d+(?:\.\d+)?)", tmdb_meta["rating_str"])
-            if m:
-                rating_val = float(m.group(1))
-        elif tmdb_meta.get("rating"):
+            # Fetch official TMDB metadata
+            tmdb_meta = {}
             try:
-                rating_val = float(tmdb_meta["rating"])
-            except Exception:
-                pass
+                from plugins.channel_post import fetch_tmdb_post_metadata
+                tmdb_meta = await fetch_tmdb_post_metadata(search_term or chosen_title) or {}
+            except Exception as tmdb_e:
+                logger.debug(f"TMDB fetch error for gem {chosen_title}: {tmdb_e}")
 
-        genre_str = " • ".join(tmdb_meta.get("genres", [])[:3]) if tmdb_meta.get("genres") else "Drama • Thriller"
-        hook_str = tmdb_meta.get("overview") or "Ek shaandar release jo aapko shuru se aakhri tak baandhe rakhegi! Abhi full HD me watch ya download karein."
-        if len(hook_str) > 220:
-            hook_str = hook_str[:215] + "..."
+            rating_val = 8.2
+            if tmdb_meta.get("rating_str"):
+                m = re.search(r"(\d+(?:\.\d+)?)", tmdb_meta["rating_str"])
+                if m:
+                    rating_val = float(m.group(1))
+            elif tmdb_meta.get("rating"):
+                try:
+                    rating_val = float(tmdb_meta["rating"])
+                except Exception:
+                    pass
 
-        poster_url = tmdb_meta.get("backdrop_url") or tmdb_meta.get("poster_url")
-        if not poster_url:
-            poster_url = await get_cached_poster_url(search_term or chosen_title)
+            genre_str = " • ".join(tmdb_meta.get("genres", [])[:3]) if tmdb_meta.get("genres") else "Drama • Thriller"
+            hook_str = tmdb_meta.get("overview") or "Ek shaandar release jo aapko shuru se aakhri tak baandhe rakhegi! Abhi full HD me watch ya download karein."
+            if len(hook_str) > 220:
+                hook_str = hook_str[:215] + "..."
 
-        is_series = tmdb_meta.get("media_type") == "tv" or "season" in chosen_title.lower()
-        gem = {
-            "title": chosen_title,
-            "type": "series" if is_series else "movie",
-            "rating": rating_val,
-            "genre": genre_str,
-            "audio": "Hindi Dubbed + Multi Audio",
-            "hook": hook_str,
-            "search_query": search_term or chosen_title,
-            "poster": poster_url
-        }
+            poster_url = tmdb_meta.get("backdrop_url") or tmdb_meta.get("poster_url")
+            if not poster_url:
+                poster_url = await get_cached_poster_url(search_term or chosen_title)
+
+            is_series = tmdb_meta.get("media_type") == "tv" or "season" in chosen_title.lower()
+            gem = {
+                "title": chosen_title,
+                "type": "series" if is_series else "movie",
+                "rating": rating_val,
+                "genre": genre_str,
+                "audio": "Hindi Dubbed + Multi Audio",
+                "hook": hook_str,
+                "search_query": search_term or chosen_title,
+                "poster": poster_url
+            }
 
     title = gem.get("title", "Must Watch")
     g_type = gem.get("type", "movie")
