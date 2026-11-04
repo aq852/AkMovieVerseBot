@@ -22,7 +22,7 @@ from utils.helpers import format_clean_title, get_cached_poster_url
 
 logger = logging.getLogger(__name__)
 
-# Pre-populated legendary gems across Movies, Anime, Web Series, and K-Dramas
+# Pre-populated legendary gems across Movies, Anime, Web Series, and K-Dramas (Verified TMDB Posters)
 DEFAULT_GEMS = [
     {
         "title": "Maharaja (2024)",
@@ -32,7 +32,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Tamil",
         "hook": "Ek seedha-saadha naayi (barber) police station me FIR likhwane aata hai ki uske ghar se ek 'Dustbin' (Lakshmi) chori ho gaya hai... Lekin aakhri ke 30 minute ka suspense aapke hosh uda dega!",
         "search_query": "Maharaja",
-        "poster": "https://image.tmdb.org/t/p/w780/5nqnYj6n2VwQp5hKovl6b9U4y8T.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/s0m4TM1XRAftQStgKpw024RvkJo.jpg"
     },
     {
         "title": "Death Note (Anime Series)",
@@ -42,7 +42,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Japanese [Dual Audio]",
         "hook": "Ek genius high-school student ko aisi diary milti hai jisme kisi ka bhi naam likhte hi uski maut ho jaati hai... Aur shuru hota hai duniya ke sabse bade detective 'L' ke saath mind games ka tufaan!",
         "search_query": "Death Note",
-        "poster": "https://image.tmdb.org/t/p/w780/tC78Pck2YJl5Y2UsIOWftKpWuRA.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/tCZFfYTIwrR7n94J6G14Y4hAFU6.jpg"
     },
     {
         "title": "12th Fail (2023)",
@@ -52,7 +52,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Original",
         "hook": "Chambal ke gaon se nikla ek ladka jo 12th me fail ho jata hai, par aisi zidd pakadta hai ki aakhri attempt me desh ka sabse bada IPS officer ban kar dikhata hai. Har student ke roongte khade kar dene wali kahani!",
         "search_query": "12th Fail",
-        "poster": "https://image.tmdb.org/t/p/w780/4qWb7T1Zk3z91m03H8Jz67V8v7P.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/eebUPRI4Z5e1Z7Hev4JZAwMIFkX.jpg"
     },
     {
         "title": "Asur: Welcome to Your Dark Side",
@@ -62,7 +62,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Original [5.1 Audio]",
         "hook": "Varanasi ki galiyon me ek shatir serial killer jo Hindu mythology aur forensic science ko mila kar aisi hatyayein karta hai ki CBI dhang reh jaati hai!",
         "search_query": "Asur",
-        "poster": "https://image.tmdb.org/t/p/w780/sC5Lp5Qv5B3h7b5V2N8K1m8P4L.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/aw8W6JCrE3zsQexfvsu4cDjb1ub.jpg"
     },
     {
         "title": "Attack on Titan (Shingeki no Kyojin)",
@@ -72,7 +72,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Japanese",
         "hook": "Deewaron ke peeche qaid insaniyat aur unhe kacha chaba jaane wale aadamkhor Titans... Plot twists aisi jo aapko har episode ke baad baith kar sochne pe majboor kar dengi!",
         "search_query": "Attack on Titan",
-        "poster": "https://image.tmdb.org/t/p/w780/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg"
     },
     {
         "title": "Tumbbad (2018)",
@@ -82,7 +82,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Original [Dolby Atmos]",
         "hook": "'Dadi so rahi hai to Hastar nahi aayega...' Lalach ki aisi bhayanak kahani jo Indian cinema me pehle kabhi nahi bani! Visuals aur sound design 10/10 masterclass.",
         "search_query": "Tumbbad",
-        "poster": "https://image.tmdb.org/t/p/w780/m9f3eM2xJ8l8V2M5y6K0N1P4R7T.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/z1xOCxw780WFJC5uCTMfCkQ4Agi.jpg"
     },
     {
         "title": "All of Us Are Dead (K-Drama)",
@@ -92,7 +92,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Korean",
         "hook": "Ek high-school science lab se failta hai ajeeb virus, aur poora school zombies se bhar jata hai... Bina kisi hathiyar ke students ka bacho aur apno ko bachaane ka ruthless struggle!",
         "search_query": "All of Us Are Dead",
-        "poster": "https://image.tmdb.org/t/p/w780/pTEFqAjLzyEuvOzUlPG8hF7i7H6.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/pTEFqAjLd5YTsMD6NSUxV6Dq7A6.jpg"
     },
     {
         "title": "Ratsasan (2018)",
@@ -102,7 +102,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Tamil",
         "hook": "School ki masoom ladkiyon ko target karne wala ek psycho killer, jiske chehre ke peeche ek aisi kahani hai jo aapke raungte khade kar degi. India ki best serial killer movies me se ek!",
         "search_query": "Ratsasan",
-        "poster": "https://image.tmdb.org/t/p/w780/bQ4b7k2T1l8M3V5y6K0N1P4R7T.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/mRObdeazn263na5zXzZSRJTBvi7.jpg"
     },
     {
         "title": "Chernobyl (Miniseries)",
@@ -112,7 +112,7 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + English",
         "hook": "1986 me Soviet nuclear plant me dhamaka hota hai... Sach chupane ke liye neta jhooth bolte hain, par scientist aur aam logon ki qurbani dilon ko jhinjhod kar rakh deti hai!",
         "search_query": "Chernobyl",
-        "poster": "https://image.tmdb.org/t/p/w780/hlLXt2tOPT6RRnjiUmoxyG1LTFi.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/hlLXt2tOPT6RRnjiUmoxyG1LTFi.jpg"
     },
     {
         "title": "Squid Game (K-Drama)",
@@ -122,12 +122,12 @@ DEFAULT_GEMS = [
         "audio": "Hindi Dubbed + Korean",
         "hook": "Karze me doobe 456 log 45.6 Billion Won ke inaam ke liye bachpan ke aam games khelte hain... Par har game harne wale ki seedhi maut hoti hai!",
         "search_query": "Squid Game",
-        "poster": "https://image.tmdb.org/t/p/w780/dDlG1vKlTq4gVfR7Y2Z9o3xW8bJ.jpg"
+        "poster": "https://image.tmdb.org/t/p/w500/1QdXdRYfktUSONkl1oD5gc6Be0s.jpg"
     }
 ]
 
 async def init_gems_collection():
-    """Ensure pre-populated gems exist in MongoDB."""
+    """Ensure pre-populated gems exist in MongoDB with verified poster URLs."""
     try:
         coll = mongo.db["hidden_gems"]
         count = await coll.count_documents({})
@@ -137,6 +137,13 @@ async def init_gems_collection():
                 g["last_shown"] = None
                 await coll.insert_one(g)
             logger.info("Initialized default curated Hidden Gems pool in MongoDB.")
+        else:
+            # Sync any old 404/broken poster URLs in MongoDB with verified working ones
+            for g in DEFAULT_GEMS:
+                await coll.update_one(
+                    {"search_query": g["search_query"]},
+                    {"$set": {"poster": g["poster"]}}
+                )
     except Exception as e:
         logger.error(f"Error initializing gems collection: {e}")
 
@@ -529,12 +536,21 @@ async def execute_broadcast_with_dead_user_purging(
     for uid in user_ids:
         try:
             if photo_url:
-                await client.send_photo(
-                    chat_id=uid,
-                    photo=photo_url,
-                    caption=text,
-                    reply_markup=markup
-                )
+                try:
+                    await client.send_photo(
+                        chat_id=uid,
+                        photo=photo_url,
+                        caption=text,
+                        reply_markup=markup
+                    )
+                except Exception as p_err:
+                    logger.warning(f"send_photo failed for user {uid} ({p_err}). Retrying with text message fallback...")
+                    await client.send_message(
+                        chat_id=uid,
+                        text=text,
+                        reply_markup=markup,
+                        disable_web_page_preview=True
+                    )
             else:
                 await client.send_message(
                     chat_id=uid,
@@ -548,12 +564,16 @@ async def execute_broadcast_with_dead_user_purging(
             await asyncio.sleep(fw.value + 1)
             try:
                 if photo_url:
-                    await client.send_photo(chat_id=uid, photo=photo_url, caption=text, reply_markup=markup)
+                    try:
+                        await client.send_photo(chat_id=uid, photo=photo_url, caption=text, reply_markup=markup)
+                    except Exception:
+                        await client.send_message(chat_id=uid, text=text, reply_markup=markup, disable_web_page_preview=True)
                 else:
                     await client.send_message(chat_id=uid, text=text, reply_markup=markup, disable_web_page_preview=True)
                 sent += 1
-            except Exception:
+            except Exception as e2:
                 failed += 1
+                logger.warning(f"Broadcast delivery retry failed for user {uid}: {e2}")
         except (UserIsBlocked, InputUserDeactivated, UserDeactivated, PeerIdInvalid):
             blocked_purged += 1
             try:
@@ -563,7 +583,7 @@ async def execute_broadcast_with_dead_user_purging(
                 logger.debug(f"Could not purge dead user {uid}: {del_err}")
         except Exception as e:
             failed += 1
-            logger.debug(f"Broadcast delivery failed for user {uid}: {e}")
+            logger.warning(f"Broadcast delivery failed for user {uid}: {e}")
 
     return {
         "total": total_users,
@@ -613,7 +633,6 @@ async def start_daily_broadcast_scheduler(client: Client):
             # Trigger window: if current IST matches target hour & minute
             if now_ist.hour == sched_hour and now_ist.minute >= sched_min:
                 logger.info(f"Triggering scheduled daily broadcast for {today_str} (IST {now_ist.strftime('%H:%M')})...")
-                await set_bot_setting("last_broadcast_date", today_str)
 
                 bot_username = client.me.username if client.me else Config.BOT_USERNAME
 
@@ -625,6 +644,9 @@ async def start_daily_broadcast_scheduler(client: Client):
 
                 # Execute with dead user pruning
                 stats = await execute_broadcast_with_dead_user_purging(client, text, markup, photo)
+
+                if stats.get("sent", 0) > 0:
+                    await set_bot_setting("last_broadcast_date", today_str)
 
                 # Report to Log Channel & Admins
                 summary_report = (
