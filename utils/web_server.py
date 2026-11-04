@@ -275,16 +275,16 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -308,6 +308,7 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -2318,16 +2319,16 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -2351,6 +2352,7 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -2708,16 +2710,16 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -2741,6 +2743,7 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -3337,16 +3340,16 @@ CATALOG_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -3370,6 +3373,7 @@ CATALOG_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -4227,6 +4231,7 @@ async def watch_handler(request: web.Request):
             """
 
     html = WEB_PLAYER_HTML.format(
+        file_unique_id=file_unique_id,
         clean_title=html_escape(clean_title),
         raw_filename=html_escape(file_name),
         badges_html=badges_html,
@@ -5128,16 +5133,16 @@ async def mx_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -5161,6 +5166,7 @@ async def mx_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -5337,16 +5343,16 @@ async def chooser_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -5370,6 +5376,7 @@ async def chooser_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -5558,16 +5565,16 @@ async def vlc_redirect_handler(request: web.Request):
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -5591,6 +5598,7 @@ async def vlc_redirect_handler(request: web.Request):
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
@@ -5914,16 +5922,16 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 if (a) maskLink(a);
             }}, true);
 
-            // Temporarily restore href on pointerdown for special app protocols (intent, tg, whatsapp)
+            // Restore native href on pointerdown so browser executes native navigation (zero popup-blocker issues)
             document.addEventListener('pointerdown', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
                 const url = el.getAttribute('data-target-url');
-                if (url && (url.startsWith('intent://') || url.startsWith('tg://') || url.startsWith('whatsapp://'))) {{
+                if (url) {{
                     el.setAttribute('href', url);
                     setTimeout(() => {{
                         el.removeAttribute('href');
-                    }}, 600);
+                    }}, 400);
                 }}
             }}, true);
 
@@ -5947,6 +5955,7 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             document.addEventListener('click', function (e) {{
                 const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
                 if (!el) return;
+                if (el.hasAttribute('href')) return;
                 if (e.defaultPrevented) return;
 
                 const url = el.getAttribute('data-target-url');
