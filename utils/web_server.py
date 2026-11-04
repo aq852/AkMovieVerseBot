@@ -213,7 +213,7 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
             }}
         }}, 1000);
 
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -243,6 +243,76 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -1822,10 +1892,8 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
         function doShareWhatsApp(e) {{
             if (e) e.preventDefault();
             const text = getShareText();
-            window.location.href = "whatsapp://send?text=" + encodeURIComponent(text);
-            setTimeout(() => {{
-                window.open("https://api.whatsapp.com/send?text=" + encodeURIComponent(text), "_blank");
-            }}, 600);
+            const waUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(text);
+            window.open(waUrl, "_blank", "noopener,noreferrer");
         }}
 
         function doShareTelegram(e) {{
@@ -1833,12 +1901,8 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             const title = getMovieTitle();
             const url = window.location.href;
             const text = "🎬 Watch " + title + " in HD Online Stream";
-            const tgAppUrl = "tg://msg_url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
             const tgWebUrl = "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
-            window.location.href = tgAppUrl;
-            setTimeout(() => {{
-                window.open(tgWebUrl, "_blank");
-            }}, 600);
+            window.open(tgWebUrl, "_blank", "noopener,noreferrer");
         }}
 
         function fallbackCopy(text, cb) {{
@@ -2162,7 +2226,7 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 console.log('Episodes setting error:', err);
             }}
         }});
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -2192,6 +2256,76 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -2467,7 +2601,7 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
         {prints_or_episodes_html}
     </div>
 
-    <!-- Bulletproof Anti-Right-Click & Inspection Shield -->
+    <!-- Bulletproof Anti-Right-Click & Stealth URL Inspection Shield -->
     <script>
         (function () {{
             function killEvent(e) {{
@@ -2498,6 +2632,76 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -3000,7 +3204,7 @@ CATALOG_HTML = """<!DOCTYPE html>
             {next_btn_html}
         </div>
     </div>
-    <!-- Bulletproof Anti-Right-Click & Inspection Shield -->
+    <!-- Bulletproof Anti-Right-Click & Stealth URL Inspection Shield -->
     <script>
         (function () {{
             function killEvent(e) {{
@@ -3043,6 +3247,76 @@ CATALOG_HTML = """<!DOCTYPE html>
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -4722,7 +4996,7 @@ async def mx_redirect_handler(request: web.Request):
                 window.location.href = "{mx_free_intent}";
             }}
         }});
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -4750,6 +5024,76 @@ async def mx_redirect_handler(request: web.Request):
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -4847,7 +5191,7 @@ async def chooser_redirect_handler(request: web.Request):
                 window.location.href = "{stream_url}";
             }}
         }});
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -4875,6 +5219,76 @@ async def chooser_redirect_handler(request: web.Request):
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -4984,7 +5398,7 @@ async def vlc_redirect_handler(request: web.Request):
                 window.location.href = "{m3u_url}";
             }}
         }});
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -5012,6 +5426,76 @@ async def vlc_redirect_handler(request: web.Request):
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
@@ -5256,7 +5740,7 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 iframe.msRequestFullscreen();
             }}
         }}
-        // Bulletproof Anti-Right-Click & Inspection Shield
+        // Bulletproof Anti-Right-Click & Stealth URL Inspection Shield
         (function () {{
             function killEvent(e) {{
                 if (e) {{
@@ -5284,6 +5768,76 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                     return killEvent(e);
                 }}
             }}, true);
+
+            // Stealth URL Cloaker: Removes href so browser never displays the link in the bottom-left corner
+            function maskLink(el) {{
+                if (!el || !el.getAttribute) return;
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('javascript:') && href !== '#' && !href.startsWith('#')) {{
+                    el.setAttribute('data-target-url', href);
+                    el.removeAttribute('href');
+                    el.style.cursor = 'pointer';
+                    el.setAttribute('role', 'link');
+                    el.setAttribute('tabindex', '0');
+                }}
+            }}
+
+            function maskAll(root) {{
+                const scope = root || document;
+                if (!scope.querySelectorAll) return;
+                scope.querySelectorAll('a[href]').forEach(maskLink);
+            }}
+
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', function () {{ maskAll(); }});
+            }} else {{
+                maskAll();
+            }}
+
+            document.addEventListener('mouseover', function (e) {{
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) maskLink(a);
+            }}, true);
+
+            if (window.MutationObserver) {{
+                new MutationObserver(function (mutations) {{
+                    for (let i = 0; i < mutations.length; i++) {{
+                        const added = mutations[i].addedNodes;
+                        for (let j = 0; j < added.length; j++) {{
+                            if (added[j].nodeType === 1) {{
+                                if (added[j].tagName === 'A' && added[j].hasAttribute('href')) {{
+                                    maskLink(added[j]);
+                                }} else if (added[j].querySelectorAll) {{
+                                    maskAll(added[j]);
+                                }}
+                            }}
+                        }}
+                    }}
+                }}).observe(document.documentElement, {{ childList: true, subtree: true }});
+            }}
+
+            document.addEventListener('click', function (e) {{
+                const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                if (!el) return;
+                if (e.defaultPrevented) return;
+
+                const url = el.getAttribute('data-target-url');
+                if (!url) return;
+
+                const target = el.getAttribute('target');
+                if (target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1) {{
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }} else {{
+                    window.location.href = url;
+                }}
+            }}, false);
+
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Enter') {{
+                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
+                    if (el) el.click();
+                }}
+            }});
         }})();
     </script>
 </body>
