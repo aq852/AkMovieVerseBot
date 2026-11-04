@@ -1172,11 +1172,15 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            gap: 8px;
+            flex-wrap: wrap;
         }}
         .episodes-header-left {{
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-wrap: wrap;
+            min-width: 0;
         }}
         .episodes-icon {{
             font-size: 17px;
@@ -2581,20 +2585,20 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
 <body class="p-2 sm:p-5 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="w-full max-w-4xl space-y-4">
         <!-- Top Navigation Bar -->
-        <header class="flex items-center justify-between navbar-card">
-            <div class="flex items-center space-x-3">
-                <a href="/browse" class="text-xl sm:text-2xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-2">
-                    <span>🍿</span> <span>AkMovieVerse</span>
+        <header class="flex items-center justify-between gap-2 navbar-card py-2.5 px-3 sm:px-4">
+            <div class="flex items-center min-w-0">
+                <a href="/browse" class="text-base sm:text-xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-1.5 truncate">
+                    <span>🍿</span> <span class="truncate">AkMovieVerse</span>
                 </a>
             </div>
-            <div class="flex items-center gap-2">
-                <a href="{browse_url}" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
-                    <span>◀</span> <span>Browse All</span>
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <a href="{browse_url}" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1 border border-white/10 whitespace-nowrap">
+                    <span>◀</span> <span>Browse</span>
                 </a>
-                <a href="{channel_url}" target="_blank" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl transition border border-sky-500/20 hidden sm:inline-flex">
+                <a href="{channel_url}" target="_blank" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl transition border border-sky-500/20 hidden sm:inline-flex whitespace-nowrap">
                     <span>📢</span> <span>Channel</span>
                 </a>
-                <a href="https://t.me/{bot_username}" target="_blank" class="text-xs sm:text-sm font-medium px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
+                <a href="https://t.me/{bot_username}" target="_blank" class="text-xs sm:text-sm font-medium px-2.5 sm:px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1 border border-white/10 whitespace-nowrap">
                     <span>🤖</span> <span>Bot</span>
                 </a>
             </div>
@@ -2811,39 +2815,58 @@ CATALOG_HTML = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 4px 16px 4px;
+            padding: 4px 2px 14px 2px;
+            gap: 8px;
+            width: 100%;
         }}
         .brand {{
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 800;
             color: #38bdf8;
             text-decoration: none;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             letter-spacing: -0.3px;
+            flex-shrink: 0;
+            min-width: 0;
         }}
         .header-actions {{
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
         }}
         .nav-btn {{
             background: rgba(56, 189, 248, 0.12);
             border: 1px solid rgba(56, 189, 248, 0.35);
             color: #38bdf8;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 700;
-            padding: 6px 12px;
+            padding: 6px 11px;
             border-radius: 999px;
             text-decoration: none;
             transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 4px;
+            white-space: nowrap;
+            line-height: 1;
+            flex-shrink: 0;
         }}
         .nav-btn:hover {{
             background: rgba(56, 189, 248, 0.25);
             color: #ffffff;
+            border-color: #38bdf8;
+        }}
+        @media (max-width: 380px) {{
+            .brand {{
+                font-size: 16.5px;
+            }}
+            .nav-btn {{
+                font-size: 10.5px;
+                padding: 5px 8px;
+            }}
         }}
         /* Search Box */
         .catalog-search-section {{
@@ -2854,8 +2877,8 @@ CATALOG_HTML = """<!DOCTYPE html>
             align-items: center;
             background: rgba(22, 27, 34, 0.85);
             border: 1px solid rgba(56, 189, 248, 0.28);
-            border-radius: 16px;
-            padding: 5px 8px 5px 16px;
+            border-radius: 14px;
+            padding: 4px 6px 4px 14px;
             backdrop-filter: blur(14px);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
             transition: all 0.2s;
@@ -2865,31 +2888,36 @@ CATALOG_HTML = """<!DOCTYPE html>
             box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
         }}
         .catalog-search-icon {{
-            font-size: 17px;
+            font-size: 16px;
             color: #64748b;
-            margin-right: 8px;
+            margin-right: 6px;
+            flex-shrink: 0;
         }}
         .catalog-search-input {{
             flex: 1;
+            min-width: 0;
             background: transparent;
             border: none;
             color: #ffffff;
-            font-size: 14.5px;
+            font-size: 14px;
             outline: none;
-            padding: 8px 6px;
+            padding: 7px 4px;
         }}
         .catalog-search-input::placeholder {{
             color: #64748b;
+            font-size: 13px;
         }}
         .catalog-search-btn {{
             background: linear-gradient(135deg, #0284c7, #2563eb);
             color: #ffffff;
             border: none;
-            padding: 10px 20px;
-            border-radius: 12px;
-            font-size: 13.5px;
-            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
             cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
             transition: all 0.2s;
         }}
         .catalog-search-btn:active {{
@@ -2942,7 +2970,7 @@ CATALOG_HTML = """<!DOCTYPE html>
         .catalog-grid {{
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 14px;
+            gap: 10px;
         }}
         @media (min-width: 600px) {{
             .catalog-grid {{
@@ -2994,17 +3022,31 @@ CATALOG_HTML = """<!DOCTYPE html>
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.38);
-            display: flex;
+            background: rgba(0, 0, 0, 0.35);
+            display: none;
             align-items: center;
             justify-content: center;
             opacity: 0;
             transition: opacity 0.22s ease;
             z-index: 3;
         }}
+        @media (hover: hover) and (pointer: fine) {{
+            .poster-play-overlay {{
+                display: flex;
+            }}
+            .catalog-card:hover .poster-play-overlay {{
+                opacity: 1;
+            }}
+            .catalog-card:hover .poster-play-icon {{
+                transform: scale(1);
+            }}
+            .catalog-card:hover .poster-img {{
+                transform: scale(1.06);
+            }}
+        }}
         .poster-play-icon {{
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             background: rgba(56, 189, 248, 0.95);
             box-shadow: 0 0 25px rgba(56, 189, 248, 0.65);
@@ -3012,19 +3054,10 @@ CATALOG_HTML = """<!DOCTYPE html>
             align-items: center;
             justify-content: center;
             color: #030712;
-            font-size: 20px;
+            font-size: 18px;
             padding-left: 3px;
             transform: scale(0.75);
             transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-        }}
-        .catalog-card:hover .poster-play-overlay {{
-            opacity: 1;
-        }}
-        .catalog-card:hover .poster-play-icon {{
-            transform: scale(1);
-        }}
-        .catalog-card:hover .poster-img {{
-            transform: scale(1.06);
         }}
         .poster-fallback {{
             width: 100%;
@@ -3038,21 +3071,24 @@ CATALOG_HTML = """<!DOCTYPE html>
         }}
         .card-badges-top {{
             position: absolute;
-            top: 8px;
-            left: 8px;
+            top: 6px;
+            left: 6px;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3px;
             z-index: 2;
+            max-width: 85%;
         }}
         .cbadge {{
-            font-size: 10.5px;
+            font-size: 9.5px;
             font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 6px;
+            padding: 2.5px 6px;
+            border-radius: 5px;
             text-transform: uppercase;
             letter-spacing: 0.3px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            width: fit-content;
+            line-height: 1.1;
         }}
         .cbadge-qual {{
             background: rgba(168, 85, 247, 0.9);
@@ -3080,31 +3116,33 @@ CATALOG_HTML = """<!DOCTYPE html>
         }}
         .card-size-bottom {{
             position: absolute;
-            bottom: 8px;
-            right: 8px;
-            background: rgba(0, 0, 0, 0.78);
+            bottom: 6px;
+            right: 6px;
+            background: rgba(0, 0, 0, 0.82);
             backdrop-filter: blur(6px);
             color: #38bdf8;
-            font-size: 10.5px;
+            font-size: 9.5px;
             font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 6px;
+            padding: 2.5px 6px;
+            border-radius: 5px;
             border: 1px solid rgba(255, 255, 255, 0.12);
             z-index: 2;
+            white-space: nowrap;
         }}
         .card-body {{
-            padding: 12px;
+            padding: 8px 8px 10px 8px;
             display: flex;
             flex-direction: column;
+            gap: 6px;
             flex: 1;
             justify-content: space-between;
         }}
         .card-title {{
-            font-size: 13.5px;
+            font-size: 12.5px;
             font-weight: 700;
-            color: #ffffff;
-            line-height: 1.35;
-            margin-bottom: 10px;
+            color: #f1f5f9;
+            line-height: 1.3;
+            margin-bottom: 4px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -3112,6 +3150,7 @@ CATALOG_HTML = """<!DOCTYPE html>
             text-decoration: none;
             transition: color 0.15s ease;
             cursor: pointer;
+            min-height: 32px;
         }}
         .card-title:hover {{
             color: #38bdf8;
@@ -3120,15 +3159,16 @@ CATALOG_HTML = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 5px;
             width: 100%;
-            padding: 10px 8px;
+            padding: 7px 6px;
             color: #ffffff;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 11.5px;
             font-weight: 700;
-            border-radius: 10px;
+            border-radius: 8px;
             transition: all 0.2s;
+            white-space: nowrap;
         }}
         .card-stream-btn {{
             background: linear-gradient(135deg, #0284c7, #2563eb);
@@ -3227,8 +3267,8 @@ CATALOG_HTML = """<!DOCTYPE html>
                 <span>⚡</span> AkMovieVerse
             </a>
             <div class="header-actions">
-                <a href="{channel_url}" target="_blank" class="nav-btn">📢 Channel ↗️</a>
-                <a href="https://t.me/{bot_username}" target="_blank" class="nav-btn">🤖 Bot ↗️</a>
+                <a href="{channel_url}" target="_blank" class="nav-btn">📢 Channel</a>
+                <a href="https://t.me/{bot_username}" target="_blank" class="nav-btn">🤖 Bot</a>
             </div>
         </div>
 
@@ -4875,16 +4915,16 @@ async def browse_handler(request: web.Request):
         card_url = f"{base_url}/post/{item['slug']}"
         if item["is_series"]:
             ep_c = item.get("episodes_count", 0)
-            btn_label = f"📺 View Episodes ({ep_c})" if ep_c > 0 else "📦 View Series Post"
+            btn_label = f"📺 {ep_c} Episodes" if ep_c > 0 else "📦 View Series"
             btn_class = "card-series-btn"
         else:
             if item.get("has_parts"):
                 total_parts = len(item.get("parts_map", {}))
-                btn_label = f"▶ View Post (Part 1 of {total_parts})"
+                btn_label = f"▶ {total_parts} Parts"
             elif total_files > 1:
-                btn_label = f"▶ View Post ({total_files} Prints)"
+                btn_label = f"▶ {total_files} Prints"
             else:
-                btn_label = "▶ View Post & Watch"
+                btn_label = "▶ Watch & Download"
             btn_class = "card-stream-btn"
 
         movie_cards.append(f"""
