@@ -213,21 +213,37 @@ VERIFY_GATEWAY_HTML = """<!DOCTYPE html>
             }}
         }}, 1000);
 
-        // Strict Right-Click, Selection & DevTools Key Blocking
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (
-                e.keyCode === 123 ||
-                (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
-                (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
-            ) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>
@@ -263,12 +279,42 @@ VERIFY_ERROR_HTML = """<!DOCTYPE html>
         a {{ display: inline-block; background: #238636; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="card">
         <h1>❌ Link Expired or Invalid</h1>
         <p>This verification link has expired or has already been used. Please return to the bot and request your file again to generate a fresh link.</p>
         <a href="https://t.me/{bot_username}">Return to Bot ↗️</a>
     </div>
+    <script>
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
+                return false;
+            }}
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
+    </script>
 </body>
 </html>
 """
@@ -1532,7 +1578,7 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
         }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="container">
         <div class="header">
             <a href="{browse_url}" class="brand" title="Browse Full Catalog">
@@ -1877,6 +1923,7 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 url: '{stream_url}',
                 title: movieTitle,
                 quality: {artplayer_quality_json_str},
+                contextmenu: [],
                 theme: '#38bdf8',
                 volume: 0.9,
                 isLive: false,
@@ -1909,6 +1956,27 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                     preload: 'metadata'
                 }}
             }});
+
+            // Strict suppression of Artplayer internal and video context menus
+            art.on('video:contextmenu', (e) => {{
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                return false;
+            }});
+            art.on('contextmenu', (e) => {{
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                return false;
+            }});
+            const playerEl = document.getElementById('artplayer');
+            if (playerEl) {{
+                playerEl.addEventListener('contextmenu', function (e) {{
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    return false;
+                }}, true);
+            }}
 
             art.on('video:error', () => {{
                 art.notice.show = '⚠️ Format not supported by browser. Tap [📱 Open in Any Video Player] below!';
@@ -2094,17 +2162,37 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 console.log('Episodes setting error:', err);
             }}
         }});
-        // Right-Click & DevTools Key Protection
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>
@@ -2127,6 +2215,16 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
+        }}
+        html, body {{
+            -webkit-touch-callout: none !important;
+            -webkit-user-select: none !important;
+            user-select: none !important;
+        }}
+        img, video, canvas {{
+            -webkit-user-drag: none !important;
+            user-drag: none !important;
+            pointer-events: auto;
         }}
         body {{
             background-color: #07090e;
@@ -2300,7 +2398,7 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
         }}
     </style>
 </head>
-<body class="p-2 sm:p-5 flex flex-col items-center">
+<body class="p-2 sm:p-5 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="w-full max-w-4xl space-y-4">
         <!-- Top Navigation Bar -->
         <header class="flex items-center justify-between navbar-card">
@@ -2369,18 +2467,38 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
         {prints_or_episodes_html}
     </div>
 
-    <!-- DevTools / Right Click Guard -->
+    <!-- Bulletproof Anti-Right-Click & Inspection Shield -->
     <script>
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>
@@ -2837,7 +2955,7 @@ CATALOG_HTML = """<!DOCTYPE html>
         }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="container">
         <div class="header">
             <a href="{browse_url}" class="brand">
@@ -2882,17 +3000,50 @@ CATALOG_HTML = """<!DOCTYPE html>
             {next_btn_html}
         </div>
     </div>
+    <!-- Bulletproof Anti-Right-Click & Inspection Shield -->
     <script>
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+
+            function isInputField(target) {{
+                return target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+            }}
+
+            window.addEventListener("selectstart", function (e) {{
+                if (isInputField(e.target)) return true;
+                return killEvent(e);
+            }}, true);
+            document.addEventListener("selectstart", function (e) {{
+                if (isInputField(e.target)) return true;
+                return killEvent(e);
+            }}, true);
+
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>
@@ -4051,7 +4202,7 @@ async def post_handler(request: web.Request):
             }
 
     if not target_item:
-        return web.Response(text="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#07090e] text-white flex flex-col items-center justify-center min-h-screen p-4 text-center"><div class="text-5xl mb-4">🔍</div><h1 class="text-2xl font-bold mb-2">Title Not Found</h1><p class="text-gray-400 mb-6">This media item was not found in the catalog.</p><a href="/browse" class="px-5 py-2.5 bg-red-600 rounded-xl text-white font-bold">Return to Browse Catalog</a></body></html>""", content_type="text/html", status=404)
+        return web.Response(text="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#07090e] text-white flex flex-col items-center justify-center min-h-screen p-4 text-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;"><div class="text-5xl mb-4">🔍</div><h1 class="text-2xl font-bold mb-2">Title Not Found</h1><p class="text-gray-400 mb-6">This media item was not found in the catalog.</p><a href="/browse" class="px-5 py-2.5 bg-red-600 rounded-xl text-white font-bold">Return to Browse Catalog</a></body></html>""", content_type="text/html", status=404)
 
     is_series = bool(target_item.get("is_series"))
     clean_title = target_item.get("clean_name") or target_item.get("title", "")
@@ -4555,9 +4706,8 @@ async def mx_redirect_handler(request: web.Request):
         .btn-chooser {{ background: linear-gradient(135deg, #059669, #047857); }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="card">
-        <h2 style="margin-bottom:8px;">🍿 Open in MX Player</h2>
         <div class="title">{html_escape(file_name)}</div>
         
         <a id="mx-btn" href="{mx_free_intent}" class="btn btn-mx">🚀 Open in MX Player</a>
@@ -4572,17 +4722,35 @@ async def mx_redirect_handler(request: web.Request):
                 window.location.href = "{mx_free_intent}";
             }}
         }});
-        // Right-Click & DevTools Key Protection
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>"""
@@ -4661,7 +4829,7 @@ async def chooser_redirect_handler(request: web.Request):
         .btn-m3u {{ background: linear-gradient(135deg, #0284c7, #2563eb); }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="card">
         <h2 style="margin-bottom:8px;">📱 Open in Any Video Player</h2>
         <div class="title">{html_escape(file_name)}</div>
@@ -4679,17 +4847,35 @@ async def chooser_redirect_handler(request: web.Request):
                 window.location.href = "{stream_url}";
             }}
         }});
-        // Right-Click & DevTools Key Protection
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>"""
@@ -4771,7 +4957,7 @@ async def vlc_redirect_handler(request: web.Request):
         .btn-m3u {{ background: linear-gradient(135deg, #059669, #047857); }}
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="card">
         <h2 style="margin-bottom:8px;">🧡 Open in VLC Player</h2>
         <div class="title">{html_escape(file_name)}</div>
@@ -4798,17 +4984,35 @@ async def vlc_redirect_handler(request: web.Request):
                 window.location.href = "{m3u_url}";
             }}
         }});
-        // Right-Click & DevTools Key Protection
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>"""
@@ -4927,7 +5131,7 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
         }}
     </style>
 </head>
-<body class="p-3 sm:p-6 flex flex-col items-center">
+<body class="p-3 sm:p-6 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
     <div class="w-full max-w-5xl space-y-4">
         <!-- Header -->
         <header class="flex items-center justify-between glass-panel px-4 py-3 sm:px-6 sm:py-4 rounded-2xl">
@@ -5052,17 +5256,35 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                 iframe.msRequestFullscreen();
             }}
         }}
-        // Right-Click & DevTools Key Protection
-        document.addEventListener("contextmenu", function (e) {{
-            e.preventDefault();
-            return false;
-        }});
-        document.addEventListener("keydown", function (e) {{
-            if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))) {{
-                e.preventDefault();
+        // Bulletproof Anti-Right-Click & Inspection Shield
+        (function () {{
+            function killEvent(e) {{
+                if (e) {{
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopPropagation) e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }}
                 return false;
             }}
-        }});
+            window.addEventListener("contextmenu", killEvent, true);
+            document.addEventListener("contextmenu", killEvent, true);
+            window.addEventListener("selectstart", killEvent, true);
+            document.addEventListener("selectstart", killEvent, true);
+            window.addEventListener("dragstart", killEvent, true);
+            document.addEventListener("dragstart", killEvent, true);
+            window.oncontextmenu = killEvent;
+            document.oncontextmenu = killEvent;
+            window.addEventListener("keydown", function (e) {{
+                if (
+                    e.keyCode === 123 ||
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74 || e.keyCode === 75 || e.keyCode === 69)) ||
+                    (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) ||
+                    ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80))
+                ) {{
+                    return killEvent(e);
+                }}
+            }}, true);
+        }})();
     </script>
 </body>
 </html>
