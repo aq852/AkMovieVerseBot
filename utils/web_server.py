@@ -3525,66 +3525,73 @@ _file_doc_cache: dict[str, tuple[dict, float]] = {}
 
 async def resolve_file_from_param(param: str) -> dict | None:
     """Find file document in MongoDB by file_unique_id, file_id, or ObjectId with in-memory caching."""
-    clean_p = param.strip()
-    now_ts = time.time()
-    cached = _file_doc_cache.get(clean_p)
-    if cached and (now_ts - cached[1] < 3600):
-        return cached[0]
-
-    # 1. Primary search index
-    doc = await mongo.files.find_one({"file_unique_id": clean_p})
-    if doc:
-        if len(_file_doc_cache) > 2000:
-            _file_doc_cache.clear()
-        _file_doc_cache[clean_p] = (doc, now_ts)
-        return doc
-    if mongo.has_secondary:
-        doc = await mongo.files_secondary.find_one({"file_unique_id": clean_p})
-        if doc:
-            return doc
-    doc = await mongo.files.find_one({"file_id": clean_p})
-    if doc:
-        return doc
-    if mongo.has_secondary:
-        doc = await mongo.files_secondary.find_one({"file_id": clean_p})
-        if doc:
-            return doc
+    if not param:
+        return None
     try:
-        doc = await mongo.files.find_one({"_id": ObjectId(clean_p)})
+        import time
+        clean_p = str(param).strip()
+        now_ts = time.time()
+        cached = _file_doc_cache.get(clean_p)
+        if cached and (now_ts - cached[1] < 3600):
+            return cached[0]
+
+        # 1. Primary search index
+        doc = await mongo.files.find_one({"file_unique_id": clean_p})
+        if doc:
+            if len(_file_doc_cache) > 2000:
+                _file_doc_cache.clear()
+            _file_doc_cache[clean_p] = (doc, now_ts)
+            return doc
+        if mongo.has_secondary:
+            doc = await mongo.files_secondary.find_one({"file_unique_id": clean_p})
+            if doc:
+                return doc
+        doc = await mongo.files.find_one({"file_id": clean_p})
         if doc:
             return doc
         if mongo.has_secondary:
-            doc = await mongo.files_secondary.find_one({"_id": ObjectId(clean_p)})
+            doc = await mongo.files_secondary.find_one({"file_id": clean_p})
             if doc:
                 return doc
-    except Exception:
-        pass
+        try:
+            doc = await mongo.files.find_one({"_id": ObjectId(clean_p)})
+            if doc:
+                return doc
+            if mongo.has_secondary:
+                doc = await mongo.files_secondary.find_one({"_id": ObjectId(clean_p)})
+                if doc:
+                    return doc
+        except Exception:
+            pass
 
-    # 2. Check isolated temp stream files (never indexed into search catalog)
-    try:
-        doc = await mongo.db["temp_stream_files"].find_one({"file_unique_id": clean_p})
-        if doc:
-            return doc
-        doc = await mongo.db["temp_stream_files"].find_one({"file_id": clean_p})
-        if doc:
-            return doc
-    except Exception:
-        pass
+        # 2. Check isolated temp stream files (never indexed into search catalog)
+        try:
+            doc = await mongo.db["temp_stream_files"].find_one({"file_unique_id": clean_p})
+            if doc:
+                return doc
+            doc = await mongo.db["temp_stream_files"].find_one({"file_id": clean_p})
+            if doc:
+                return doc
+        except Exception:
+            pass
 
-    # 3. Check batches collection (if param is batch_id or matches a file inside a batch)
-    try:
-        batch = await mongo.batches.find_one({"batch_id": clean_p})
-        if batch and batch.get("files"):
-            return batch["files"][0]
-        batch_file = await mongo.batches.find_one({"files.file_unique_id": clean_p})
-        if batch_file and batch_file.get("files"):
-            for bf in batch_file["files"]:
-                if bf.get("file_unique_id") == clean_p or bf.get("file_id") == clean_p:
-                    return bf
-    except Exception:
-        pass
+        # 3. Check batches collection (if param is batch_id or matches a file inside a batch)
+        try:
+            batch = await mongo.batches.find_one({"batch_id": clean_p})
+            if batch and batch.get("files"):
+                return batch["files"][0]
+            batch_file = await mongo.batches.find_one({"files.file_unique_id": clean_p})
+            if batch_file and batch_file.get("files"):
+                for bf in batch_file["files"]:
+                    if bf.get("file_unique_id") == clean_p or bf.get("file_id") == clean_p:
+                        return bf
+        except Exception:
+            pass
 
-    return None
+        return None
+    except Exception as e:
+        logger.error(f"Error resolving file param {param}: {e}", exc_info=True)
+        return None
 
 
 async def options_handler(request: web.Request):
@@ -5713,6 +5720,7 @@ async def health_handler(request):
     """Health-check endpoint for Koyeb, Heroku, and Render monitoring probes."""
     return web.json_response({
         "status": "online",
+        "version": "1.0.6",
         "service": "AutoFilterBot",
         "streaming_enabled": Config.ENABLE_STREAMING,
         "max_concurrent_streams": Config.MAX_CONCURRENT_STREAMS,
