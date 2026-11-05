@@ -5,6 +5,7 @@ Adopted from AkMovieVerse, TeleStream, and NoxMedia streaming architectures.
 """
 
 import asyncio
+import gc
 import logging
 import math
 import time
@@ -58,10 +59,10 @@ class StreamConcurrencyGuard:
         self.semaphore.release()
 
 
-# 64 chunks x 1MB = ~64MB In-Memory LRU Cache
+# 16 chunks x 512KB = ~8MB In-Memory LRU Cache (Lean & Stable for 512MB RAM containers)
 # Caches header metadata (MOOV atom / EBML seekhead), audio codecs, and recent seeks
 class ChunkCache:
-    def __init__(self, max_entries: int = 64):
+    def __init__(self, max_entries: int = 16):
         self.max_entries = max_entries
         self.cache: OrderedDict[Tuple[int, int, int], bytes] = OrderedDict()
         self._lock = asyncio.Lock()
@@ -84,9 +85,9 @@ class ChunkCache:
                 self.cache.popitem(last=False)
 
 
-# Global singletons
-concurrency_guard = StreamConcurrencyGuard(max_concurrency=Config.MAX_CONCURRENT_STREAMS)
-chunk_lru_cache = ChunkCache(max_entries=64)
+# Global singletons: Max 12 concurrent streams to protect 512MB RAM boundary
+concurrency_guard = StreamConcurrencyGuard(max_concurrency=min(Config.MAX_CONCURRENT_STREAMS, 12))
+chunk_lru_cache = ChunkCache(max_entries=16)
 _media_session_lock = asyncio.Lock()
 # In-memory location cache: file_unique_id -> (location, doc_id, dc_id, timestamp)
 _location_cache: Dict[str, Tuple[Any, int, int, float]] = {}
@@ -249,7 +250,7 @@ class TGCustomStreamer:
         client: Client,
         file_doc: dict,
         byte_range: ByteRange,
-        chunk_size: int = 1024 * 1024
+        chunk_size: int = 512 * 1024
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream a byte range from Telegram MTProto with mathematical chunk alignment,
@@ -294,20 +295,30 @@ class TGCustomStreamer:
                     )
 
                 # 3. Precise RFC 7233 slice cutting
+                chunk_slice = None
                 if part_count == 1:
-                    yield chunk_data[plan.first_cut:plan.last_cut]
-                    break
+                    chunk_slice = chunk_data[plan.first_cut:plan.last_cut]
                 elif current_part == 1:
-                    yield chunk_data[plan.first_cut:]
+                    chunk_slice = chunk_data[plan.first_cut:]
                 elif current_part == part_count:
-                    yield chunk_data[:plan.last_cut]
+                    chunk_slice = chunk_data[:plan.last_cut]
                 else:
-                    yield chunk_data
+                    chunk_slice = chunk_data
+
+                del chunk_data
+                yield chunk_slice
+                del chunk_slice
+
+                if current_part % 10 == 0:
+                    gc.collect()
 
                 curr_offset = next_offset
                 current_part += 1
+                if part_count == 1:
+                    break
 
         finally:
             if prefetch_task is not None and not prefetch_task.done():
                 prefetch_task.cancel()
+            gc.collect()
             await concurrency_guard.release()

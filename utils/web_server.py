@@ -3686,8 +3686,8 @@ async def stream_handler(request: web.Request):
         return web.Response(status=status, headers=headers)
 
     try:
-        # Use 1MB chunks for video files >= 10MB to double streaming throughput
-        chunk_size = 1024 * 1024 if file_size >= 10 * 1024 * 1024 else 512 * 1024
+        # 512KB chunks: fast initial response for VLC/MX Player and lean memory footprint (<200MB) on Koyeb
+        chunk_size = 512 * 1024
         body_gen = TGCustomStreamer.yield_file_range(client, file_doc, byte_range, chunk_size=chunk_size)
         return web.Response(status=status, body=body_gen, headers=headers)
     except ServerBusyError:
