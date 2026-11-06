@@ -8,11 +8,11 @@ import aiohttp
 import uuid
 
 try:
-    from hydrogram import Client, filters
+    from hydrogram import Client, filters, enums
     from hydrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
     from hydrogram.errors import FloodWait, MessageNotModified, MessageIdInvalid
 except ImportError:
-    from pyrogram import Client, filters
+    from pyrogram import Client, filters, enums
     from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
     from pyrogram.errors import FloodWait, MessageNotModified, MessageIdInvalid
 
@@ -686,6 +686,7 @@ async def publish_or_upgrade_channel_post(
                 chat_id=target_channel,
                 message_id=msg_id,
                 caption=caption,
+                parse_mode=enums.ParseMode.HTML,
                 reply_markup=buttons
             )
             await mongo.db["channel_posts"].update_one(
@@ -724,6 +725,7 @@ async def publish_or_upgrade_channel_post(
             chat_id=target_channel,
             photo=photo_url,
             caption=caption,
+            parse_mode=enums.ParseMode.HTML,
             reply_markup=buttons
         )
 
@@ -959,6 +961,7 @@ async def admin_post_command(client: Client, message: Message):
             f"<b>👁️ [DRAFT PREVIEW FOR CHANNEL <code>{channel_id}</code>]</b>\n\n"
             f"{caption}"
         ),
+        parse_mode=enums.ParseMode.HTML,
         reply_markup=preview_markup
     )
 
@@ -1027,7 +1030,8 @@ async def post_preview_callbacks(client: Client, callback_query: CallbackQuery):
             await callback_query.message.edit_media(
                 media=InputMediaPhoto(
                     media=new_photo,
-                    caption=f"<b>👁️ [DRAFT PREVIEW FOR CHANNEL <code>{target_ch}</code>]</b>\n\n{caption}"
+                    caption=f"<b>👁️ [DRAFT PREVIEW FOR CHANNEL <code>{target_ch}</code>]</b>\n\n{caption}",
+                    parse_mode=enums.ParseMode.HTML
                 ),
                 reply_markup=new_markup
             )

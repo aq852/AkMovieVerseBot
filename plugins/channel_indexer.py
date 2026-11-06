@@ -16,6 +16,7 @@ from config import Config
 from database.mongo import mongo
 from database.files import save_file, save_files_bulk
 from utils.helpers import get_chat_type_str
+from utils.title_cleaner import PIRATE_SITES_PATTERN, URL_AND_WWW_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -42,22 +43,26 @@ def sanitize_file_name(raw_name: str) -> str:
     if not ext:
         ext = ".mp4"
 
-    # Remove URLs (http, https, t.me, www)
+    # 1. Strip URLs, domains, and t.me invite links
+    name = URL_AND_WWW_PATTERN.sub('', name)
     name = re.sub(r'https?://\S+', '', name, flags=re.IGNORECASE)
-    name = re.sub(r't\.me/\S+', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'www\.\S+', '', name, flags=re.IGNORECASE)
-
-    # Remove @channel_tags (e.g. @AkMovieVerse, @MoviesZone_bot)
+    name = re.sub(r'(?:t\.me|telegram\.me|tg://)\S*', '', name, flags=re.IGNORECASE)
     name = re.sub(r'@[\w_]+', '', name)
 
-    # Remove common domain patterns (.com, .in, .net, .org, .xyz, etc.)
-    name = re.sub(r'[\w\-]+\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co)\b', '', name, flags=re.IGNORECASE)
+    # 2. Strip domains with any TLD (.com, .nl, .lat, etc.) even with pirate site prefix: VegaMovies.nl, BollyFlix.org
+    name = re.sub(r'\b[\w\-]+\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
 
-    # Remove promotional bracketed tags: [Join @...], [Uploaded by ...], (Telegram: ...)
-    name = re.sub(r'\[\s*(?:join|uploaded|telegram|channel|exclusive|official|backup|promo|link|download)[^\]]*\]', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'\(\s*(?:join|uploaded|telegram|channel|exclusive|official|backup|promo|link|download)[^\)]*\)', '', name, flags=re.IGNORECASE)
+    # 3. Strip comprehensive pirate sites and scene rippers (VegaMovies, 1TamilMV, BollyFlix, KatmovieHD, etc.)
+    name = PIRATE_SITES_PATTERN.sub('', name)
 
-    # Clean multiple dots, underscores, brackets, and extra spaces
+    # 4. Strip standalone leftover TLD extensions like .nl, .lat, .xyz if left behind
+    name = re.sub(r'(?:^|[\s\._\-\[])\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
+
+    # 5. Strip promotional bracketed tags: [Join @...], [Uploaded by ...], [Team ...], [Exclusive ...], (Telegram: ...)
+    name = re.sub(r'\[\s*(?:join|team|uploaded|telegram|channel|exclusive|official|backup|promo|link|download|paid)[^\]]*\]', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\(\s*(?:join|team|uploaded|telegram|channel|exclusive|official|backup|promo|link|download|paid)[^\)]*\)', '', name, flags=re.IGNORECASE)
+
+    # 6. Clean multiple dots, underscores, brackets, and extra spaces
     name = re.sub(r'[\[\]\(\)\{\}]', ' ', name)
     name = re.sub(r'[\._\-]{2,}', '.', name)
     name = re.sub(r'\s+', ' ', name).strip()

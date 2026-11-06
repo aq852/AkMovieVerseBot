@@ -648,6 +648,32 @@ class TestAutoFilterEngine(unittest.TestCase):
         clean_file = "Inception.2010.1080p.BluRay.x264.mkv"
         self.assertEqual(sanitize_stored_filename(clean_file), clean_file)
 
+    def test_channel_indexer_sanitize_file_name(self):
+        from plugins.channel_indexer import sanitize_file_name
+        # 1. VegaMovies and TLD removal
+        s1 = "[VegaMovies.nl] The Vvaan (2026) Hindi 1080p WEB-DL x264.mkv"
+        res1 = sanitize_file_name(s1)
+        self.assertNotIn("VegaMovies", res1)
+        self.assertNotIn("nl", res1.split()[0])
+        self.assertIn("The Vvaan", res1)
+        self.assertIn("1080p", res1)
+
+        # 2. KatmovieHD bracket tag removal
+        s2 = "Money.Heist.S05E01.1080p.NF.WEB-DL.[KatmovieHD].mkv"
+        res2 = sanitize_file_name(s2)
+        self.assertNotIn("KatmovieHD", res2)
+        self.assertIn("Money.Heist", res2)
+        self.assertIn("S05E01", res2)
+
+        # 3. Telegram invite hash and join tag removal
+        s3 = "Squid Game S02 (2024) [Join t.me/+abcdef12345] 720p Hindi.mkv"
+        res3 = sanitize_file_name(s3)
+        self.assertNotIn("t.me", res3)
+        self.assertNotIn("Join", res3)
+        self.assertIn("Squid Game", res3)
+        self.assertIn("S02", res3)
+        self.assertIn("720p", res3)
+
     def test_remove_ads_visibility_with_shortener_toggle(self):
         from config import Config
         from utils.helpers import build_filter_buttons

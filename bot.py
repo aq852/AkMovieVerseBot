@@ -2,9 +2,9 @@ import sys
 import logging
 import asyncio
 try:
-    from hydrogram import Client, idle
+    from hydrogram import Client, idle, enums
 except ImportError:
-    from pyrogram import Client, idle
+    from pyrogram import Client, idle, enums
 
 from config import Config
 from database.mongo import init_indexes
@@ -26,7 +26,8 @@ class Bot(Client):
             api_hash=Config.API_HASH,
             bot_token=Config.BOT_TOKEN,
             plugins=dict(root="plugins"),
-            workers=50
+            workers=50,
+            parse_mode=enums.ParseMode.HTML
         )
 
     async def start(self):
