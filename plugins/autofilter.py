@@ -224,38 +224,44 @@ async def group_auto_filter_handler(client: Client, message: Message):
         match = None
         if TITLES_CACHE:
             from rapidfuzz import fuzz
-            from utils.online_stream import clean_search_title
-            clean_q_lower = clean_q.lower().strip()
-            q_words = [w for w in clean_q_lower.split() if len(w) > 2]
+            from utils.title_cleaner import extract_core_title
+            clean_q_core = extract_core_title(clean_q).lower().strip()
+            # Only match actual non-numeric title words (filter out 4-digit years like 2026 to prevent year-traps)
+            q_words = [w for w in clean_q_core.split() if len(w) >= 3 and not w.isdigit()]
 
             best_candidate = None
+            best_clean_title = None
             best_score = 0
 
-            for raw_title in TITLES_CACHE:
-                cleaned = clean_search_title(raw_title).lower().strip()
-                if not cleaned:
-                    continue
-                c_words = cleaned.split()
+            # Only attempt fuzzy matching if query has actual alphabetic title words
+            if q_words and clean_q_core:
+                for raw_title in TITLES_CACHE:
+                    candidate_core = extract_core_title(raw_title).lower().strip()
+                    if not candidate_core or candidate_core == clean_q_core:
+                        continue
+                    c_words = [w for w in candidate_core.split() if len(w) >= 3 and not w.isdigit()]
+                    if not c_words:
+                        continue
 
-                # At least one query word should fuzzy-match a candidate word (>= 70 ratio)
-                word_match = any(
-                    any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
-                    for qw in q_words
-                ) if q_words else True
+                    # At least one meaningful query word must fuzzy-match a candidate word (>= 70 ratio)
+                    word_match = any(
+                        any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
+                        for qw in q_words
+                    )
 
-                if not word_match:
-                    continue
+                    if not word_match:
+                        continue
 
-                w_score = fuzz.WRatio(clean_q_lower, cleaned)
-                p_score = fuzz.partial_ratio(clean_q_lower, cleaned)
-                score = max(w_score, (p_score + w_score) / 2)
+                    w_score = fuzz.WRatio(clean_q_core, candidate_core)
+                    score = w_score
 
-                if score > best_score and score >= 65:
-                    best_score = score
-                    best_candidate = raw_title
+                    if score > best_score and score >= 65:
+                        best_score = score
+                        best_candidate = raw_title
+                        best_clean_title = extract_core_title(raw_title)
 
-            if best_candidate:
-                match = (best_candidate, best_score)
+            if best_candidate and best_clean_title:
+                match = (best_clean_title, best_score)
 
         # Fast background lookup on Cinemeta for online web stream player (TeleStream engine)
         from utils.online_stream import search_online_meta, get_online_player_url
@@ -288,11 +294,10 @@ async def group_auto_filter_handler(client: Client, message: Message):
             online_stream_url = google_url
 
         if match:
-            suggested_raw = match[0]
-            from utils.online_stream import clean_search_title
-            suggested_title = clean_search_title(suggested_raw).strip() or suggested_raw
+            suggested_title = match[0].strip()
+            disp_title = suggested_title if len(suggested_title) <= 32 else f"{suggested_title[:29]}..."
             buttons = [
-                [InlineKeyboardButton(f"🔍 Search '{suggested_title[:30]}'", callback_data=f"spell_{suggested_title[:25]}")],
+                [InlineKeyboardButton(f"🔍 Search '{disp_title}'", callback_data=f"spell_{suggested_title[:25]}")],
                 [InlineKeyboardButton("🔔 Notify Me When Uploaded", callback_data=f"notifme_{clean_q[:25]}")],
                 [InlineKeyboardButton("🌐 Stream Online in HD ↗️", url=online_stream_url)],
                 [InlineKeyboardButton("💬 Request Movie", callback_data=f"reqmovie_{clean_q[:25]}")]

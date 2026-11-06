@@ -955,13 +955,14 @@ class TestAutoFilterEngine(unittest.TestCase):
 
     def test_fuzzy_spellcheck_on_actual_typos(self):
         from rapidfuzz import fuzz
-        from utils.online_stream import clean_search_title
+        from utils.title_cleaner import extract_core_title
 
         catalog = [
             "The.Avengers.2012.1080p.BluRay.x264",
             "Spider-Man.No.Way.Home.2021.1080p",
             "Oppenheimer.2023.IMAX.1080p",
-            "Interstellar.2014.1080p.BluRay"
+            "Interstellar.2014.1080p.BluRay",
+            "Brothers 2026 S01 E01 E08 COMBINED A"
         ]
 
         test_typos = {
@@ -974,31 +975,68 @@ class TestAutoFilterEngine(unittest.TestCase):
         for typo, expected_prefix in test_typos.items():
             best_candidate = None
             best_score = 0
-            clean_q_lower = typo.lower().strip()
-            q_words = [w for w in clean_q_lower.split() if len(w) > 2]
+            clean_q_core = extract_core_title(typo).lower().strip()
+            q_words = [w for w in clean_q_core.split() if len(w) >= 3 and not w.isdigit()]
 
             for item in catalog:
-                cleaned = clean_search_title(item).lower().strip()
-                c_words = cleaned.split()
+                cand_core = extract_core_title(item).lower().strip()
+                if not cand_core or cand_core == clean_q_core:
+                    continue
+                c_words = [w for w in cand_core.split() if len(w) >= 3 and not w.isdigit()]
+                if not c_words:
+                    continue
+
                 word_match = any(
                     any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
                     for qw in q_words
-                ) if q_words else True
-
+                )
                 if not word_match:
                     continue
 
-                w_score = fuzz.WRatio(clean_q_lower, cleaned)
-                p_score = fuzz.partial_ratio(clean_q_lower, cleaned)
-                score = max(w_score, (p_score + w_score) / 2)
-
+                score = fuzz.WRatio(clean_q_core, cand_core)
                 if score > best_score and score >= 65:
                     best_score = score
-                    best_candidate = item
+                    best_candidate = extract_core_title(item)
 
             self.assertIsNotNone(best_candidate, f"Failed to match typo: {typo}")
-            clean_res = clean_search_title(best_candidate)
-            self.assertTrue(clean_res.startswith(expected_prefix), f"Expected prefix {expected_prefix}, got {clean_res}")
+            self.assertTrue(best_candidate.startswith(expected_prefix), f"Expected prefix {expected_prefix}, got {best_candidate}")
+
+    def test_fuzzy_year_trap_prevention(self):
+        """Verify that searching for 'My Royal Nemesis (2026)' NEVER false-matches 'Brothers 2026'."""
+        from rapidfuzz import fuzz
+        from utils.title_cleaner import extract_core_title
+
+        catalog = [
+            "Brothers 2026 S01 E01 E08 COMBINED A",
+            "The.Avengers.2012.1080p.BluRay.x264"
+        ]
+
+        query = "My Royal Nemesis (2026)"
+        clean_q_core = extract_core_title(query).lower().strip()
+        q_words = [w for w in clean_q_core.split() if len(w) >= 3 and not w.isdigit()]
+
+        matched_candidate = None
+        for item in catalog:
+            cand_core = extract_core_title(item).lower().strip()
+            if not cand_core or cand_core == clean_q_core:
+                continue
+            c_words = [w for w in cand_core.split() if len(w) >= 3 and not w.isdigit()]
+            if not c_words:
+                continue
+
+            word_match = any(
+                any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
+                for qw in q_words
+            )
+            if not word_match:
+                continue
+
+            score = fuzz.WRatio(clean_q_core, cand_core)
+            if score >= 65:
+                matched_candidate = item
+                break
+
+        self.assertIsNone(matched_candidate, f"Year-trap failed! Unrelated file matched: {matched_candidate}")
 
     def test_purge_files_and_caches_resets_flags(self):
         import asyncio

@@ -250,3 +250,24 @@ def sanitize_stored_filename(fn: str) -> str:
     base = re.sub(r'^\s*[-_.\s]+|\s*[-_.\s]+$', '', base)
     base = re.sub(r'\s+', ' ', base).strip()
     return f'{base}{ext}' if base else fn
+
+
+def extract_core_title(raw_name: str) -> str:
+    """Extract clean core movie/series title without years, episodes, season packs, audio channels, or codecs.
+    Used by fuzzy spell-check and search fallback to prevent release years and tags from triggering false matches.
+    """
+    if not raw_name:
+        return ""
+    # 1. Remove bracket promos, paren groups, dots, and separators
+    s = re.sub(r"\[.*?\]|\(.*?\)", " ", raw_name)
+    s = re.sub(r"[\._\-\+]", " ", s)
+    # 2. Remove 4-digit release years (1900-2099) so they never trigger fuzzy false matches
+    s = re.sub(r"\b(19\d{2}|20\d{2})\b", " ", s)
+    # 3. Remove season, episode, pack tags
+    s = re.sub(r"\b(?:s\d+|e\d+(?:-\d+)?|season\s*\d+|episode\s*\d+|ep\s*\d+|combined|complete|pack|part\s*\d+)\b", " ", s, flags=re.IGNORECASE)
+    # 4. Remove qualities, codecs, audio, rip tags
+    s = re.sub(r"\b(?:1080p|720p|480p|2160p|4k|uhd|hd|sd|hevc|x264|x265|10bit|web-?dl|webrip|bluray|brrip|dvdrip|hdtc|camrip|aac|mp3|mkv|mp4|avi|ddp5\.1|5\.1|dual[\s_]*audio|multi[\s_]*audio|hindi|english|telugu|tamil|kannada|malayalam|imax)\b", " ", s, flags=re.IGNORECASE)
+    # 5. Remove trailing orphan single letters
+    s = re.sub(r"\b[a-zA-Z]\b", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
