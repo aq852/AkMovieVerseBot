@@ -1164,5 +1164,135 @@ class TestAutoFilterEngine(unittest.TestCase):
         btn = InlineKeyboardButton("🗑️ Cancel Alert", callback_data="delalert_12345")
         self.assertTrue(btn.callback_data.startswith("delalert_"))
 
+    def test_parse_broadcast_custom_buttons(self):
+        from plugins.admin import parse_broadcast_custom_buttons
+
+        # 1. Empty / None text
+        self.assertIsNone(parse_broadcast_custom_buttons(""))
+        self.assertIsNone(parse_broadcast_custom_buttons("   "))
+
+        # 2. Single button
+        text_single = "/abroadcast [Join Channel | https://t.me/testchannel]"
+        markup1 = parse_broadcast_custom_buttons(text_single)
+        self.assertIsNotNone(markup1)
+        self.assertEqual(len(markup1.inline_keyboard), 1)
+        self.assertEqual(markup1.inline_keyboard[0][0].text, "Join Channel")
+        self.assertEqual(markup1.inline_keyboard[0][0].url, "https://t.me/testchannel")
+
+        # 3. Multiple rows and multiple buttons in row
+        text_multi = """
+        /abroadcast -pin
+        [Main Channel | https://t.me/ch1][Backup Channel | https://t.me/ch2]
+        [👑 Buy VIP | https://t.me/bot?start=vip]
+        """
+        markup2 = parse_broadcast_custom_buttons(text_multi)
+        self.assertIsNotNone(markup2)
+        self.assertEqual(len(markup2.inline_keyboard), 2)
+        # Row 1 has 2 buttons
+        self.assertEqual(len(markup2.inline_keyboard[0]), 2)
+        self.assertEqual(markup2.inline_keyboard[0][0].text, "Main Channel")
+        self.assertEqual(markup2.inline_keyboard[0][1].text, "Backup Channel")
+        # Row 2 has 1 button
+        self.assertEqual(len(markup2.inline_keyboard[1]), 1)
+        self.assertEqual(markup2.inline_keyboard[1][0].text, "👑 Buy VIP")
+
+    def test_promo_codes_creation_and_redemption(self):
+        import asyncio
+        from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock
+        from database.promo import create_promo_code, redeem_promo_code, delete_promo_code
+        from database.mongo import mongo
+
+        # 1. Validation tests
+        ok, msg, _ = asyncio.run(create_promo_code("AB", 7, 10))
+        self.assertFalse(ok)
+        self.assertIn("3-30", msg)
+
+        ok, msg, _ = asyncio.run(create_promo_code("VALIDCODE", 0, 10))
+        self.assertFalse(ok)
+        self.assertIn("Days must be", msg)
+
+        # 2. Mock MongoDB promo_codes collection
+        fake_db = {}
+
+        mock_col = MagicMock()
+
+        async def fake_find_one(query):
+            code = query.get("code")
+            return fake_db.get(code)
+
+        async def fake_insert_one(doc):
+            fake_db[doc["code"]] = doc
+            return MagicMock(inserted_id="mock_id")
+
+        async def fake_find_one_and_update(filter_q, update_q, **kwargs):
+            code = filter_q.get("code")
+            doc = fake_db.get(code)
+            if not doc:
+                return None
+            if not doc.get("is_active", True):
+                return None
+            if doc.get("claimed_count", 0) >= doc.get("max_uses", 1):
+                return None
+            user_id = filter_q.get("claimed_by", {}).get("$ne")
+            if user_id in doc.get("claimed_by", []):
+                return None
+
+            # Apply atomic update
+            doc["claimed_count"] = doc.get("claimed_count", 0) + update_q.get("$inc", {}).get("claimed_count", 1)
+            doc.setdefault("claimed_by", []).append(update_q.get("$addToSet", {}).get("claimed_by"))
+            return doc
+
+        async def fake_delete_one(query):
+            code = query.get("code")
+            if code in fake_db:
+                del fake_db[code]
+                return MagicMock(deleted_count=1)
+            return MagicMock(deleted_count=0)
+
+        mock_col.find_one = AsyncMock(side_effect=fake_find_one)
+        mock_col.insert_one = AsyncMock(side_effect=fake_insert_one)
+        mock_col.find_one_and_update = AsyncMock(side_effect=fake_find_one_and_update)
+        mock_col.delete_one = AsyncMock(side_effect=fake_delete_one)
+
+        mock_db_dict = {"promo_codes": mock_col}
+
+        with patch.object(type(mongo), "db", new_callable=PropertyMock, return_value=mock_db_dict):
+            with patch("database.promo.add_premium", new=AsyncMock(return_value=True)):
+                # Create promo
+                ok, msg, doc = asyncio.run(create_promo_code("VIPTEST", 7, max_uses=2))
+                self.assertTrue(ok)
+                self.assertEqual(doc["code"], "VIPTEST")
+                self.assertEqual(doc["days"], 7)
+
+                # Duplicate code should fail
+                ok_dup, msg_dup, _ = asyncio.run(create_promo_code("VIPTEST", 7, 5))
+                self.assertFalse(ok_dup)
+                self.assertIn("already exists", msg_dup)
+
+                # User 100 redeems successfully
+                ok_r1, msg_r1, days1 = asyncio.run(redeem_promo_code("VIPTEST", 100))
+                self.assertTrue(ok_r1)
+                self.assertEqual(days1, 7)
+
+                # User 100 double-claim rejection
+                ok_r1_again, msg_r1_again, _ = asyncio.run(redeem_promo_code("VIPTEST", 100))
+                self.assertFalse(ok_r1_again)
+                self.assertIn("already redeemed", msg_r1_again)
+
+                # User 200 redeems successfully (claim 2 of 2)
+                ok_r2, msg_r2, days2 = asyncio.run(redeem_promo_code("VIPTEST", 200))
+                self.assertTrue(ok_r2)
+                self.assertEqual(days2, 7)
+
+                # User 300 claims exhausted code -> limit reached
+                ok_r3, msg_r3, _ = asyncio.run(redeem_promo_code("VIPTEST", 300))
+                self.assertFalse(ok_r3)
+                self.assertIn("limit", msg_r3.lower())
+
+                # Revoke / delete promo code
+                del_ok = asyncio.run(delete_promo_code("VIPTEST"))
+                self.assertTrue(del_ok)
+                self.assertNotIn("VIPTEST", fake_db)
+
 if __name__ == "__main__":
     unittest.main()

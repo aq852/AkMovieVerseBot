@@ -274,6 +274,42 @@ async def start_command_handler(client: Client, message: Message):
                 except Exception:
                     pass
 
+    # 1.1 Promo Code Deep-link: /start redeem_<code>
+    elif args.startswith("redeem_"):
+        promo_code = args.split("redeem_", 1)[1].strip()
+        from database.promo import redeem_promo_code
+        success, msg, days = await redeem_promo_code(promo_code, user_id)
+        if success:
+            u_mention = message.from_user.mention(message.from_user.first_name)
+            congrats_text = (
+                "🎉 <b>PROMO CODE REDEEMED SUCCESSFULLY!</b> 👑\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"• 👤 <b>Member:</b> {u_mention}\n"
+                f"• 🎟️ <b>Coupon Code:</b> <code>{promo_code.upper()}</code>\n"
+                f"• 💎 <b>VIP Unlocked:</b> <code>{days} Day(s) Premium Pass</code>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "🌟 <b>Your Active VIP Perks:</b>\n"
+                "• 🚫 No shorteners or verification ads\n"
+                "• ⚡ Instant 1-second file delivery\n"
+                "• 📦 Unlimited batch downloads\n\n"
+                "<i>Enjoy your premium experience! Type any movie title to start searching.</i>"
+            )
+            await message.reply_text(congrats_text)
+            if Config.LOG_CHANNEL:
+                try:
+                    await client.send_message(
+                        Config.LOG_CHANNEL,
+                        f"🎟️ <b>#PromoCodeRedeemed</b>\n\n"
+                        f"• <b>User:</b> {u_mention} (<code>{user_id}</code>)\n"
+                        f"• <b>Code:</b> <code>{promo_code.upper()}</code>\n"
+                        f"• <b>Duration:</b> <code>+{days} Days VIP</code>"
+                    )
+                except Exception:
+                    pass
+        else:
+            await message.reply_text(msg)
+        return
+
     # 2. File Retrieval or Batch Deep-link: /start file_<id> or /start batch_<id>
     elif args.startswith("file_") or args.startswith("batch_"):
         raw_id = args.split("_", 1)[1]

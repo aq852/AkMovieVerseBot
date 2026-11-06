@@ -498,6 +498,225 @@ async def group_broadcast_command(client: Client, message: Message):
     )
 
 
+# ------------------------------------------------------------------------------
+# 3.1 Advanced Broadcast with Custom URL Buttons & Auto-Pin (/abroadcast)
+# ------------------------------------------------------------------------------
+
+def parse_broadcast_custom_buttons(text: str) -> InlineKeyboardMarkup | None:
+    """Parse inline URL buttons formatted as [Button Title | https://link.com].
+    Supports multiple rows (newlines) and multiple buttons per row.
+    """
+    if not text:
+        return None
+    keyboard = []
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        matches = re.findall(r"\[([^\|\]]+)\|\s*([^\]]+)\]", line)
+        if matches:
+            row = []
+            for btn_text, btn_url in matches:
+                b_text = btn_text.strip()
+                b_url = btn_url.strip()
+                if b_url.startswith(("http://", "https://", "tg://")):
+                    row.append(InlineKeyboardButton(b_text, url=b_url))
+            if row:
+                keyboard.append(row)
+    return InlineKeyboardMarkup(keyboard) if keyboard else None
+
+
+@Client.on_message(filters.command(["preview_broadcast", "test_abroadcast"]) & filters.private)
+async def preview_broadcast_command(client: Client, message: Message):
+    """Admin tool to test and preview a broadcast message with custom buttons in PM first."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
+
+    broadcast_msg = message.reply_to_message
+    if not broadcast_msg:
+        return await message.reply_text(
+            "⚠️ <b>Reply to the message you want to preview!</b>\n\n"
+            "<b>Usage:</b>\n"
+            "Reply to any post with:\n"
+            "<code>/preview_broadcast\n"
+            "[📢 Join Channel | https://t.me/Akmovieszone]\n"
+            "[👑 Buy VIP Pass | https://t.me/Akmovieszone_bot?start=plans]</code>"
+        )
+
+    cmd_text = message.text or ""
+    custom_markup = parse_broadcast_custom_buttons(cmd_text) or broadcast_msg.reply_markup
+
+    try:
+        await broadcast_msg.copy(
+            chat_id=message.from_user.id,
+            reply_markup=custom_markup
+        )
+        await message.reply_text("✅ <b>Above is your broadcast preview with attached custom buttons!</b>\n<i>If everything looks good, broadcast using <code>/abroadcast</code>.</i>")
+    except Exception as e:
+        await message.reply_text(f"❌ <b>Preview Error:</b> <code>{e}</code>")
+
+
+@Client.on_message(filters.command(["abroadcast", "advbroadcast", "broadcast_btn"]) & filters.private)
+async def advanced_broadcast_command(client: Client, message: Message):
+    """Broadcast post to all users with custom inline URL buttons and optional -pin flag."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
+
+    broadcast_msg = message.reply_to_message
+    if not broadcast_msg:
+        return await message.reply_text(
+            "📢 <b>ADVANCED BROADCAST WITH BUTTONS</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Reply to any message (photo, video, text, document) with buttons:\n\n"
+            "<b>Example 1 (With Buttons):</b>\n"
+            "<code>/abroadcast\n"
+            "[📢 Main Channel | https://t.me/Akmovieszone]\n"
+            "[👑 Buy VIP | https://t.me/Akmovieszone_bot?start=plans]</code>\n\n"
+            "<b>Example 2 (Buttons in same row):</b>\n"
+            "<code>/abroadcast\n"
+            "[📢 Channel | https://t.me/mychannel][👥 Group | https://t.me/mygroup]</code>\n\n"
+            "<b>Optional Flags:</b>\n"
+            "• <code>-pin</code> : Auto-pin message in PM for all users\n"
+            "  <i>Example:</i> <code>/abroadcast -pin [Channel | https://t.me/mychannel]</code>\n\n"
+            "💡 Tip: Use <code>/preview_broadcast</code> to test layout before sending!"
+        )
+
+    cmd_text = message.text or ""
+    do_pin = "-pin" in cmd_text.lower().split()
+    custom_markup = parse_broadcast_custom_buttons(cmd_text) or broadcast_msg.reply_markup
+
+    user_ids = await get_all_user_ids()
+    total_users = len(user_ids)
+    if total_users == 0:
+        return await message.reply_text("❌ No users found in database.")
+
+    progress_msg = await message.reply_text(f"🚀 <b>Broadcasting to {total_users:,} users with custom buttons...</b>")
+
+    sent = 0
+    blocked = 0
+    failed = 0
+    pinned_count = 0
+    last_update = time.time()
+
+    for user_id in user_ids:
+        try:
+            sent_m = await broadcast_msg.copy(chat_id=user_id, reply_markup=custom_markup)
+            sent += 1
+            if do_pin and sent_m:
+                try:
+                    await sent_m.pin(both_sides=True)
+                    pinned_count += 1
+                except Exception:
+                    pass
+        except FloodWait as fw:
+            await asyncio.sleep(fw.value)
+            try:
+                sent_m = await broadcast_msg.copy(chat_id=user_id, reply_markup=custom_markup)
+                sent += 1
+                if do_pin and sent_m:
+                    try:
+                        await sent_m.pin(both_sides=True)
+                        pinned_count += 1
+                    except Exception:
+                        pass
+            except Exception:
+                failed += 1
+        except (UserIsBlocked, InputUserDeactivated, UserDeactivated, PeerIdInvalid):
+            blocked += 1
+            try:
+                await mongo.users.delete_one({"user_id": user_id})
+            except Exception:
+                pass
+        except Exception:
+            failed += 1
+
+        if time.time() - last_update > 10:
+            last_update = time.time()
+            pin_txt = f"\n<b>Pinned:</b> <code>{pinned_count:,}</code>" if do_pin else ""
+            try:
+                await progress_msg.edit_text(
+                    f"📢 <b>Advanced Broadcast in Progress...</b>\n\n"
+                    f"<b>Total Users:</b> <code>{total_users:,}</code>\n"
+                    f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+                    f"<b>Blocked/Deleted:</b> <code>{blocked:,}</code>\n"
+                    f"<b>Failed:</b> <code>{failed:,}</code>"
+                    f"{pin_txt}"
+                )
+            except Exception:
+                pass
+
+    pin_final = f"\n📌 <b>Messages Pinned:</b> <code>{pinned_count:,}</code>" if do_pin else ""
+    await progress_msg.edit_text(
+        f"🎉 <b>Advanced Broadcast Completed!</b>\n\n"
+        f"👥 <b>Total Users:</b> <code>{total_users:,}</code>\n"
+        f"✅ <b>Delivered:</b> <code>{sent:,}</code>\n"
+        f"🧹 <b>Blocked/Deleted (Purged from DB):</b> <code>{blocked:,}</code>\n"
+        f"⚠️ <b>Failed:</b> <code>{failed:,}</code>"
+        f"{pin_final}"
+    )
+
+
+@Client.on_message(filters.command(["agrp_broadcast", "adv_grp_broadcast"]) & filters.private)
+async def advanced_group_broadcast_command(client: Client, message: Message):
+    """Broadcast announcement to all groups with custom inline URL buttons."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
+
+    broadcast_msg = message.reply_to_message
+    if not broadcast_msg:
+        return await message.reply_text(
+            "⚠️ <b>Reply to the message you want to broadcast to groups!</b>\n"
+            "Format: <code>/agrp_broadcast [Button Text | URL]</code>"
+        )
+
+    cmd_text = message.text or ""
+    custom_markup = parse_broadcast_custom_buttons(cmd_text) or broadcast_msg.reply_markup
+
+    chat_ids = await get_all_chat_ids()
+    total_chats = len(chat_ids)
+    if total_chats == 0:
+        return await message.reply_text("❌ No groups found in database.")
+
+    progress_msg = await message.reply_text(f"🚀 <b>Broadcasting to {total_chats:,} groups with buttons...</b>")
+
+    sent = 0
+    failed = 0
+    last_update = time.time()
+
+    for chat_id in chat_ids:
+        try:
+            await broadcast_msg.copy(chat_id=chat_id, reply_markup=custom_markup)
+            sent += 1
+        except FloodWait as fw:
+            await asyncio.sleep(fw.value)
+            try:
+                await broadcast_msg.copy(chat_id=chat_id, reply_markup=custom_markup)
+                sent += 1
+            except Exception:
+                failed += 1
+        except Exception:
+            failed += 1
+
+        if time.time() - last_update > 10:
+            last_update = time.time()
+            try:
+                await progress_msg.edit_text(
+                    f"📢 <b>Group Broadcast in Progress...</b>\n\n"
+                    f"<b>Total Groups:</b> <code>{total_chats:,}</code>\n"
+                    f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+                    f"<b>Failed/Left:</b> <code>{failed:,}</code>"
+                )
+            except Exception:
+                pass
+
+    await progress_msg.edit_text(
+        f"🎉 <b>Group Advanced Broadcast Completed!</b>\n\n"
+        f"<b>Total Groups:</b> <code>{total_chats:,}</code>\n"
+        f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+        f"<b>Failed/Left:</b> <code>{failed:,}</code>"
+    )
+
+
 # 4. /deletecam (CamRip / PreDVD Purge)
 @Client.on_message(filters.command(["deletecam", "purgecam", "deletefiles"]))
 async def purge_camrip_command(client: Client, message: Message):
