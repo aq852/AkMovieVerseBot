@@ -496,20 +496,30 @@ async def start_command_handler(client: Client, message: Message):
         await group_auto_filter_handler(client, message)
         return
 
-    # 6. Filter Deep-link: /start filter_<query> (Direct Filter Trigger from Top Link)
+    # 6. Filter Deep-link: /start filter_<query> (Direct Filter Trigger from Channel Post or Top Link)
     elif args.startswith("filter_"):
         import urllib.parse
         raw_filter_q = urllib.parse.unquote_plus(args.split("filter_", 1)[1]).replace("_", " ").strip()
-        from utils.smart_nav import create_nav_session, build_navigator_root_view
-        sid = create_nav_session(
-            query=raw_filter_q,
-            user_id=user_id,
-            chat_id=message.chat.id,
-            is_pm=True,
-            bot_username=bot_username
-        )
-        text, markup = await build_navigator_root_view(sid)
-        await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+        try:
+            from utils.smart_nav import create_nav_session, build_navigator_root_view
+            sid = create_nav_session(
+                query=raw_filter_q,
+                user_id=user_id,
+                chat_id=message.chat.id,
+                is_pm=True,
+                bot_username=bot_username
+            )
+            text, markup = await build_navigator_root_view(sid)
+            if "❌" not in text and "⚠️ No" not in text and "0 Files" not in text:
+                await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+                return
+        except Exception as nav_err:
+            logger.debug(f"Smart Nav fallback to autofilter: {nav_err}")
+
+        # Seamless fallback: Run standard group_auto_filter_handler so files, spell-check & sponsor ad are sent
+        message.text = raw_filter_q
+        from plugins.autofilter import group_auto_filter_handler
+        await group_auto_filter_handler(client, message)
         return
 
     # 7. Time-based & Single-Use Secret Share Deep-link: /start share_<token>

@@ -313,6 +313,10 @@ async def build_navigator_root_view(sid: str) -> tuple[str, InlineKeyboardMarkup
     query = sess["query"]
     analysis = await analyze_query_media(query)
 
+    # Case 0: No files found
+    if analysis.get("total_files", 0) == 0:
+        return f"⚠️ <b>No files found matching '{query}'.</b>", InlineKeyboardMarkup([])
+
     # Case 1: Only Series exist
     if analysis["has_series"] and not analysis["has_movies"]:
         update_nav_session(sid, media_type="series")
@@ -321,8 +325,10 @@ async def build_navigator_root_view(sid: str) -> tuple[str, InlineKeyboardMarkup
     # Case 2: Only Movies exist
     if analysis["has_movies"] and not analysis["has_series"]:
         update_nav_session(sid, media_type="movie")
-        # If only 1 file exists, jump directly to filtered results with instant download button!
-        if analysis.get("movie_count", 0) <= 1:
+        # If only 1 file exists, OR if there are no sub-filters (languages/qualities) to choose from,
+        # jump directly to filtered results so user gets instant 1-click download buttons!
+        has_subfilters = bool(analysis.get("movie_languages") or analysis.get("movie_qualities"))
+        if analysis.get("movie_count", 0) <= 1 or not has_subfilters:
             return await build_filtered_results_view(sid, page=1)
         return await build_movie_filter_view(sid, analysis)
 
