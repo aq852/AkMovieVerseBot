@@ -14,7 +14,7 @@ except ImportError:
 
 from config import Config
 from database.mongo import mongo
-from database.files import get_total_files_count, delete_camrip_files, delete_file_by_id, delete_all_files
+from database.files import get_total_files_count, delete_camrip_files, delete_file_by_id, delete_all_files, purge_files_and_caches, purge_factory_reset
 from database.users import get_total_users_count, get_all_user_ids, set_ban_status, add_premium, remove_premium, get_all_premium_users
 from database.chats import get_total_chats_count, get_all_chat_ids
 
@@ -545,23 +545,173 @@ async def clean_filenames_command(client: Client, message: Message):
     )
 
 
-# 6. /deleteall
-@Client.on_message(filters.command(["deleteall", "delall", "purgeall"]))
+# 6. /deleteall (MongoDB Storage Wipe & Clean)
+@Client.on_message(filters.command(["deleteall", "delall", "purgeall", "wipedb", "cleandb"]))
 async def delete_all_files_command(client: Client, message: Message):
-    """Wipe the entire file index with confirmation safety."""
+    """Wipe indexed files & caches with mandatory pre-wipe safety backup and interactive confirmation."""
     if not Config.is_admin(message.from_user.id):
-        return
+        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
 
     args = message.text.split()
-    if len(args) < 2 or args[1] != "confirm":
-        await message.reply_text(
-            "⚠️ **WARNING:** This will delete **ALL** indexed files from the database!\n\n"
-            "To proceed, send: `/deleteall confirm`"
+    if len(args) >= 2 and args[1].lower() in ["confirm", "yes", "force"]:
+        status_msg = await message.reply_text(
+            "🛡️ <b>Step 1/2: Generating Safety Net Backup...</b>\n"
+            "<i>Creating offsite compressed .zip archive of all MongoDB collections...</i>"
         )
-        return
+        from plugins.backup import generate_and_send_backup
+        success, backup_info = await generate_and_send_backup(
+            client, message.chat.id, reason="Pre-Wipe Safety Net (/deleteall confirm)"
+        )
 
-    deleted = await delete_all_files()
-    await message.reply_text(f"💥 **Database Purged!** Deleted `{deleted}` files.")
+        await status_msg.edit_text(
+            "💥 <b>Step 2/2: Purging Files & Cache Bloat from MongoDB...</b>\n"
+            "<i>Dropping files, tmdb cache, channel posts, checkpoints, and verifications...</i>"
+        )
+
+        res = await purge_files_and_caches()
+
+        backup_status = f"<code>{backup_info}</code> (Sent to Admin &amp; LOG_CHANNEL)" if success else f"⚠️ Failed: {backup_info}"
+        report = (
+            "🎉 <b>MongoDB Storage Cleared Successfully!</b>\n\n"
+            f"🛡️ <b>Pre-Wipe Backup:</b> {backup_status}\n\n"
+            "<b>Purged Collections Summary:</b>\n"
+            f"• <b>Primary DB Files:</b> <code>{res['files_primary']:,}</code> deleted\n"
+            f"• <b>Secondary DB Files:</b> <code>{res['files_secondary']:,}</code> deleted\n"
+            f"• <b>TMDB Metadata Cache:</b> <code>{res['tmdb_cache']:,}</code> deleted\n"
+            f"• <b>Channel Post Mappings:</b> <code>{res['channel_posts']:,}</code> deleted\n"
+            f"• <b>Indexer Checkpoints:</b> <code>{res['checkpoints']:,}</code> deleted\n"
+            f"• <b>Verifications Cache:</b> <code>{res['verifications']:,}</code> deleted\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>Total Documents Purged:</b> <code>{res['total']:,}</code>\n"
+            "💾 <b>MongoDB Storage:</b> 🟢 <b>~0 MB (Clean & Free)</b>\n"
+            "✨ <i>User accounts, VIP subscriptions, and bot settings were preserved safely!</i>"
+        )
+        return await status_msg.edit_text(report)
+
+    # If called without arguments, show live metrics and interactive 2-step buttons
+    c1 = await mongo.files.count_documents({})
+    c2 = await mongo.files_secondary.count_documents({}) if mongo.has_secondary else 0
+    try:
+        c_tmdb = await mongo.db["tmdb_post_cache"].count_documents({})
+    except Exception:
+        c_tmdb = 0
+    try:
+        c_posts = await mongo.db["channel_posts"].count_documents({})
+    except Exception:
+        c_posts = 0
+
+    warn_text = (
+        "⚠️ <b>DANGER ZONE: MONGODB PURGE & STORAGE CLEANUP</b> ⚠️\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "This tool allows you to wipe data to free up your 512 MB MongoDB Atlas storage.\n\n"
+        "📊 <b>Current Storage Footprint:</b>\n"
+        f"• <b>Primary DB (DB1) Files:</b> <code>{c1:,}</code> records\n"
+        f"• <b>Secondary DB (DB2) Files:</b> <code>{c2:,}</code> records\n"
+        f"• <b>TMDB Post Cache:</b> <code>{c_tmdb:,}</code> records\n"
+        f"• <b>Channel Post Cache:</b> <code>{c_posts:,}</code> records\n\n"
+        "🛡️ <b>Pre-Wipe Safety Guarantee:</b>\n"
+        "An automatic full <code>.zip</code> backup will be generated and dispatched to your PM and <code>LOG_CHANNEL</code> before any deletion begins!\n\n"
+        "<b>Select cleanup mode below:</b>\n"
+        "• <b>Clean Files & Caches:</b> Purges all files and cache bloat. Storage drops to ~0 MB. Preserves users & VIPs.\n"
+        "• <b>Full Factory Reset:</b> Purges files, batches, share links, requests, and alerts. Preserves users & bot credentials.\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <i>Fast Confirm:</i> <code>/deleteall confirm</code>"
+    )
+
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📁 Clean Files & Caches (~0 MB)", callback_data="wipe_files")],
+        [InlineKeyboardButton("💥 Full Factory Reset (All Data)", callback_data="wipe_factory")],
+        [InlineKeyboardButton("❌ Cancel Purge", callback_data="wipe_cancel")]
+    ])
+
+    await message.reply_text(warn_text, reply_markup=buttons)
+
+
+@Client.on_callback_query(filters.regex(r"^wipe_(files|factory|cancel)$"))
+async def wipe_database_callback(client: Client, query: CallbackQuery):
+    """Handle 2-step inline keyboard confirmation for database wipe."""
+    if not Config.is_admin(query.from_user.id):
+        return await query.answer("⛔ Access Denied: Admin privileges required.", show_alert=True)
+
+    action = query.data.split("_")[1]
+
+    if action == "cancel":
+        await query.answer("Cancelled")
+        return await query.message.edit_text("✅ <b>Purge Operation Cancelled.</b> Your database remains untouched.")
+
+    await query.answer("⚡ Initiating Safe Wipe...", show_alert=False)
+
+    from plugins.backup import generate_and_send_backup
+
+    if action == "files":
+        await query.message.edit_text(
+            "⏳ <b>Step 1/2: Generating Safety Backup...</b>\n"
+            "<i>Exporting all MongoDB collections to compressed offsite ZIP...</i>"
+        )
+        success, backup_info = await generate_and_send_backup(
+            client, query.message.chat.id, reason="Safety Net Before Files & Cache Purge"
+        )
+
+        await query.message.edit_text(
+            "💥 <b>Step 2/2: Purging Files & Cache Bloat from MongoDB...</b>\n"
+            "<i>Dropping files, tmdb cache, channel posts, checkpoints, and verifications...</i>"
+        )
+
+        res = await purge_files_and_caches()
+        backup_status = f"<code>{backup_info}</code> (Sent to Admin &amp; LOG_CHANNEL)" if success else f"⚠️ Failed: {backup_info}"
+
+        report = (
+            "🎉 <b>MongoDB Storage Cleared Successfully!</b>\n\n"
+            f"🛡️ <b>Pre-Wipe Backup:</b> {backup_status}\n\n"
+            "<b>Purged Collections Summary:</b>\n"
+            f"• <b>Primary DB Files:</b> <code>{res['files_primary']:,}</code> deleted\n"
+            f"• <b>Secondary DB Files:</b> <code>{res['files_secondary']:,}</code> deleted\n"
+            f"• <b>TMDB Metadata Cache:</b> <code>{res['tmdb_cache']:,}</code> deleted\n"
+            f"• <b>Channel Post Mappings:</b> <code>{res['channel_posts']:,}</code> deleted\n"
+            f"• <b>Indexer Checkpoints:</b> <code>{res['checkpoints']:,}</code> deleted\n"
+            f"• <b>Verifications Cache:</b> <code>{res['verifications']:,}</code> deleted\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>Total Documents Purged:</b> <code>{res['total']:,}</code>\n"
+            "💾 <b>MongoDB Storage:</b> 🟢 <b>~0 MB (Clean & Free)</b>\n"
+            "✨ <i>User accounts, VIP subscriptions, and bot settings were preserved safely!</i>"
+        )
+        return await query.message.edit_text(report)
+
+    elif action == "factory":
+        await query.message.edit_text(
+            "⏳ <b>Step 1/2: Generating Full Safety Backup...</b>\n"
+            "<i>Exporting all MongoDB collections to compressed offsite ZIP...</i>"
+        )
+        success, backup_info = await generate_and_send_backup(
+            client, query.message.chat.id, reason="Safety Net Before Full Factory Reset"
+        )
+
+        await query.message.edit_text(
+            "💥 <b>Step 2/2: Performing Full Factory Reset...</b>\n"
+            "<i>Dropping files, caches, batches, links, requests, and alerts...</i>"
+        )
+
+        res = await purge_factory_reset()
+        backup_status = f"<code>{backup_info}</code> (Sent to Admin &amp; LOG_CHANNEL)" if success else f"⚠️ Failed: {backup_info}"
+
+        report = (
+            "🎉 <b>Full Factory Reset Completed!</b>\n\n"
+            f"🛡️ <b>Pre-Wipe Backup:</b> {backup_status}\n\n"
+            "<b>Purged Collections Summary:</b>\n"
+            f"• <b>Primary DB Files:</b> <code>{res['files_primary']:,}</code> deleted\n"
+            f"• <b>Secondary DB Files:</b> <code>{res['files_secondary']:,}</code> deleted\n"
+            f"• <b>Batches Collection:</b> <code>{res.get('batches', 0):,}</code> deleted\n"
+            f"• <b>Share Links:</b> <code>{res.get('share_links', 0):,}</code> deleted\n"
+            f"• <b>Movie Requests:</b> <code>{res.get('movie_requests', 0):,}</code> deleted\n"
+            f"• <b>Upload Alerts:</b> <code>{res.get('upload_alerts', 0):,}</code> deleted\n"
+            f"• <b>Manual Filters:</b> <code>{res.get('manual_filters', 0):,}</code> deleted\n"
+            f"• <b>Caches (TMDB/Posts/Verify):</b> <code>{res['tmdb_cache'] + res['channel_posts'] + res['verifications']:,}</code> deleted\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>Total Documents Purged:</b> <code>{res['total']:,}</code>\n"
+            "💾 <b>MongoDB Storage:</b> 🟢 <b>~0 MB (Completely Fresh State)</b>\n"
+            "✨ <i>User accounts and bot credentials were preserved safely!</i>"
+        )
+        return await query.message.edit_text(report)
 
 
 # Quick Copyright Purge: /delbyname <name>

@@ -691,16 +691,152 @@ async def delete_camrip_files() -> int:
 
 async def delete_all_files() -> int:
     """Full database purge of all indexed files across all clusters."""
+    global _DB1_FULL_STATUS, _LAST_DB1_CHECK_TIME
     try:
         res1 = await mongo.files.delete_many({})
         total = res1.deleted_count
         if mongo.has_secondary:
             res2 = await mongo.files_secondary.delete_many({})
             total += res2.deleted_count
+        _DB1_FULL_STATUS = False
+        _LAST_DB1_CHECK_TIME = 0
+        from database.mongo import set_bot_setting
+        await set_bot_setting("last_storage_alert_tier", "none")
         return total
     except Exception as e:
         logger.error(f"Error purging all files: {e}")
         return 0
+
+
+async def purge_files_and_caches() -> dict:
+    """Purge all indexed media files and cache bloat (TMDB cache, channel posts, checkpoints, verifications)
+    across all MongoDB clusters. Safely drops database storage footprint to ~0 MB while preserving users,
+    VIP subscriptions, and bot settings.
+    """
+    global _DB1_FULL_STATUS, _LAST_DB1_CHECK_TIME
+    stats = {
+        "files_primary": 0,
+        "files_secondary": 0,
+        "tmdb_cache": 0,
+        "channel_posts": 0,
+        "checkpoints": 0,
+        "verifications": 0,
+        "total": 0
+    }
+    try:
+        # 1. Primary files
+        res1 = await mongo.files.delete_many({})
+        stats["files_primary"] = res1.deleted_count
+
+        # 2. Secondary files (if connected)
+        if mongo.has_secondary:
+            res2 = await mongo.files_secondary.delete_many({})
+            stats["files_secondary"] = res2.deleted_count
+
+        # 3. TMDB post cache
+        try:
+            res_tmdb = await mongo.db["tmdb_post_cache"].delete_many({})
+            stats["tmdb_cache"] = res_tmdb.deleted_count
+        except Exception as e:
+            logger.warning(f"Error purging tmdb_post_cache: {e}")
+
+        # 4. Channel post mappings
+        try:
+            res_cp = await mongo.db["channel_posts"].delete_many({})
+            stats["channel_posts"] = res_cp.deleted_count
+        except Exception as e:
+            logger.warning(f"Error purging channel_posts: {e}")
+
+        # 5. Indexer checkpoints
+        try:
+            res_chk = await mongo.db["indexer_checkpoints"].delete_many({})
+            stats["checkpoints"] = res_chk.deleted_count
+        except Exception as e:
+            logger.warning(f"Error purging indexer_checkpoints: {e}")
+
+        # 6. Verifications
+        try:
+            res_v = await mongo.verify.delete_many({})
+            stats["verifications"] = res_v.deleted_count
+        except Exception as e:
+            logger.warning(f"Error purging verifications: {e}")
+
+        stats["total"] = (
+            stats["files_primary"] + stats["files_secondary"] +
+            stats["tmdb_cache"] + stats["channel_posts"] +
+            stats["checkpoints"] + stats["verifications"]
+        )
+
+        # Reset global memory flags and database storage alert tier
+        _DB1_FULL_STATUS = False
+        _LAST_DB1_CHECK_TIME = 0
+        from database.mongo import set_bot_setting
+        await set_bot_setting("last_storage_alert_tier", "none")
+
+        logger.info(f"Database purge_files_and_caches completed: {stats}")
+        return stats
+    except Exception as e:
+        logger.error(f"Error executing purge_files_and_caches: {e}", exc_info=True)
+        return stats
+
+
+async def purge_factory_reset() -> dict:
+    """Full factory reset: Purges files, caches, batches, secret share links, movie requests,
+    upload alerts, and manual filters. Keeps user registrations, VIP accounts, and bot credentials safe.
+    """
+    stats = await purge_files_and_caches()
+    extra_stats = {
+        "batches": 0,
+        "share_links": 0,
+        "movie_requests": 0,
+        "upload_alerts": 0,
+        "manual_filters": 0,
+        "downloader_stats": 0
+    }
+    try:
+        try:
+            res_b = await mongo.batches.delete_many({})
+            extra_stats["batches"] = res_b.deleted_count
+        except Exception:
+            pass
+
+        try:
+            res_sl = await mongo.share_links.delete_many({})
+            extra_stats["share_links"] = res_sl.deleted_count
+        except Exception:
+            pass
+
+        try:
+            res_req = await mongo.requests.delete_many({})
+            extra_stats["movie_requests"] = res_req.deleted_count
+        except Exception:
+            pass
+
+        try:
+            res_ua = await mongo.db["upload_alerts"].delete_many({})
+            extra_stats["upload_alerts"] = res_ua.deleted_count
+        except Exception:
+            pass
+
+        try:
+            res_mf = await mongo.filters.delete_many({})
+            extra_stats["manual_filters"] = res_mf.deleted_count
+        except Exception:
+            pass
+
+        try:
+            res_ds = await mongo.dl_stats.delete_many({})
+            extra_stats["downloader_stats"] = res_ds.deleted_count
+        except Exception:
+            pass
+
+        stats.update(extra_stats)
+        stats["total"] += sum(extra_stats.values())
+        logger.info(f"Database purge_factory_reset completed: {stats}")
+        return stats
+    except Exception as e:
+        logger.error(f"Error executing purge_factory_reset: {e}", exc_info=True)
+        return stats
 
 
 async def get_total_files_count() -> int:

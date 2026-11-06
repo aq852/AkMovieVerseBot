@@ -1000,5 +1000,51 @@ class TestAutoFilterEngine(unittest.TestCase):
             clean_res = clean_search_title(best_candidate)
             self.assertTrue(clean_res.startswith(expected_prefix), f"Expected prefix {expected_prefix}, got {clean_res}")
 
+    def test_purge_files_and_caches_resets_flags(self):
+        import asyncio
+        from database.files import purge_files_and_caches
+        import database.files as files_mod
+        from database.mongo import mongo
+        from unittest.mock import patch, MagicMock, AsyncMock
+
+        files_mod._DB1_FULL_STATUS = True
+        mock_res = MagicMock(deleted_count=5)
+
+        with patch.object(type(mongo), "files", new_callable=MagicMock) as mock_f:
+            mock_f.delete_many = AsyncMock(return_value=mock_res)
+            with patch.object(type(mongo), "has_secondary", False):
+                with patch("database.mongo.set_bot_setting", new_callable=AsyncMock) as mock_set:
+                    res = asyncio.run(purge_files_and_caches())
+                    self.assertEqual(res["files_primary"], 5)
+                    self.assertFalse(files_mod._DB1_FULL_STATUS)
+                    mock_set.assert_called_with("last_storage_alert_tier", "none")
+
+    def test_purge_factory_reset_keys(self):
+        import asyncio
+        from database.files import purge_factory_reset
+        from unittest.mock import patch, AsyncMock
+
+        with patch("database.files.purge_files_and_caches", new_callable=AsyncMock) as mock_base:
+            mock_base.return_value = {
+                "files_primary": 10,
+                "files_secondary": 0,
+                "tmdb_cache": 2,
+                "channel_posts": 1,
+                "checkpoints": 1,
+                "verifications": 1,
+                "total": 15
+            }
+            res = asyncio.run(purge_factory_reset())
+            self.assertIn("batches", res)
+            self.assertIn("share_links", res)
+            self.assertIn("movie_requests", res)
+            self.assertIn("upload_alerts", res)
+            self.assertGreaterEqual(res["total"], 15)
+
+    def test_deleteall_callback_handler_exists(self):
+        import plugins.admin as admin
+        self.assertTrue(hasattr(admin.wipe_database_callback, "handlers"))
+        self.assertGreater(len(admin.wipe_database_callback.handlers), 0)
+
 if __name__ == "__main__":
     unittest.main()

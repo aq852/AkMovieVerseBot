@@ -36,13 +36,8 @@ BACKUP_COLLECTIONS = [
     "upload_alerts"
 ]
 
-@Client.on_message(filters.command(["backup", "dbbackup"]) & filters.private)
-async def backup_database(client: Client, message: Message):
-    """Admin command: Dump MongoDB collections to a compressed ZIP and send to Admin & Log Channel."""
-    if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Only bot administrators can execute database backups.")
-
-    status_msg = await message.reply_text("⏳ **Generating Database Backup...**\n_Reading MongoDB collections and serializing documents..._")
+async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "Manual Backup") -> tuple[bool, str]:
+    """Generate compressed JSON backup of all MongoDB collections and dispatch to chat_id and LOG_CHANNEL."""
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"autofilterbot_backup_{timestamp}.zip"
     temp_dir = os.path.join(os.getcwd(), "temp_backup")
@@ -69,50 +64,80 @@ async def backup_database(client: Client, message: Message):
                     logger.error(f"Error backing up collection {coll_name}: {coll_err}")
                     stats_lines.append(f"• `{coll_name}`: ⚠️ Error ({coll_err})")
 
+            # Backup secondary cluster files if connected
+            if mongo.has_secondary:
+                try:
+                    sec_docs = await mongo.files_secondary.find({}).to_list(length=None)
+                    sec_count = len(sec_docs)
+                    total_docs += sec_count
+                    stats_lines.append(f"• `{Config.COLLECTION_NAME}_secondary`: **{sec_count}** records")
+                    json_data2 = json_util.dumps(sec_docs, indent=2)
+                    zf.writestr(f"{Config.COLLECTION_NAME}_secondary.json", json_data2)
+                except Exception as sec_err:
+                    logger.error(f"Error backing up secondary files: {sec_err}")
+
         zip_size = os.path.getsize(zip_path)
         readable_size = get_readable_size(zip_size)
 
         summary_caption = (
-            f"📦 **AkMovieVerse Database Backup**\n\n"
-            f"📅 **Timestamp (UTC)**: `{timestamp}`\n"
-            f"📊 **Total Collections**: `{len(BACKUP_COLLECTIONS)}`\n"
-            f"📄 **Total Documents**: `{total_docs:,}`\n"
-            f"💾 **Archive Size**: `{readable_size}`\n\n"
-            f"__Collection Breakdown:__\n" + "\n".join(stats_lines[:15]) +
-            f"\n\n_To restore: Reply to this zip with /restore_"
+            f"📦 <b>AkMovieVerse Database Backup</b>\n\n"
+            f"🛡️ <b>Trigger Reason:</b> <code>{reason}</code>\n"
+            f"📅 <b>Timestamp (UTC):</b> <code>{timestamp}</code>\n"
+            f"📊 <b>Total Collections:</b> <code>{len(BACKUP_COLLECTIONS)}</code>\n"
+            f"📄 <b>Total Documents:</b> <code>{total_docs:,}</code>\n"
+            f"💾 <b>Archive Size:</b> <code>{readable_size}</code>\n\n"
+            f"<b>Collection Breakdown:</b>\n" + "\n".join(stats_lines[:15]) +
+            f"\n\n<i>To restore: Reply to this zip with:</i> <code>/restore</code>"
         )
 
-        # Send to Admin Private Chat
-        await client.send_document(
-            chat_id=message.chat.id,
-            document=zip_path,
-            file_name=zip_filename,
-            caption=summary_caption
-        )
+        # Send to target chat
+        if chat_id:
+            try:
+                await client.send_document(
+                    chat_id=chat_id,
+                    document=zip_path,
+                    file_name=zip_filename,
+                    caption=summary_caption
+                )
+            except Exception as e:
+                logger.warning(f"Could not deliver backup to chat {chat_id}: {e}")
 
-        # Send copy to LOG_CHANNEL for safe off-site persistence
-        if Config.LOG_CHANNEL:
+        # Send copy to LOG_CHANNEL
+        if Config.LOG_CHANNEL and Config.LOG_CHANNEL != chat_id:
             try:
                 await client.send_document(
                     chat_id=Config.LOG_CHANNEL,
                     document=zip_path,
                     file_name=zip_filename,
-                    caption=f"🛡️ **System Automated Log Backup**\n{summary_caption}"
+                    caption=f"🛡️ <b>System Automated Log Backup</b>\n\n{summary_caption}"
                 )
             except Exception as log_err:
                 logger.warning(f"Could not deliver backup to LOG_CHANNEL: {log_err}")
 
-        await status_msg.delete()
-
+        return True, readable_size
     except Exception as e:
         logger.error(f"Failed to generate database backup: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ **Backup Failed**: `{e}`")
+        return False, str(e)
     finally:
         if os.path.exists(zip_path):
             try:
                 os.remove(zip_path)
             except Exception:
                 pass
+
+
+@Client.on_message(filters.command(["backup", "dbbackup"]) & filters.private)
+async def backup_database(client: Client, message: Message):
+    """Admin command: Dump MongoDB collections to a compressed ZIP and send to Admin & Log Channel."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ **Access Denied**: Only bot administrators can execute database backups.")
+
+    status_msg = await message.reply_text("⏳ **Generating Database Backup...**\n_Reading MongoDB collections and serializing documents..._")
+    success, result_str = await generate_and_send_backup(client, message.chat.id, reason="Manual Admin Request (/backup)")
+    if success:
+        await status_msg.delete()
+    else:
+        await status_msg.edit_text(f"❌ **Backup Failed**: `{result_str}`")
 
 
 @Client.on_message(filters.command(["restore", "dbrestore"]) & filters.private)
