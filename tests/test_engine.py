@@ -1046,5 +1046,44 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertTrue(hasattr(admin.wipe_database_callback, "handlers"))
         self.assertGreater(len(admin.wipe_database_callback.handlers), 0)
 
+    def test_housekeeping_runs_and_preserves_safety_invariants(self):
+        import asyncio
+        from plugins.housekeeping import run_database_housekeeping, format_housekeeping_report
+        from database.mongo import mongo
+        from unittest.mock import patch, MagicMock, AsyncMock
+
+        mock_del = MagicMock(deleted_count=3)
+        with patch.object(type(mongo), "batches", new_callable=MagicMock) as mock_b, \
+             patch.object(type(mongo), "share_links", new_callable=MagicMock) as mock_sl, \
+             patch.object(type(mongo), "verify", new_callable=MagicMock) as mock_v, \
+             patch.object(type(mongo), "requests", new_callable=MagicMock) as mock_req, \
+             patch.object(type(mongo), "users", new_callable=MagicMock) as mock_users:
+
+            mock_b.delete_many = AsyncMock(return_value=mock_del)
+            mock_sl.delete_many = AsyncMock(return_value=mock_del)
+            mock_v.delete_many = AsyncMock(return_value=mock_del)
+            mock_req.delete_many = AsyncMock(return_value=mock_del)
+            mock_users.delete_many = AsyncMock()
+            mock_users.delete_one = AsyncMock()
+
+            stats = asyncio.run(run_database_housekeeping(client=None, triggered_by="Test Suite"))
+
+            self.assertIn("total_purged", stats)
+            self.assertEqual(stats["expired_batches"], 3)
+            self.assertEqual(stats["expired_share_links"], 3)
+            # CRITICAL SAFETY INVARIANT CHECK: users must NEVER be touched!
+            mock_users.delete_many.assert_not_called()
+            mock_users.delete_one.assert_not_called()
+
+            # Test report formatting
+            rep = format_housekeeping_report(stats)
+            self.assertIn("Database Housekeeping", rep)
+            self.assertIn("All Users, Channel Auto-Posts &amp; TMDB Cache were 100% preserved", rep)
+
+    def test_autoclean_command_decorator_exists(self):
+        import plugins.housekeeping as housekeeping
+        self.assertTrue(hasattr(housekeeping.auto_clean_command, "handlers"))
+        self.assertGreater(len(housekeeping.auto_clean_command.handlers), 0)
+
 if __name__ == "__main__":
     unittest.main()

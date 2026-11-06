@@ -123,3 +123,13 @@ async def get_all_chat_ids() -> list[int]:
     except Exception as e:
         logger.error(f"Error fetching chat IDs for broadcast: {e}")
         return []
+
+
+async def delete_chat(chat_id: int) -> bool:
+    """Delete a group chat from database if bot was kicked or chat is dead."""
+    try:
+        res = await mongo.chats.delete_one({"chat_id": chat_id})
+        return res.deleted_count > 0
+    except Exception as e:
+        logger.error(f"Error deleting chat {chat_id}: {e}")
+        return False

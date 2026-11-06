@@ -139,6 +139,7 @@ ADMIN_COMMANDS = [
     BotCommand("setthumb", "Set custom thumbnail for downloads"),
     BotCommand("backup", "Backup MongoDB database to zip: /backup"),
     BotCommand("autobackup", "Weekly backup toggle: /autobackup [on|off]"),
+    BotCommand("autoclean", "Weekly cleanup & dead groups purge: /autoclean"),
     BotCommand("restore", "Restore MongoDB backup: reply /restore"),
     BotCommand("clonechannel", "Clone files between channels: /clonechannel"),
     BotCommand("hypedrop", "Blockbuster Hype Premiere: /hypedrop <title>"),

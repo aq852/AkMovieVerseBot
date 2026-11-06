@@ -112,6 +112,14 @@ class Bot(Client):
         except Exception as e:
             logger.warning(f"Could not launch weekly backup scheduler: {e}")
 
+        # 8b. Start Weekly Sunday Database Housekeeping & Storage Auto-Cleaner
+        try:
+            from plugins.housekeeping import start_weekly_housekeeping_scheduler
+            asyncio.create_task(start_weekly_housekeeping_scheduler(self))
+            logger.info("Launched Weekly Database Housekeeping background scheduler.")
+        except Exception as e:
+            logger.warning(f"Could not launch weekly housekeeping scheduler: {e}")
+
         # 9. Start Periodic MongoDB Storage Health & Alert Checker (Every 15 Minutes)
         try:
             async def _storage_health_loop():
