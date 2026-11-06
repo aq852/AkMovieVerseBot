@@ -597,3 +597,76 @@ async def alt_stream_callback(client: Client, query: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in alt_stream_callback: {e}")
     await query.answer()
+
+
+# ==============================================================================
+# Gift Reward Flow Callbacks
+# ==============================================================================
+
+@Client.on_callback_query(filters.regex(r"^claimgift_"))
+async def claim_gift_callback_handler(client: Client, query: CallbackQuery):
+    """Handle interactive task verification and reward claiming."""
+    gift_id = query.data.split("claimgift_")[1]
+    user_id = query.from_user.id
+    from utils.gift_flow import render_gift_page
+    await render_gift_page(client=client, user_id=user_id, gift_id=gift_id, callback_query=query)
+
+
+@Client.on_callback_query(filters.regex(r"^delgift_cb_"))
+async def del_gift_cb_handler(client: Client, query: CallbackQuery):
+    """Admin callback to revoke gift campaign."""
+    if not Config.is_admin(query.from_user.id):
+        return await query.answer("⛔ Access Denied: Admin privileges required.", show_alert=True)
+    gid = query.data.split("delgift_cb_")[1]
+    from database.gifts import delete_gift
+    ok = await delete_gift(gid)
+    if ok:
+        await query.answer("🗑️ Gift campaign revoked successfully!", show_alert=True)
+        try:
+            await query.message.edit_text(f"🗑️ <b>Gift campaign <code>{gid}</code> has been revoked and stopped!</b>")
+        except Exception:
+            pass
+    else:
+        await query.answer("❌ Failed to revoke gift.", show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^gift_info_"))
+async def gift_info_cb_handler(client: Client, query: CallbackQuery):
+    """Admin callback to inspect specific gift details."""
+    if not Config.is_admin(query.from_user.id):
+        return await query.answer("⛔ Access Denied: Admin privileges required.", show_alert=True)
+    gid = query.data.split("gift_info_")[1]
+    from database.gifts import get_gift
+    gift = await get_gift(gid)
+    if not gift:
+        return await query.answer("❌ Gift not found.", show_alert=True)
+
+    claimed = gift.get("claimed_count", 0)
+    max_c = gift.get("max_claims", 0)
+    views = gift.get("views_count", 0)
+    active = gift.get("is_active", False)
+    status_str = "🟢 Active" if active else "🔴 Inactive / Expired"
+
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+    link = f"https://t.me/{bot_uname}?start=gift_{gid}"
+
+    text = (
+        f"🎁 <b>GIFT REWARD #{gid}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Title:</b> <code>{html.escape(gift.get('title', 'Gift'))}</code>\n"
+        f"• <b>Status:</b> {status_str}\n"
+        f"• <b>Claimed:</b> <code>{claimed} / {max_c if max_c else '∞'} Users</code>\n"
+        f"• <b>Views:</b> <code>{views:,} Views</code>\n"
+        f"• <b>VIP Only:</b> <code>{'Yes' if gift.get('is_vip_only') else 'No'}</code>\n"
+        f"• <b>Shortener:</b> <code>{'Yes' if gift.get('require_shortener') else 'No'}</code>\n"
+        f"• <b>Channels:</b> <code>{', '.join(gift.get('channels', [])) or 'None'}</code>\n"
+        f"• <b>Link:</b> <code>{link}</code>"
+    )
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗑️ Revoke Gift", callback_data=f"delgift_cb_{gid}")]
+    ])
+    try:
+        await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+    except Exception:
+        pass
+    await query.answer()

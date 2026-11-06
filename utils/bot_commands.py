@@ -161,7 +161,13 @@ ADMIN_COMMANDS = [
     BotCommand("agrp_broadcast", "Advanced broadcast to all groups"),
     BotCommand("setad", "Set time-based sponsor ad: /setad <time> [Text | Link]"),
     BotCommand("ads", "Sponsor ad campaign status & stats: /ads"),
-    BotCommand("delad", "Delete active sponsor ad: /delad")
+    BotCommand("delad", "Delete active sponsor ad: /delad"),
+    BotCommand("gift", "Create task-locked gift: reply /gift [claims] [time]"),
+    BotCommand("giftbatch", "Create batch gift: /giftbatch <batch_id> [claims]"),
+    BotCommand("gifts", "Active gift reward campaigns dashboard"),
+    BotCommand("delgift", "Revoke gift campaign: /delgift <gift_id>"),
+    BotCommand("giftban", "Blacklist user from gifts: /giftban <user_id>"),
+    BotCommand("giftunban", "Unban user from gifts: /giftunban <user_id>")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:

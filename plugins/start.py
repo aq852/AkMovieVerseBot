@@ -558,7 +558,33 @@ async def start_command_handler(client: Client, message: Message):
         await deliver_file_with_copyright_warning(client, user_id, file_doc)
         return
 
+    elif args.startswith("gift_"):
+        gift_id = args.split("gift_")[1]
+        from utils.gift_flow import render_gift_page
+        await render_gift_page(client=client, user_id=user_id, gift_id=gift_id, target_message=message)
+        return
 
+    elif args.startswith("vgtok_"):
+        token = args.split("vgtok_")[1]
+        from database.gifts import verify_gift_task_token
+        ok, msg, token_doc = await verify_gift_task_token(token)
+        if not ok or not token_doc:
+            await message.reply_text(f"❌ <b>Verification Failed:</b> {msg}")
+            return
+
+        gift_id = token_doc.get("gift_id", "")
+        bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+        success_text = (
+            "✅ <b>TASK COMPLETED &amp; VERIFIED!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Your ad/shortener task has been confirmed in our database!\n\n"
+            "👉 Tap the button below to unlock and claim your gift reward:"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎁 Continue to Claim Reward ↗️", url=f"https://t.me/{bot_uname}?start=gift_{gift_id}")]
+        ])
+        await message.reply_text(success_text, reply_markup=markup)
+        return
 
     # 7. Standard /start Greeting
     hour = datetime.datetime.utcnow().hour + 5.5

@@ -1425,5 +1425,182 @@ class TestAutoFilterEngine(unittest.TestCase):
             purged = asyncio.run(clean_expired_ads(keep_days=7))
             self.assertGreaterEqual(purged, 1)
 
+    def test_gift_flags_parsing(self):
+        from plugins.gifts import parse_gift_flags
+        args = ["100", "72h", "@AkMoviesZone", "-viponly", "-shortener", "-del", "3m", "-img", "https://img.com/p.jpg"]
+        flags = parse_gift_flags(args)
+        self.assertEqual(flags["claims"], 100)
+        self.assertEqual(flags["duration_seconds"], 72 * 3600)
+        self.assertIn("@AkMoviesZone", flags["channels"])
+        self.assertTrue(flags["is_vip_only"])
+        self.assertTrue(flags["require_shortener"])
+        self.assertEqual(flags["auto_delete_seconds"], 180)
+        self.assertEqual(flags["poster_url"], "https://img.com/p.jpg")
+        self.assertTrue(flags["protect_content"])
+
+    def test_gift_reward_system_crud(self):
+        import asyncio
+        from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock
+        from database.mongo import mongo
+        from database.gifts import (
+            create_gift,
+            get_gift,
+            record_gift_claim,
+            has_user_claimed_gift,
+            delete_gift,
+            gift_ban_user,
+            gift_unban_user,
+            is_gift_banned,
+            create_gift_task_token,
+            verify_gift_task_token,
+            is_gift_task_verified,
+            clean_expired_gifts
+        )
+
+        fake_gifts = {}
+        fake_blacklist = {}
+        fake_tokens = {}
+
+        # Mock gift_rewards collection
+        mock_gr = MagicMock()
+
+        async def fake_gr_insert(doc):
+            fake_gifts[doc["gift_id"]] = doc
+            return MagicMock(inserted_id="g_id")
+
+        async def fake_gr_find(query, sort=None):
+            return fake_gifts.get(query.get("gift_id"))
+
+        async def fake_gr_update(query, update, upsert=False):
+            gid = query.get("gift_id")
+            if gid in fake_gifts:
+                doc = fake_gifts[gid]
+                if "$set" in update:
+                    doc.update(update["$set"])
+                if "$inc" in update:
+                    for k, v in update["$inc"].items():
+                        doc[k] = doc.get(k, 0) + v
+                if "$push" in update:
+                    for k, v in update["$push"].items():
+                        doc.setdefault(k, []).append(v)
+                return MagicMock(modified_count=1)
+            return MagicMock(modified_count=0)
+
+        mock_gr.insert_one = AsyncMock(side_effect=fake_gr_insert)
+        mock_gr.find_one = AsyncMock(side_effect=fake_gr_find)
+        mock_gr.update_one = AsyncMock(side_effect=fake_gr_update)
+        mock_gr.delete_many = AsyncMock(return_value=MagicMock(deleted_count=1))
+
+        # Mock gift_blacklist collection
+        mock_gb = MagicMock()
+
+        async def fake_gb_update(query, update, upsert=False):
+            fake_blacklist[query["user_id"]] = update.get("$set", {})
+            return MagicMock(modified_count=1)
+
+        async def fake_gb_find(query):
+            return fake_blacklist.get(query.get("user_id"))
+
+        async def fake_gb_del(query):
+            if query.get("user_id") in fake_blacklist:
+                del fake_blacklist[query["user_id"]]
+                return MagicMock(deleted_count=1)
+            return MagicMock(deleted_count=0)
+
+        mock_gb.update_one = AsyncMock(side_effect=fake_gb_update)
+        mock_gb.find_one = AsyncMock(side_effect=fake_gb_find)
+        mock_gb.delete_one = AsyncMock(side_effect=fake_gb_del)
+
+        # Mock gift_task_tokens collection
+        mock_gt = MagicMock()
+
+        async def fake_gt_insert(doc):
+            fake_tokens[doc["token"]] = doc
+            return MagicMock(inserted_id="t_id")
+
+        async def fake_gt_find(query):
+            if "token" in query:
+                return fake_tokens.get(query["token"])
+            for t, d in fake_tokens.items():
+                if d.get("gift_id") == query.get("gift_id") and d.get("user_id") == query.get("user_id"):
+                    if query.get("is_verified") is True and not d.get("is_verified"):
+                        continue
+                    return d
+            return None
+
+        async def fake_gt_update(query, update):
+            tok = query.get("token")
+            if tok in fake_tokens:
+                fake_tokens[tok].update(update.get("$set", {}))
+                return MagicMock(modified_count=1)
+            return MagicMock(modified_count=0)
+
+        mock_gt.insert_one = AsyncMock(side_effect=fake_gt_insert)
+        mock_gt.find_one = AsyncMock(side_effect=fake_gt_find)
+        mock_gt.update_one = AsyncMock(side_effect=fake_gt_update)
+        mock_gt.delete_many = AsyncMock(return_value=MagicMock(deleted_count=1))
+
+        mock_db = {
+            "gift_rewards": mock_gr,
+            "gift_blacklist": mock_gb,
+            "gift_task_tokens": mock_gt
+        }
+
+        with patch.object(type(mongo), "db", new_callable=PropertyMock, return_value=mock_db):
+            # 1. Create Gift
+            g_doc = asyncio.run(create_gift(
+                title="Avengers 4K IMAX",
+                file_type="single",
+                file_doc={"file_id": "f_123", "file_name": "avengers.mkv"},
+                max_claims=2,
+                duration_seconds=3600,
+                created_by=999
+            ))
+            gid = g_doc["gift_id"]
+            self.assertIsNotNone(gid)
+            self.assertEqual(g_doc["max_claims"], 2)
+
+            # 2. Get Gift
+            fetched = asyncio.run(get_gift(gid))
+            self.assertEqual(fetched["title"], "Avengers 4K IMAX")
+
+            # 3. User 100 Claims
+            ok1, _ = asyncio.run(record_gift_claim(gid, 100))
+            self.assertTrue(ok1)
+            self.assertTrue(asyncio.run(has_user_claimed_gift(gid, 100)))
+
+            # 4. User 100 Duplicate Claim Blocked
+            ok_dup, _ = asyncio.run(record_gift_claim(gid, 100))
+            self.assertFalse(ok_dup)
+
+            # 5. User 200 Claims (Stock Reached: 2/2)
+            ok2, _ = asyncio.run(record_gift_claim(gid, 200))
+            self.assertTrue(ok2)
+
+            # 6. User 300 Rejection (Out of stock)
+            ok3, msg3 = asyncio.run(record_gift_claim(gid, 300))
+            self.assertFalse(ok3)
+            self.assertIn("claimed", msg3.lower())
+
+            # 7. Gift Blacklist test
+            banned = asyncio.run(gift_ban_user(555, "Spamming"))
+            self.assertTrue(banned)
+            self.assertTrue(asyncio.run(is_gift_banned(555)))
+            unbanned = asyncio.run(gift_unban_user(555))
+            self.assertTrue(unbanned)
+            self.assertFalse(asyncio.run(is_gift_banned(555)))
+
+            # 8. Token Verification test
+            tok = asyncio.run(create_gift_task_token(gid, 777, "shortener"))
+            self.assertTrue(tok.startswith("gtok_"))
+            self.assertFalse(asyncio.run(is_gift_task_verified(gid, 777, "shortener")))
+            ok_v, _, _ = asyncio.run(verify_gift_task_token(tok))
+            self.assertTrue(ok_v)
+            self.assertTrue(asyncio.run(is_gift_task_verified(gid, 777, "shortener")))
+
+            # 9. Clean Expired Gifts
+            purged = asyncio.run(clean_expired_gifts(keep_days=14))
+            self.assertGreaterEqual(purged, 1)
+
 if __name__ == "__main__":
     unittest.main()
