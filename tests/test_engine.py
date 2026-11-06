@@ -1438,6 +1438,18 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertEqual(flags["poster_url"], "https://img.com/p.jpg")
         self.assertTrue(flags["protect_content"])
 
+        # Test -unlimited flag
+        args_unlim = ["@AkMoviesZone", "-unlimited"]
+        flags_unlim = parse_gift_flags(args_unlim)
+        self.assertEqual(flags_unlim["claims"], 0)
+        self.assertEqual(flags_unlim["duration_seconds"], 0)
+
+        # Test 0 0 positional args
+        args_zeros = ["0", "0", "@AkMoviesZone"]
+        flags_zeros = parse_gift_flags(args_zeros)
+        self.assertEqual(flags_zeros["claims"], 0)
+        self.assertEqual(flags_zeros["duration_seconds"], 0)
+
     def test_gift_reward_system_crud(self):
         import asyncio
         from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock

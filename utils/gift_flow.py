@@ -302,8 +302,13 @@ async def render_gift_page(
     if callback_query:
         await callback_query.answer("❌ Please complete all tasks above first!", show_alert=True)
 
-    pct = int((claimed / max_c * 100)) if max_c > 0 else 0
-    rem_stock = max(0, max_c - claimed) if max_c > 0 else "Unlimited"
+    if max_c > 0:
+        pct = int((claimed / max_c * 100))
+        stock_line = f"👥 <b>Stock:</b> <code>{claimed}/{max_c} Claimed ({pct}%)</code>"
+        rem_line = f"🔥 <b>Remaining:</b> <code>{max(0, max_c - claimed)} Left!</code>"
+    else:
+        stock_line = f"👥 <b>Stock:</b> <code>{claimed} Claimed (Unlimited Stock)</code>"
+        rem_line = "🔥 <b>Remaining:</b> <code>Unlimited (Open for Everyone!)</code>"
 
     auto_del_sec = gift.get("auto_delete_seconds", 300)
     del_mins = auto_del_sec // 60
@@ -313,8 +318,8 @@ async def render_gift_page(
         "🎁 <b>EXCLUSIVE REWARD BOX UNLOCKED!</b> 🎁",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"📦 <b>Reward:</b> <code>{html.escape(gift.get('title', 'Exclusive Reward'))}</code>",
-        f"👥 <b>Stock:</b> <code>{claimed}/{max_c if max_c else '∞'} Claimed ({pct}%)</code>",
-        f"🔥 <b>Remaining:</b> <code>{rem_stock} Left!</code>",
+        stock_line,
+        rem_line,
         f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "👉 <b>Complete the quick tasks below to unlock your reward:</b>\n"

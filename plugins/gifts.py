@@ -49,7 +49,7 @@ def parse_short_duration(dur_str: str) -> Optional[int]:
 
 
 def parse_gift_flags(arg_list: list[str]) -> dict:
-    """Parse command line flags like -viponly, -shortener, -protect, -del 3m, -img <url>."""
+    """Parse command line flags like -viponly, -shortener, -protect, -del 3m, -img <url>, -unlimited."""
     flags = {
         "is_vip_only": False,
         "require_shortener": False,
@@ -61,6 +61,7 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         "duration_seconds": 172800  # 48 hours default
     }
 
+    seen_numbers = 0
     skip_next = False
     for i, token in enumerate(arg_list):
         if skip_next:
@@ -68,7 +69,14 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
             continue
 
         tok_low = token.lower()
-        if tok_low == "-viponly":
+        if tok_low in ("-unlimited", "-nolimit", "-forever", "-inf"):
+            flags["claims"] = 0
+            flags["duration_seconds"] = 0
+        elif tok_low in ("unlimited", "nolimit", "inf"):
+            flags["claims"] = 0
+        elif tok_low in ("forever", "lifetime", "never", "0h", "0d", "0s"):
+            flags["duration_seconds"] = 0
+        elif tok_low == "-viponly":
             flags["is_vip_only"] = True
         elif tok_low in ("-shortener", "-short", "-ad"):
             flags["require_shortener"] = True
@@ -79,7 +87,7 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         elif tok_low == "-del":
             if i + 1 < len(arg_list):
                 dur = parse_short_duration(arg_list[i + 1])
-                if dur:
+                if dur is not None:
                     flags["auto_delete_seconds"] = dur
                 skip_next = True
         elif tok_low in ("-img", "-poster"):
@@ -89,10 +97,16 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         elif token.startswith("@") or token.startswith("-100"):
             flags["channels"].append(token)
         elif token.isdigit():
-            flags["claims"] = int(token)
+            val = int(token)
+            if seen_numbers == 0:
+                flags["claims"] = val
+            elif seen_numbers == 1:
+                # 2nd numeric token without unit: 0 means no time limit, else hours
+                flags["duration_seconds"] = 0 if val == 0 else (val * 3600)
+            seen_numbers += 1
         elif re.match(r"^\d+\s*([hdwHDW]|days?|hours?|weeks?)$", token):
             dur = parse_short_duration(token)
-            if dur:
+            if dur is not None:
                 flags["duration_seconds"] = dur
 
     return flags
@@ -183,18 +197,21 @@ async def create_single_gift_handler(client: Client, message: Message):
     protect_badge = "🔒 Content Protected (No Forward)" if flags["protect_content"] else "🔓 Standard"
     del_mins = flags["auto_delete_seconds"] // 60
     del_str = f"{del_mins} Minute(s)" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
+    stock_str = f"First {flags['claims']} Users Only!" if flags["claims"] > 0 else "Unlimited (Open for Everyone!)"
+    validity_str = "Permanent / Lifetime Drop" if flags["duration_seconds"] == 0 else "Limited Time"
 
     card_text = (
-        "🎁 <b>EXCLUSIVE LIMITED REWARD DROP!</b> 🎁\n"
+        "🎁 <b>EXCLUSIVE REWARD DROP!</b> 🎁\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 <b>Reward:</b> <code>{html.escape(clean_title)}</code>\n"
         f"💾 <b>Size:</b> <code>{get_readable_size(file_size)}</code>\n"
-        f"👥 <b>Available Stock:</b> <code>First {flags['claims']} Users Only!</code>\n"
+        f"👥 <b>Available Stock:</b> <code>{stock_str}</code>\n"
+        f"⏳ <b>Campaign Validity:</b> <code>{validity_str}</code>\n"
         f"🛡️ <b>Access:</b> {vip_badge}\n"
-        f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
+        f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
         f"🔐 <b>Protection:</b> <code>{protect_badge}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <b>Claim your gift below before stock runs out:</b>"
+        "👇 <b>Claim your gift below:</b>"
     )
 
     markup = InlineKeyboardMarkup([
@@ -283,6 +300,8 @@ async def create_batch_gift_handler(client: Client, message: Message):
 
     del_mins = flags["auto_delete_seconds"] // 60
     del_str = f"{del_mins} Minute(s)" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
+    stock_str = f"First {flags['claims']} Users Only!" if flags["claims"] > 0 else "Unlimited (Open for Everyone!)"
+    validity_str = "Permanent / Lifetime Drop" if flags["duration_seconds"] == 0 else "Limited Time"
 
     card_text = (
         "🎁 <b>EXCLUSIVE BATCH REWARD PACK!</b> 🎁\n"
@@ -290,10 +309,11 @@ async def create_batch_gift_handler(client: Client, message: Message):
         f"📦 <b>Package:</b> <code>{html.escape(clean_title)}</code>\n"
         f"📁 <b>Total Files:</b> <code>{total_files} Files</code>\n"
         f"💾 <b>Total Size:</b> <code>{get_readable_size(total_size)}</code>\n"
-        f"👥 <b>Available Stock:</b> <code>First {flags['claims']} Users Only!</code>\n"
-        f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
+        f"👥 <b>Available Stock:</b> <code>{stock_str}</code>\n"
+        f"⏳ <b>Campaign Validity:</b> <code>{validity_str}</code>\n"
+        f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <b>Claim complete pack below before stock runs out:</b>"
+        "👇 <b>Claim complete pack below:</b>"
     )
 
     markup = InlineKeyboardMarkup([
