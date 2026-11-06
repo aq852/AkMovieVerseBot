@@ -162,6 +162,18 @@ async def group_auto_filter_handler(client: Client, message: Message):
             mode=button_mode
         )
 
+        # Check sponsor ad for non-VIP users
+        sponsor_ad = None
+        user_id = message.from_user.id if message.from_user else 0
+        if user_id:
+            try:
+                from database.users import is_premium
+                from database.ads import get_active_sponsor_ad
+                if not await is_premium(user_id):
+                    sponsor_ad = await get_active_sponsor_ad()
+            except Exception as e:
+                logger.debug(f"Error fetching sponsor ad for autofilter: {e}")
+
         # Build clean Image 2 style hyperlinked text with sizes & full filenames
         content_text = format_search_results_text(
             results=results,
@@ -171,7 +183,8 @@ async def group_auto_filter_handler(client: Client, message: Message):
             user_mention=user_mention,
             elapsed_sec=elapsed_sec,
             page=1,
-            total_pages=total_pages
+            total_pages=total_pages,
+            sponsor_ad=sponsor_ad
         )
 
         # Send clean, instant text search results (<0.1s delivery) with link preview disabled

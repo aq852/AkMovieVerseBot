@@ -158,7 +158,10 @@ ADMIN_COMMANDS = [
     BotCommand("delpromo", "Revoke promo code: /delpromo <code>"),
     BotCommand("abroadcast", "Advanced broadcast with buttons: /abroadcast"),
     BotCommand("preview_broadcast", "Test & preview broadcast in PM"),
-    BotCommand("agrp_broadcast", "Advanced broadcast to all groups")
+    BotCommand("agrp_broadcast", "Advanced broadcast to all groups"),
+    BotCommand("setad", "Set time-based sponsor ad: /setad <time> [Text | Link]"),
+    BotCommand("ads", "Sponsor ad campaign status & stats: /ads"),
+    BotCommand("delad", "Delete active sponsor ad: /delad")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:

@@ -53,6 +53,7 @@ async def run_database_housekeeping(client: Client = None, triggered_by: str = "
         "stale_checkpoints": 0,
         "resolved_requests": 0,
         "notified_alerts": 0,
+        "expired_ads": 0,
         "total_purged": 0,
         "duration_seconds": 0.0,
         "triggered_by": triggered_by
@@ -157,11 +158,19 @@ async def run_database_housekeeping(client: Client = None, triggered_by: str = "
     except Exception as e:
         logger.error(f"Error purging upload alerts: {e}")
 
+    # 8. Expired Inactive Sponsor Ads (older than 7 days)
+    try:
+        from database.ads import clean_expired_ads
+        purged_ads = await clean_expired_ads(keep_days=7)
+        stats["expired_ads"] = purged_ads
+    except Exception as e:
+        logger.error(f"Error purging expired ads in housekeeping: {e}")
+
     stats["total_purged"] = (
         stats["dead_chats"] + stats["expired_batches"] +
         stats["expired_share_links"] + stats["expired_verifications"] +
         stats["stale_checkpoints"] + stats["resolved_requests"] +
-        stats["notified_alerts"]
+        stats["notified_alerts"] + stats["expired_ads"]
     )
     stats["duration_seconds"] = round((datetime.datetime.utcnow() - t0).total_seconds(), 2)
 
@@ -184,6 +193,7 @@ def format_housekeeping_report(stats: dict) -> str:
         f"• <b>Stale Checkpoints (14d+):</b> <code>{stats.get('stale_checkpoints', 0):,}</code>\n"
         f"• <b>Resolved Requests (30d+):</b> <code>{stats.get('resolved_requests', 0):,}</code>\n"
         f"• <b>Notified Upload Alerts:</b> <code>{stats.get('notified_alerts', 0):,}</code>\n"
+        f"• <b>Expired Sponsor Ads (7d+):</b> <code>{stats.get('expired_ads', 0):,}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🧹 <b>Total Junk Records Cleared:</b> <code>{stats.get('total_purged', 0):,}</code>\n"
         "✨ <i>All Users, Channel Auto-Posts &amp; TMDB Cache were 100% preserved!</i>"

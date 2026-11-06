@@ -577,13 +577,30 @@ async def start_command_handler(client: Client, message: Message):
         f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
     )
 
-    markup = InlineKeyboardMarkup([
+    markup_rows = [
         [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
         [
             InlineKeyboardButton("HELP 📢", callback_data="help_menu"),
             InlineKeyboardButton("ABOUT 📖", callback_data="about_menu")
         ]
-    ])
+    ]
+
+    # Time-based sponsor ad for non-VIP users (Bottom button + caption link)
+    if not await is_premium(user_id):
+        try:
+            from database.ads import get_active_sponsor_ad
+            ad = await get_active_sponsor_ad()
+            if ad and ad.get("text") and ad.get("url"):
+                ad_title = ad["text"]
+                ad_url = ad["url"]
+                markup_rows.append([
+                    InlineKeyboardButton(f"🔥 {ad_title} ↗️", url=ad_url)
+                ])
+                welcome_text += f"\n\n📢 <i>Sponsored:</i> <a href=\"{ad_url}\">{html.escape(ad_title)}</a>"
+        except Exception as e:
+            logger.debug(f"Could not load sponsor ad for start: {e}")
+
+    markup = InlineKeyboardMarkup(markup_rows)
 
     sent = False
     start_pic = get_random_start_pic()

@@ -257,6 +257,17 @@ async def smart_nav_callback_handler(client: Client, query: CallbackQuery):
             is_pm=is_pm
         )
 
+        sponsor_ad = None
+        u_id = query.from_user.id if query.from_user else 0
+        if u_id:
+            try:
+                from database.users import is_premium
+                from database.ads import get_active_sponsor_ad
+                if not await is_premium(u_id):
+                    sponsor_ad = await get_active_sponsor_ad()
+            except Exception as e:
+                logger.debug(f"Error fetching sponsor ad for smart filter clear: {e}")
+
         content_text = format_search_results_text(
             results=results,
             query=clean_q,
@@ -264,7 +275,8 @@ async def smart_nav_callback_handler(client: Client, query: CallbackQuery):
             bot_username=bot_uname,
             user_mention=u_mention,
             page=1,
-            total_pages=total_pages
+            total_pages=total_pages,
+            sponsor_ad=sponsor_ad
         )
 
         try:

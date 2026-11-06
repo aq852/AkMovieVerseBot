@@ -242,6 +242,18 @@ async def refresh_filtered_results(client: Client, query: CallbackQuery, search_
 
     user_name = query.from_user.first_name if query.from_user else "User"
     user_mention = query.from_user.mention(user_name) if query.from_user else user_name
+
+    sponsor_ad = None
+    u_id = query.from_user.id if query.from_user else 0
+    if u_id:
+        try:
+            from database.users import is_premium
+            from database.ads import get_active_sponsor_ad
+            if not await is_premium(u_id):
+                sponsor_ad = await get_active_sponsor_ad()
+        except Exception as e:
+            logger.debug(f"Error fetching sponsor ad for callback: {e}")
+
     content_text = format_search_results_text(
         results=results,
         query=search_q,
@@ -249,7 +261,8 @@ async def refresh_filtered_results(client: Client, query: CallbackQuery, search_
         bot_username=bot_username,
         user_mention=user_mention,
         page=page,
-        total_pages=total_pages
+        total_pages=total_pages,
+        sponsor_ad=sponsor_ad
     )
 
     try:
@@ -376,6 +389,18 @@ async def spell_check_callback(client: Client, query: CallbackQuery):
 
     user_name = query.from_user.first_name if query.from_user else "User"
     user_mention = query.from_user.mention(user_name) if query.from_user else user_name
+
+    sponsor_ad = None
+    u_id = query.from_user.id if query.from_user else 0
+    if u_id:
+        try:
+            from database.users import is_premium
+            from database.ads import get_active_sponsor_ad
+            if not await is_premium(u_id):
+                sponsor_ad = await get_active_sponsor_ad()
+        except Exception as e:
+            logger.debug(f"Error fetching sponsor ad for spell-check: {e}")
+
     text = format_search_results_text(
         results=results,
         query=suggested_q,
@@ -383,7 +408,8 @@ async def spell_check_callback(client: Client, query: CallbackQuery):
         bot_username=bot_username,
         user_mention=user_mention,
         page=1,
-        total_pages=total_pages
+        total_pages=total_pages,
+        sponsor_ad=sponsor_ad
     )
     try:
         if query.message.photo:

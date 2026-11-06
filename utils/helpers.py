@@ -425,7 +425,8 @@ def format_search_results_text(
     user_mention: str = "User",
     elapsed_sec: str = None,
     page: int = 1,
-    total_pages: int = 1
+    total_pages: int = 1,
+    sponsor_ad: dict = None
 ) -> str:
     """Format search results as clean numbered clickable text links with exact sizes (Image 2 style)."""
     import html
@@ -455,6 +456,13 @@ def format_search_results_text(
 
         # Exact 2nd photo style: size is inside the clickable link right with title
         lines.append(f"<b>{idx}.</b> <a href=\"{link}\">[{size_str}] {clean_name}</a>\n")
+
+    # Dynamic Sponsor Ad Text Link (Clean, non-intrusive, zero keyboard clutter)
+    if sponsor_ad and sponsor_ad.get("text") and sponsor_ad.get("url"):
+        ad_title = html.escape(sponsor_ad["text"])
+        ad_link = html.escape(sponsor_ad["url"])
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(f"📢 <b>Sponsor:</b> <a href=\"{ad_link}\">{ad_title}</a>\n")
 
     return "\n".join(lines).strip()
 

@@ -1294,5 +1294,136 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertTrue(del_ok)
                 self.assertNotIn("VIPTEST", fake_db)
 
+    def test_parse_duration_string(self):
+        from database.ads import parse_duration_string
+        self.assertEqual(parse_duration_string("1h"), 3600)
+        self.assertEqual(parse_duration_string("24h"), 86400)
+        self.assertEqual(parse_duration_string("3d"), 259200)
+        self.assertEqual(parse_duration_string("7d"), 604800)
+        self.assertEqual(parse_duration_string("1w"), 604800)
+        self.assertEqual(parse_duration_string("30d"), 2592000)
+        self.assertEqual(parse_duration_string("1m"), 2592000)
+        self.assertEqual(parse_duration_string("1y"), 31536000)
+        self.assertIsNone(parse_duration_string("invalid"))
+        self.assertIsNone(parse_duration_string("10x"))
+
+    def test_format_search_results_sponsor_ad(self):
+        from utils.helpers import format_search_results_text
+        fake_results = [{
+            "file_unique_id": "u123",
+            "file_name": "One_Piece_Episode_100.mkv",
+            "file_size": 104857600
+        }]
+        # Without ad
+        text_no_ad = format_search_results_text(
+            results=fake_results,
+            query="one piece",
+            total_files=1,
+            bot_username="testbot",
+            sponsor_ad=None
+        )
+        self.assertNotIn("📢 <b>Sponsor:</b>", text_no_ad)
+
+        # With active sponsor ad
+        ad = {"text": "Join AkMovies Official", "url": "https://t.me/akmovies"}
+        text_with_ad = format_search_results_text(
+            results=fake_results,
+            query="one piece",
+            total_files=1,
+            bot_username="testbot",
+            sponsor_ad=ad
+        )
+        self.assertIn("📢 <b>Sponsor:</b>", text_with_ad)
+        self.assertIn("https://t.me/akmovies", text_with_ad)
+        self.assertIn("Join AkMovies Official", text_with_ad)
+
+    def test_sponsor_ad_engine_crud(self):
+        import asyncio
+        from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock
+        from database.mongo import mongo
+        from database.ads import (
+            set_sponsor_ad,
+            get_active_sponsor_ad,
+            delete_sponsor_ad,
+            get_ad_stats,
+            clean_expired_ads
+        )
+        fake_ads = []
+
+        async def fake_update_many(query, update):
+            for a in fake_ads:
+                if query.get("is_active") is True and a.get("is_active"):
+                    a.update(update.get("$set", {}))
+            return MagicMock(modified_count=1)
+
+        async def fake_insert_one(doc):
+            doc["_id"] = "ad_1"
+            fake_ads.append(doc)
+            return MagicMock(inserted_id="ad_1")
+
+        async def fake_find_one(query, sort=None):
+            for a in fake_ads:
+                if query.get("is_active") is True and a.get("is_active"):
+                    return a
+            if not query.get("is_active") and fake_ads:
+                return fake_ads[-1]
+            return None
+
+        async def fake_update_one(query, update):
+            for a in fake_ads:
+                if a.get("_id") == query.get("_id"):
+                    if "$set" in update:
+                        a.update(update["$set"])
+                    if "$inc" in update:
+                        for k, v in update["$inc"].items():
+                            a[k] = a.get(k, 0) + v
+                    return MagicMock(modified_count=1)
+            return MagicMock(modified_count=0)
+
+        async def fake_delete_many(query):
+            count = len(fake_ads)
+            fake_ads.clear()
+            return MagicMock(deleted_count=count)
+
+        mock_ads_col = MagicMock()
+        mock_ads_col.update_many = AsyncMock(side_effect=fake_update_many)
+        mock_ads_col.insert_one = AsyncMock(side_effect=fake_insert_one)
+        mock_ads_col.find_one = AsyncMock(side_effect=fake_find_one)
+        mock_ads_col.update_one = AsyncMock(side_effect=fake_update_one)
+        mock_ads_col.delete_many = AsyncMock(side_effect=fake_delete_many)
+
+        mock_db = {"sponsor_ads": mock_ads_col}
+
+        with patch.object(type(mongo), "db", new_callable=PropertyMock, return_value=mock_db):
+            # 1. Set Sponsor Ad
+            ok, msg, doc = asyncio.run(set_sponsor_ad(
+                text="1XBet Promo",
+                url="https://1xbet.com",
+                duration_str="7d",
+                duration_seconds=604800,
+                created_by=123
+            ))
+            self.assertTrue(ok)
+            self.assertEqual(doc["text"], "1XBet Promo")
+
+            # 2. Get Active Ad
+            active = asyncio.run(get_active_sponsor_ad(track_impression=True))
+            self.assertIsNotNone(active)
+            self.assertEqual(active["text"], "1XBet Promo")
+            self.assertEqual(active["impressions"], 1)
+
+            # 3. Stats
+            stats = asyncio.run(get_ad_stats())
+            self.assertIsNotNone(stats)
+            self.assertTrue(stats["is_active"])
+
+            # 4. Delete Ad
+            deleted = asyncio.run(delete_sponsor_ad())
+            self.assertTrue(deleted)
+
+            # 5. Clean Expired Ads
+            purged = asyncio.run(clean_expired_ads(keep_days=7))
+            self.assertGreaterEqual(purged, 1)
+
 if __name__ == "__main__":
     unittest.main()

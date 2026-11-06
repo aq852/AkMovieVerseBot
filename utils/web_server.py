@@ -640,6 +640,49 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             color: #ffffff;
             border-color: #38bdf8;
         }}
+        .sponsor-banner-bar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.12));
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            padding: 9px 14px;
+            border-radius: 12px;
+            text-decoration: none;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }}
+        .sponsor-banner-bar:hover {{
+            border-color: rgba(245, 158, 11, 0.7);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(239, 68, 68, 0.22));
+            transform: translateY(-1px);
+        }}
+        .sponsor-tag {{
+            font-size: 10px;
+            font-weight: 900;
+            background: #f59e0b;
+            color: #000;
+            padding: 2px 7px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }}
+        .sponsor-text {{
+            color: #fef3c7;
+            font-size: 13px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }}
+        .sponsor-arrow {{
+            color: #f59e0b;
+            font-size: 14px;
+            font-weight: 700;
+            margin-left: 8px;
+        }}
         .btn-bot {{
             grid-column: span 2;
             background: linear-gradient(135deg, #2563eb, #1d4ed8);
@@ -1774,6 +1817,8 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             </a>
             <a href="{channel_url}" target="_blank" class="btn-channel">📢 Join Channel ↗️</a>
         </div>
+
+        {sponsor_banner_html}
 
         <div class="player-wrapper">
             <div id="artplayer"></div>
@@ -4397,6 +4442,23 @@ async def watch_handler(request: web.Request):
             </div>
             """
 
+    sponsor_banner_html = ""
+    try:
+        from database.ads import get_active_sponsor_ad
+        ad = await get_active_sponsor_ad()
+        if ad and ad.get("text") and ad.get("url"):
+            sponsor_banner_html = (
+                f'<a href="{html_escape(ad["url"])}" target="_blank" rel="noopener noreferrer" class="sponsor-banner-bar">'
+                f'<div style="display:flex;align-items:center;overflow:hidden;flex:1;">'
+                f'<span class="sponsor-tag">SPONSOR</span>'
+                f'<span class="sponsor-text">{html_escape(ad["text"])}</span>'
+                f'</div>'
+                f'<span class="sponsor-arrow">↗</span>'
+                f'</a>'
+            )
+    except Exception as e:
+        logger.debug(f"Could not load sponsor ad for web player: {e}")
+
     html = WEB_PLAYER_HTML.format(
         file_unique_id=file_unique_id,
         clean_title=html_escape(clean_title),
@@ -4426,7 +4488,8 @@ async def watch_handler(request: web.Request):
         next_ep_title=html_escape(next_ep_title),
         current_ep_num=current_ep_num,
         episodes_json_str=json.dumps(episodes_json),
-        artplayer_quality_json_str=json.dumps(artplayer_quality_json)
+        artplayer_quality_json_str=json.dumps(artplayer_quality_json),
+        sponsor_banner_html=sponsor_banner_html
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -5935,6 +5998,8 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             </div>
         </header>
 
+        {sponsor_banner_html}
+
         <!-- Player Stage Container (TOP PRIORITY - ALWAYS FIRST) -->
         <div class="player-stage">
             <iframe id="cinema-iframe" src="{initial_stream_url}" allowfullscreen allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
@@ -6301,6 +6366,23 @@ async def watch_online_handler(request: web.Request):
     genres_info = html_escape(imdb_meta.get("genres") or "⚡ Instant Multi-Server Web Stream")
     overview_text = html_escape(imdb_meta.get("overview") or "Stream online directly with your browser. Switch servers if playback buffers or is slow.")
 
+    sponsor_banner_html = ""
+    try:
+        from database.ads import get_active_sponsor_ad
+        ad = await get_active_sponsor_ad()
+        if ad and ad.get("text") and ad.get("url"):
+            sponsor_banner_html = (
+                f'<a href="{html_escape(ad["url"])}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between glass-panel px-4 py-2.5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 hover:border-amber-400 transition group text-decoration-none my-1">'
+                f'<div class="flex items-center gap-2 min-w-0">'
+                f'<span class="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500 text-black tracking-wider">SPONSOR</span>'
+                f'<span class="text-xs sm:text-sm font-semibold text-amber-200 group-hover:text-white transition truncate">{html_escape(ad["text"])}</span>'
+                f'</div>'
+                f'<span class="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition ml-2">↗</span>'
+                f'</a>'
+            )
+    except Exception as e:
+        logger.debug(f"Could not load sponsor ad for watch_online: {e}")
+
     html = ONLINE_PLAYER_HTML.format(
         title=html_escape(clean_title),
         channel_url=html_escape(channel_url),
@@ -6313,7 +6395,8 @@ async def watch_online_handler(request: web.Request):
         rating_badge=rating_badge,
         genres_info=genres_info,
         overview_text=overview_text,
-        servers_json=json.dumps(servers)
+        servers_json=json.dumps(servers),
+        sponsor_banner_html=sponsor_banner_html
     )
     return web.Response(text=html, content_type="text/html")
 

@@ -680,6 +680,20 @@ async def build_filtered_results_view(sid: str, page: int = 1) -> tuple[str, Inl
         # Exact 2nd photo style: size is inside the clickable link right with title
         text_lines.append(f"<b>{idx}.</b> <a href=\"{link}\">[{size_str}] {clean_name}</a>\n")
 
+    user_id = sess.get("user_id", 0)
+    try:
+        from database.users import is_premium
+        from database.ads import get_active_sponsor_ad
+        if not await is_premium(user_id):
+            ad = await get_active_sponsor_ad()
+            if ad and ad.get("text") and ad.get("url"):
+                ad_title = html.escape(ad["text"])
+                ad_link = html.escape(ad["url"])
+                text_lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+                text_lines.append(f"📢 <b>Sponsor:</b> <a href=\"{ad_link}\">{ad_title}</a>\n")
+    except Exception as e:
+        logger.debug(f"Could not load sponsor ad in smart nav: {e}")
+
     text = "\n".join(text_lines).strip()
 
     keyboard = []
