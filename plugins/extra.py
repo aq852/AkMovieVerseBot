@@ -1,3 +1,4 @@
+import re
 import logging
 import datetime
 try:
@@ -211,18 +212,29 @@ async def imdb_lookup_command(client: Client, message: Message):
         return
 
     caption = (
-        f"🎬 **{imdb_data['title']} ({imdb_data['year']})**\n\n"
-        f"🌟 **Rating:** `{imdb_data['rating']}`\n"
-        f"🎭 **Type:** `{imdb_data['genres']}`\n"
-        f"👥 **Cast:** `{imdb_data['cast']}`\n\n"
-        f"⚡ Powered by Auto Filter Bot"
+        f"🎬 <b>{imdb_data['title']} ({imdb_data['year']})</b>\n\n"
+        f"🌟 <b>Rating:</b> <code>{imdb_data['rating']}</code>\n"
+        f"🎭 <b>Type:</b> <code>{imdb_data['genres']}</code>\n"
+        f"👥 <b>Cast:</b> <code>{imdb_data['cast']}</code>\n\n"
+        f"⚡ <i>Powered by Auto Filter Bot</i>"
     )
 
+    import urllib.parse
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
-    clean_slug = imdb_data["title"].replace(" ", "_")[:28]
-    imdb_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🔍 Search '{imdb_data['title'][:25]}' in Bot", url=f"https://t.me/{bot_username}?start=search_{clean_slug}")]
-    ])
+    raw_title = imdb_data["title"]
+    clean_search_str = re.sub(r"[^\w\s]", " ", raw_title).strip()
+    encoded_search = urllib.parse.quote_plus(clean_search_str)
+
+    # In PM: Direct 1-click callback so search runs instantly without re-routing or START buttons!
+    # In Groups: Deep-link URL to PM
+    if is_private_chat(message):
+        imdb_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"🔍 Search '{raw_title[:24]}' in Bot", callback_data=f"imdbsearch_{clean_search_str[:35]}")]
+        ])
+    else:
+        imdb_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"🔍 Search '{raw_title[:24]}' in Bot ↗️", url=f"https://t.me/{bot_username}?start=filter_{encoded_search}")]
+        ])
 
     await wait_msg.delete()
     if imdb_data.get("poster"):
@@ -233,6 +245,17 @@ async def imdb_lookup_command(client: Client, message: Message):
             pass
 
     await message.reply_text(caption, reply_markup=imdb_markup)
+
+
+@Client.on_callback_query(filters.regex(r"^imdbsearch_(.+)"))
+async def imdb_search_callback_handler(client: Client, query: CallbackQuery):
+    """Direct 1-click search from /imdb result in PM."""
+    search_q = query.matches[0].group(1).strip()
+    await query.answer(f"🔍 Searching: {search_q}...")
+    from plugins.autofilter import group_auto_filter_handler
+    query.message.text = search_q
+    query.message.from_user = query.from_user
+    await group_auto_filter_handler(client, query.message)
 
 
 # /help Command

@@ -497,15 +497,27 @@ def build_post_buttons(group: dict, custom_btn: dict | None = None) -> InlineKey
     web_url = getattr(Config, "WEB_URL", "http://127.0.0.1:8088").rstrip("/")
     bot_username = Config.BOT_USERNAME or "bot"
 
-    if group.get("is_series"):
-        slug = group.get("slug") or re.sub(r"[^\w\-]", "-", group.get("clean_name", "series").lower())
+    clean_name = group.get("clean_name", "")
+    is_series = group.get("is_series", False)
+    files = group.get("files", [])
+    qualities = group.get("qualities", set())
+    encoded_name = urllib.parse.quote_plus(clean_name)
+
+    if is_series:
+        slug = group.get("slug") or re.sub(r"[^\w\-]", "-", clean_name.lower())
         watch_url = f"{web_url}/series/{slug}"
-        clean_name = group.get("clean_name", "")
-        bot_file_url = f"https://t.me/{bot_username}?start=search_{urllib.parse.quote_plus(clean_name)}"
+        # Series: Route to Smart Navigator with Season and Episode picker
+        bot_file_url = f"https://t.me/{bot_username}?start=filter_{encoded_name}"
     else:
         pid = group.get("primary_file_id") or "0"
         watch_url = f"{web_url}/watch/{pid}"
-        bot_file_url = f"https://t.me/{bot_username}?start=file_{pid}"
+        # Movie: If multiple files or qualities exist (e.g. 480p, 720p, 1080p, 4K),
+        # route to Smart Quality Navigator so user can pick their desired quality!
+        # If only 1 file exists, link directly to file_{pid} for instant 1-click delivery.
+        if len(files) > 1 or len(qualities) > 1:
+            bot_file_url = f"https://t.me/{bot_username}?start=filter_{encoded_name}"
+        else:
+            bot_file_url = f"https://t.me/{bot_username}?start=file_{pid}"
 
     rows = [
         [

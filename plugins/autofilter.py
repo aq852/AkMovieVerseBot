@@ -307,19 +307,19 @@ async def group_auto_filter_handler(client: Client, message: Message):
             if online_meta:
                 m_title = online_meta.get("title") or clean_q.title()
                 year_val = f" ({online_meta['year']})" if online_meta.get("year") else ""
-                rating_val = f"⭐ `{online_meta['rating']}`" if online_meta.get("rating") else "⭐ `8.0`"
+                rating_val = f"⭐ <code>{online_meta['rating']}</code>" if online_meta.get("rating") else "⭐ <code>8.0</code>"
                 genres_val = f" | 🎭 {online_meta['genres']}" if online_meta.get("genres") else ""
                 online_info = (
-                    f"🍿 **Web Stream Available:**\n"
-                    f"🎬 **{m_title}**{year_val}\n"
+                    f"🍿 <b>Web Stream Available:</b>\n"
+                    f"🎬 <b>{m_title}</b>{year_val}\n"
                     f"{rating_val}{genres_val}\n\n"
                 )
 
             not_found_msg = await message.reply_text(
-                f"⚠️ **Could not find any file for:** `{clean_q}`\n\n"
-                f"💡 **Did you mean:** `{suggested_title}`?\n\n"
+                f"⚠️ <b>Could not find any file for:</b> <code>{clean_q}</code>\n\n"
+                f"💡 <b>Did you mean:</b> <code>{suggested_title}</code>?\n\n"
                 f"{online_info}"
-                f"_Click the suggested button below to search, or stream online in your browser._",
+                f"<i>Click the suggested button below to search, or stream online in your browser.</i>",
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
         else:
@@ -333,29 +333,29 @@ async def group_auto_filter_handler(client: Client, message: Message):
                 m_title = online_meta.get("title") or clean_q.title()
                 season_label = f" [Season {online_meta['season']}]" if online_meta.get("season", 1) > 1 else ""
                 year_val = f" ({online_meta['year']})" if online_meta.get("year") else ""
-                rating_val = f"⭐ Rating: `{online_meta['rating']}`" if online_meta.get("rating") else "⭐ Rating: `8.0`"
+                rating_val = f"⭐ Rating: <code>{online_meta['rating']}</code>" if online_meta.get("rating") else "⭐ Rating: <code>8.0</code>"
                 genres_val = f" | 🎭 {online_meta['genres']}" if online_meta.get("genres") else ""
                 type_label = "TV Series / Anime" if online_meta.get("media_type") == "series" else "Movie"
 
                 not_found_msg = await message.reply_text(
-                    f"😕 **File Not Found in Local Channel!**\n\n"
-                    f"❌ Direct Telegram file is not in our database for: `{clean_q}`\n\n"
-                    f"🍿 **Great News! It's Available to Stream Online:**\n"
-                    f"🎬 **{type_label}:** {m_title}{year_val}{season_label}\n"
+                    f"😕 <b>File Not Found in Local Channel!</b>\n\n"
+                    f"❌ Direct Telegram file is not in our database for: <code>{clean_q}</code>\n\n"
+                    f"🍿 <b>Great News! It's Available to Stream Online:</b>\n"
+                    f"🎬 <b>{type_label}:</b> {m_title}{year_val}{season_label}\n"
                     f"{rating_val}{genres_val}\n"
                     f"⚡ Multi-server streaming ready (VidLink, VidEm, VidSrc, Smashy, AutoEmbed, 2Embed, Vidy, VidZee, NontonGo, SuperEmbed)!\n\n"
-                    f"👇 _Tap the button below to stream directly in your browser:_ ",
+                    f"👇 <i>Tap the button below to stream directly in your browser:</i>",
                     reply_markup=InlineKeyboardMarkup(buttons)
                 )
             else:
                 not_found_msg = await message.reply_text(
-                    f"😕 **No Search Results Found!**\n\n"
-                    f"❌ **Sorry!** We couldn't find any file matching: `{clean_q}` in our database.\n\n"
-                    f"📌 **Search Tips:**\n"
+                    f"😕 <b>No Search Results Found!</b>\n\n"
+                    f"❌ <b>Sorry!</b> We couldn't find any file matching: <code>{clean_q}</code> in our database.\n\n"
+                    f"📌 <b>Search Tips:</b>\n"
                     f"• Check the spelling of the movie/series name.\n"
-                    f"• Try searching with the release year (e.g. `{clean_q} 2024`).\n"
+                    f"• Try searching with the release year (e.g. <code>{clean_q} 2024</code>).\n"
                     f"• Avoid extra symbols, dots, or quality tags.\n\n"
-                    f"👇 _Stream online in your browser or request this file below!_",
+                    f"👇 <i>Stream online in your browser or request this file below!</i>",
                     reply_markup=InlineKeyboardMarkup(buttons)
                 )
 

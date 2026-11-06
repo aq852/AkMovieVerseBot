@@ -385,18 +385,22 @@ async def start_command_handler(client: Client, message: Message):
                 pass
 
         if pending_file_id:
-            if pending_file_id.startswith("batch_") or pending_file_id.startswith("file_"):
+            if pending_file_id.startswith("batch_"):
                 b_id = pending_file_id.split("_", 1)[1]
                 from plugins.file_store import handle_start_batch
                 await handle_start_batch(client, message, b_id)
                 return
             else:
-                file_doc = await get_file_by_id(pending_file_id)
+                raw_fid = pending_file_id.split("_", 1)[1] if pending_file_id.startswith("file_") else pending_file_id
+                file_doc = await get_file_by_id(raw_fid)
                 if file_doc:
                     try:
                         await deliver_file_with_copyright_warning(client, user_id, file_doc)
+                        return
                     except Exception as e:
                         logger.error(f"Error delivering verified file: {e}")
+                else:
+                    await message.reply_text("❌ <b>Sorry, requested file could not be found.</b>")
         return
 
     # 4. VIP Plans / Remove Ads: /start plans
@@ -420,6 +424,23 @@ async def start_command_handler(client: Client, message: Message):
     elif args.startswith("search_"):
         import urllib.parse
         raw_query = urllib.parse.unquote_plus(args.split("search_", 1)[1]).replace("_", " ").strip()
+        # Attempt smart navigator session first so user gets quality / season buttons if available!
+        try:
+            from utils.smart_nav import create_nav_session, build_navigator_root_view
+            sid = create_nav_session(
+                query=raw_query,
+                user_id=user_id,
+                chat_id=message.chat.id,
+                is_pm=True,
+                bot_username=bot_username
+            )
+            text, markup = await build_navigator_root_view(sid)
+            if "❌" not in text and "⚠️ No" not in text:
+                await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+                return
+        except Exception as nav_err:
+            logger.debug(f"Smart Nav fallback to filter handler: {nav_err}")
+
         message.text = raw_query
         from plugins.autofilter import group_auto_filter_handler
         await group_auto_filter_handler(client, message)

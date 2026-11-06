@@ -386,7 +386,7 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertIsNotNone(buttons)
         self.assertEqual(buttons.inline_keyboard[0][0].text, "▶️ Watch Online")
         self.assertEqual(buttons.inline_keyboard[0][1].text, "🤖 Get File")
-        self.assertIn("search_Dexter", buttons.inline_keyboard[0][1].url)
+        self.assertIn("filter_Dexter", buttons.inline_keyboard[0][1].url)
 
     def test_web_player_download_toggle(self):
         import asyncio
@@ -1122,6 +1122,38 @@ class TestAutoFilterEngine(unittest.TestCase):
         import plugins.housekeeping as housekeeping
         self.assertTrue(hasattr(housekeeping.auto_clean_command, "handlers"))
         self.assertGreater(len(housekeeping.auto_clean_command.handlers), 0)
+
+    def test_imdb_search_callback_exists(self):
+        import plugins.extra as extra
+        self.assertTrue(hasattr(extra.imdb_search_callback_handler, "handlers"))
+        self.assertGreater(len(extra.imdb_search_callback_handler.handlers), 0)
+
+    def test_channel_post_buttons_multi_vs_single_quality(self):
+        from plugins.channel_post import build_post_buttons
+
+        # Movie with multiple qualities -> must route to start=filter_
+        group_multi = {
+            "is_series": False,
+            "clean_name": "Inception",
+            "files": [{"file_unique_id": "f1"}, {"file_unique_id": "f2"}],
+            "qualities": {"720p", "1080p"},
+            "primary_file_id": "f1"
+        }
+        markup_multi = build_post_buttons(group_multi)
+        get_file_btn_multi = markup_multi.inline_keyboard[0][1]
+        self.assertIn("start=filter_Inception", get_file_btn_multi.url)
+
+        # Movie with only single quality -> must route directly to start=file_
+        group_single = {
+            "is_series": False,
+            "clean_name": "Inception",
+            "files": [{"file_unique_id": "f1"}],
+            "qualities": {"1080p"},
+            "primary_file_id": "f1"
+        }
+        markup_single = build_post_buttons(group_single)
+        get_file_btn_single = markup_single.inline_keyboard[0][1]
+        self.assertIn("start=file_f1", get_file_btn_single.url)
 
 if __name__ == "__main__":
     unittest.main()
