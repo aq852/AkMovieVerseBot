@@ -330,7 +330,7 @@ Use `/ahelp` or `/admincommands` to access the interactive categorized command c
 </p>
 
 - 📢 **Official Channel:** [AKMOVIEVERSE](https://t.me/AkMovieVerse) (`@AkMovieVerse`)
-- 💬 **Updates & Drops:** [@AkMoviesOfficial](https://t.me/AkMoviesOfficial)
+- 💬 **Updates & Drops:** [@AkMovies](https://t.me/Akmovieverse)
 - 🆘 **Direct Support & Inquiries:** [@AK_ownerbot](https://t.me/AK_ownerbot)
 
 ---
