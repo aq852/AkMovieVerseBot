@@ -219,7 +219,7 @@ async def start_command_handler(client: Client, message: Message):
 
     # Check blacklist
     if await is_banned(user_id):
-        await message.reply_text("🚫 **You have been blacklisted from using this bot.**")
+        await message.reply_text("🚫 <b>You have been blacklisted from using this bot.</b>")
         return
 
     user_doc, is_new = await add_user(user_id, name, username)
@@ -230,13 +230,13 @@ async def start_command_handler(client: Client, message: Message):
             uname_str = f"@{username}" if username else "No username"
             user_mention = message.from_user.mention(name)
             args_text = message.text.split()[1] if len(message.text.split()) > 1 else ""
-            ref_txt = f"\n• **Referred By:** `{args_text.split('refer_')[1]}`" if args_text.startswith("refer_") else ""
+            ref_txt = f"\n• <b>Referred By:</b> <code>{args_text.split('refer_')[1]}</code>" if args_text.startswith("refer_") else ""
             log_txt = (
-                "👤 **#NewUser Started Bot!**\n\n"
-                f"• **Name:** {user_mention}\n"
-                f"• **User ID:** `{user_id}`\n"
-                f"• **Username:** {uname_str}\n"
-                f"• **Total Users:** `{total_u:,}`"
+                "👤 <b>#NewUser Started Bot!</b>\n\n"
+                f"• <b>Name:</b> {user_mention}\n"
+                f"• <b>User ID:</b> <code>{user_id}</code>\n"
+                f"• <b>Username:</b> {uname_str}\n"
+                f"• <b>Total Users:</b> <code>{total_u:,}</code>"
                 f"{ref_txt}"
             )
             await client.send_message(Config.LOG_CHANNEL, log_txt)
@@ -256,7 +256,7 @@ async def start_command_handler(client: Client, message: Message):
                 try:
                     await client.send_message(
                         referrer_id,
-                        "🎉 **Congratulations!** You invited 5 friends and have unlocked **1 Day of Free VIP Premium Access**!"
+                        "🎉 <b>Congratulations!</b> You invited 5 friends and have unlocked <b>1 Day of Free VIP Premium Access</b>!"
                     )
                 except Exception:
                     pass
@@ -277,7 +277,7 @@ async def start_command_handler(client: Client, message: Message):
         file_doc = await get_file_by_id(file_unique_id)
 
         if not file_doc:
-            await message.reply_text("❌ **Sorry, this file is no longer available in our database.**")
+            await message.reply_text("❌ <b>Sorry, this file is no longer available in our database.</b>")
             return
 
         # FSub Verification
@@ -285,9 +285,9 @@ async def start_command_handler(client: Client, message: Message):
         if not is_member:
             markup = build_fsub_markup(unjoined, file_unique_id)
             await message.reply_text(
-                "📢 **Channel Membership Required!**\n\n"
+                "📢 <b>Channel Membership Required!</b>\n\n"
                 "To access this file, you must first join our official updates channel(s).\n"
-                "Join using the button(s) below, then click **'Try Again'**:",
+                "Join using the button(s) below, then click <b>'Try Again'</b>:",
                 reply_markup=markup
             )
             return
@@ -353,7 +353,7 @@ async def start_command_handler(client: Client, message: Message):
             return
         except Exception as e:
             logger.error(f"Error dispatching file to {user_id}: {e}")
-            await message.reply_text(f"❌ **Error sending file:** `{e}`")
+            await message.reply_text(f"❌ <b>Error sending file:</b> <code>{e}</code>")
             return
 
     # 3. Token Verification Completion: /start verify_<token>
@@ -362,12 +362,12 @@ async def start_command_handler(client: Client, message: Message):
         success, pending_file_id, verified_user_id = await verify_user_token(token)
 
         if not success or verified_user_id != user_id:
-            await message.reply_text("❌ **Invalid or expired verification token.** Please request the file again.")
+            await message.reply_text("❌ <b>Invalid or expired verification token.</b> Please request the file again.")
             return
 
         await message.reply_text(
-            "🎉 **Verification Successful!**\n\n"
-            "You now have **24 Hours of Unlimited Access** to all files without any shorteners!\n"
+            "🎉 <b>Verification Successful!</b>\n\n"
+            "You now have <b>24 Hours of Unlimited Access</b> to all files without any shorteners!\n"
             "Sending your requested file now..."
         )
 
@@ -376,10 +376,10 @@ async def start_command_handler(client: Client, message: Message):
                 u_mention = message.from_user.mention(message.from_user.first_name)
                 await client.send_message(
                     Config.LOG_CHANNEL,
-                    f"🔓 **#TokenVerified (24h Pass Active)**\n\n"
-                    f"• **User:** {u_mention} (`{user_id}`)\n"
-                    f"• **Shortener:** `{Config.SHORTENER_URL}`\n"
-                    f"• **Status:** Active for next 24 Hours"
+                    f"🔓 <b>#TokenVerified (24h Pass Active)</b>\n\n"
+                    f"• <b>User:</b> {u_mention} (<code>{user_id}</code>)\n"
+                    f"• <b>Shortener:</b> <code>{Config.SHORTENER_URL}</code>\n"
+                    f"• <b>Status:</b> Active for next 24 Hours"
                 )
             except Exception:
                 pass
@@ -473,27 +473,27 @@ async def start_command_handler(client: Client, message: Message):
                 exp_dt = share_doc.get("expire_at")
                 exp_str = exp_dt.strftime("%d %b %Y, %H:%M UTC") if exp_dt else "Passed"
                 await message.reply_text(
-                    "⏳ **This Secret Share Link Has Expired!**\n\n"
-                    f"• **Expired At:** `{exp_str}`\n\n"
+                    "⏳ <b>This Secret Share Link Has Expired!</b>\n\n"
+                    f"• <b>Expired At:</b> <code>{exp_str}</code>\n\n"
                     "💡 The sender configured this link with a time limit that has already passed."
                 )
             elif reason == "limit_reached":
                 max_u = share_doc.get("max_uses", 1)
                 limit_text = "Single-Use (1 Person Only)" if max_u == 1 else f"{max_u}-Person Limit"
                 await message.reply_text(
-                    "🔒 **Access Limit Reached!**\n\n"
-                    f"• **Restriction:** `{limit_text}`\n\n"
+                    "🔒 <b>Access Limit Reached!</b>\n\n"
+                    f"• <b>Restriction:</b> <code>{limit_text}</code>\n\n"
                     "This secret link has already been claimed by someone else and has self-destructed! 🔥"
                 )
             else:
-                await message.reply_text("❌ **Invalid or Deleted Share Link!**")
+                await message.reply_text("❌ <b>Invalid or Deleted Share Link!</b>")
             return
 
         # Fetch and deliver the file
         file_unique_id = share_doc["file_unique_id"]
         file_doc = await get_file_by_id(file_unique_id)
         if not file_doc:
-            await message.reply_text("❌ **The file associated with this link is no longer available.**")
+            await message.reply_text("❌ <b>The file associated with this link is no longer available.</b>")
             return
 
         max_u = share_doc.get("max_uses")
@@ -501,9 +501,9 @@ async def start_command_handler(client: Client, message: Message):
         rem_label = f"{max_u - claimed} remaining" if max_u else "Unlimited"
 
         await message.reply_text(
-            "🔓 **Access Granted via Secret Share Link!**\n\n"
-            f"• **File:** `{file_doc.get('file_name', 'Movie')}`\n"
-            f"• **Usage:** `{claimed}/{max_u if max_u else '∞'}` ({rem_label})\n\n"
+            "🔓 <b>Access Granted via Secret Share Link!</b>\n\n"
+            f"• <b>File:</b> <code>{file_doc.get('file_name', 'Movie')}</code>\n"
+            f"• <b>Usage:</b> <code>{claimed}/{max_u if max_u else '∞'}</code> ({rem_label})\n\n"
             "Delivering your file now..."
         )
         await deliver_file_with_copyright_warning(client, user_id, file_doc)
@@ -523,9 +523,9 @@ async def start_command_handler(client: Client, message: Message):
         greeting_time = "GOOD NIGHT 🌙"
 
     welcome_text = (
-        f"🚩_JAI SHRI RAM_🚩\n\n"
-        f"HEY **{name}**, {greeting_time}\n\n"
-        f"🤖 I AM **{bot_username}**, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
+        f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
+        f"HEY <b>{name}</b>, {greeting_time}\n\n"
+        f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
     )
 
     markup = InlineKeyboardMarkup([
@@ -560,7 +560,7 @@ async def user_plan_command(client: Client, message: Message):
             [InlineKeyboardButton("🎟️ VIEW VIP PREMIUM PLANS ↗️", url=f"https://t.me/{bot_username}?start=plans")]
         ])
         await message.reply_text(
-            "💎 **AkMovieVerse VIP Premium Plans**\n\n"
+            "💎 <b>AkMovieVerse VIP Premium Plans</b>\n\n"
             "Enjoy 100% ad-free instant downloads, zero shorteners, and unlimited searches!\n"
             "👉 Tap below to view VIP plans in private chat:",
             reply_markup=markup
@@ -579,16 +579,16 @@ async def user_plan_command(client: Client, message: Message):
         hours = max(0, remaining.seconds // 3600)
 
         text = (
-            "💎 **YOUR VIP MEMBERSHIP STATUS** 💎\n\n"
-            "• **Status:** `ACTIVE VIP 👑`\n"
-            f"• **Remaining Time:** `{days} Days, {hours} Hours`\n"
-            f"• **Expires On:** `{expiry_dt.strftime('%d %b %Y, %H:%M UTC')}`\n\n"
-            "🌟 **Your Active Perks:**\n"
+            "💎 <b>YOUR VIP MEMBERSHIP STATUS</b> 💎\n\n"
+            "• <b>Status:</b> <code>ACTIVE VIP 👑</code>\n"
+            f"• <b>Remaining Time:</b> <code>{days} Days, {hours} Hours</code>\n"
+            f"• <b>Expires On:</b> <code>{expiry_dt.strftime('%d %b %Y, %H:%M UTC')}</code>\n\n"
+            "🌟 <b>Your Active Perks:</b>\n"
             "• 🚫 No shorteners or token verification\n"
             "• ⚡ Instant 1-second direct PM delivery\n"
             "• 🔓 Unlimited files & searches\n"
             "• 📦 SEND ALL batch deliveries\n\n"
-            "💡 _Want to extend your validity? Choose an upgrade below:_"
+            "💡 <i>Want to extend your validity? Choose an upgrade below:</i>"
         )
         markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Extend VIP Plan", callback_data="view_plans")],
@@ -631,7 +631,7 @@ async def refer_command(client: Client, message: Message):
             [InlineKeyboardButton("👥 INVITE FRIENDS IN PM ↗️", url=f"https://t.me/{bot_username}?start=refer")]
         ])
         await message.reply_text(
-            "👥 **Refer & Earn Free VIP Access**\n\n"
+            "👥 <b>Refer & Earn Free VIP Access</b>\n\n"
             "Invite friends to get free days of VIP membership!\n"
             "👉 Tap below to get your personal invite link in PM:",
             reply_markup=markup

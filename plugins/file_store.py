@@ -506,7 +506,7 @@ async def deliver_batch_files_to_user(client: Client, user_id: int, batch_doc: d
     progress_msg = None
     if target_msg:
         try:
-            progress_msg = await target_msg.reply_text(f"⏳ **Dispatching {len(files)} files to your chat...**")
+            progress_msg = await target_msg.reply_text(f"⏳ <b>Dispatching {len(files)} files to your chat...</b>")
         except Exception:
             pass
 
@@ -528,7 +528,7 @@ async def deliver_batch_files_to_user(client: Client, user_id: int, batch_doc: d
 
     if progress_msg:
         try:
-            await progress_msg.edit_text(f"✅ **Successfully delivered all {sent_count} files!**")
+            await progress_msg.edit_text(f"✅ <b>Successfully delivered all {sent_count} files!</b>")
             await asyncio.sleep(4)
             await progress_msg.delete()
         except Exception:
@@ -1353,11 +1353,11 @@ async def batch_command_handler(client: Client, message: Message):
 
         if not c_id or not start_id or not end_id:
             await message.reply_text(
-                "⚠️ **Invalid link format!**\n\n"
-                "**Usage:**\n"
-                "• `/batch https://t.me/c/123/10 https://t.me/c/123/20 [Title]`\n"
-                "• `/batch https://t.me/c/123/10-20 [Title]`\n\n"
-                "💡 Or send `/batch` with no arguments to collect files interactively in PM."
+                "⚠️ <b>Invalid link format!</b>\n\n"
+                "<b>Usage:</b>\n"
+                "• <code>/batch https://t.me/c/123/10 https://t.me/c/123/20 [Title]</code>\n"
+                "• <code>/batch https://t.me/c/123/10-20 [Title]</code>\n\n"
+                "💡 Or send <code>/batch</code> with no arguments to collect files interactively in PM."
             )
             return
 
@@ -1366,10 +1366,10 @@ async def batch_command_handler(client: Client, message: Message):
 
         total_msgs = end_id - start_id + 1
         if total_msgs > 100:
-            await message.reply_text("⚠️ **Batch limit exceeded:** Maximum 100 messages can be packed per batch.")
+            await message.reply_text("⚠️ <b>Batch limit exceeded:</b> Maximum 100 messages can be packed per batch.")
             return
 
-        status_msg = await message.reply_text(f"⏳ **Scanning {total_msgs} messages from channel...**")
+        status_msg = await message.reply_text(f"⏳ <b>Scanning {total_msgs} messages from channel...</b>")
 
         msg_ids = list(range(start_id, end_id + 1))
         collected_files = []
@@ -1387,11 +1387,11 @@ async def batch_command_handler(client: Client, message: Message):
 
         except Exception as e:
             logger.error(f"Error reading channel range: {e}")
-            await status_msg.edit_text(f"❌ **Failed to fetch channel messages:** `{e}`\n\nEnsure bot is Admin in the channel!")
+            await status_msg.edit_text(f"❌ <b>Failed to fetch channel messages:</b> <code>{e}</code>\n\nEnsure bot is Admin in the channel!")
             return
 
         if not collected_files:
-            await status_msg.edit_text("❌ **No media files found in the specified range.**")
+            await status_msg.edit_text("❌ <b>No media files found in the specified range.</b>")
             return
 
         first_clean = collected_files[0].get("file_name", "File")
@@ -1467,7 +1467,7 @@ async def batch_done_handler(client: Client, message: Message):
     collected_files = batch_state.get("files", [])
 
     if not collected_files:
-        await message.reply_text("❌ **No files were added.** Batch collection cancelled.")
+        await message.reply_text("❌ <b>No files were added.</b> Batch collection cancelled.")
         return
 
     allowed, used_today, daily_limit = await can_user_create_filestore_link(user_id)
@@ -1481,7 +1481,7 @@ async def batch_done_handler(client: Client, message: Message):
     first_clean = collected_files[0].get("file_name", "File")
     default_title = first_clean if len(collected_files) == 1 else f"{first_clean} Pack ({len(collected_files)} Files)"
 
-    status_msg = await message.reply_text("⏳ **Processing batch files...**")
+    status_msg = await message.reply_text("⏳ <b>Processing batch files...</b>")
 
     await prompt_naming_or_finalize(
         client=client,
@@ -1515,7 +1515,7 @@ async def batch_cancel_handler(client: Client, message: Message):
             cancelled = True
 
     if cancelled:
-        await message.reply_text("❌ **Operation cancelled.**")
+        await message.reply_text("❌ <b>Operation cancelled.</b>")
     else:
         await message.reply_text("ℹ️ No active batch or naming session to cancel.")
 
@@ -1539,7 +1539,7 @@ async def genlink_command_handler(client: Client, message: Message):
 
     reply = message.reply_to_message
     if not reply or not (reply.document or reply.video or reply.audio or reply.photo or reply.animation or reply.voice):
-        await message.reply_text("⚠️ **Please reply to a media file** with `/genlink [Optional Title]`.")
+        await message.reply_text("⚠️ <b>Please reply to a media file</b> with <code>/genlink [Optional Title]</code>.")
         return
 
     f_info = extract_media_from_message(reply)
@@ -1551,7 +1551,7 @@ async def genlink_command_handler(client: Client, message: Message):
     custom_title = args[1].strip() if len(args) > 1 else None
     default_title = f_info["file_name"]
 
-    status_msg = await message.reply_text("⏳ **Processing file...**")
+    status_msg = await message.reply_text("⏳ <b>Processing file...</b>")
 
     await prompt_naming_or_finalize(
         client=client,
@@ -1591,7 +1591,7 @@ async def list_batches_command(client: Client, message: Message):
     if not batches:
         await message.reply_text(
             "ℹ️ <b>No batch links found.</b>\n\n"
-            "Use `/batch` or reply to any file with `/genlink` to create your first shareable link!"
+            "Use <code>/batch</code> or reply to any file with <code>/genlink</code> to create your first shareable link!"
         )
         return
 
@@ -1729,24 +1729,24 @@ async def delete_batch_command(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ **Usage:** `/delbatch <batch_id>`\nExample: `/delbatch a1b2c3d4`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/delbatch &lt;batch_id&gt;</code>\nExample: <code>/delbatch a1b2c3d4</code>")
         return
 
     b_id = args[1].strip()
     batch_doc = await get_batch(b_id)
     if not batch_doc:
-        await message.reply_text(f"❌ **Batch `{b_id}` not found.**")
+        await message.reply_text(f"❌ <b>Batch <code>{b_id}</code> not found.</b>")
         return
 
     if not Config.is_admin(user_id) and batch_doc.get("created_by") != user_id:
-        await message.reply_text("⛔ **Unauthorized:** You can only delete batches created by your account.")
+        await message.reply_text("⛔ <b>Unauthorized:</b> You can only delete batches created by your account.")
         return
 
     success = await delete_batch(b_id)
     if success:
-        await message.reply_text(f"✅ **Batch `{b_id}` has been permanently deleted.**")
+        await message.reply_text(f"✅ <b>Batch <code>{b_id}</code> has been permanently deleted.</b>")
     else:
-        await message.reply_text(f"❌ **Failed to delete batch `{b_id}`.**")
+        await message.reply_text(f"❌ <b>Failed to delete batch <code>{b_id}</code>.</b>")
 
 
 # ==========================================
@@ -1861,10 +1861,10 @@ async def telegraph_uploader(client: Client, message: Message):
     # Pre-check size before downloading to save bandwidth
     media = reply.document or reply.video or reply.animation or reply.sticker
     if media and getattr(media, "file_size", 0) > 50 * 1024 * 1024:
-        await message.reply_text("⚠️ **File too large!** Maximum media size allowed for CDN upload is 50 MB.")
+        await message.reply_text("⚠️ <b>File too large!</b> Maximum media size allowed for CDN upload is 50 MB.")
         return
 
-    status_msg = await message.reply_text("⚡ **Uploading to CDN (Smart Size-Routing)...**")
+    status_msg = await message.reply_text("⚡ <b>Uploading to CDN (Smart Size-Routing)...</b>")
 
     temp_path = None
     try:
@@ -1888,7 +1888,7 @@ async def telegraph_uploader(client: Client, message: Message):
         cdn_url, provider = await upload_media_to_cdn(temp_path, filename=filename, mime_type=mime_type)
 
         if provider == "LIMIT_EXCEEDED":
-            await status_msg.edit_text("⚠️ **File too large!** Maximum 50 MB media can be uploaded to CDN.")
+            await status_msg.edit_text("⚠️ <b>File too large!</b> Maximum 50 MB media can be uploaded to CDN.")
             return
 
         if cdn_url:
@@ -1912,7 +1912,7 @@ async def telegraph_uploader(client: Client, message: Message):
 
     except Exception as e:
         logger.error(f"Error in telegraph upload: {e}")
-        await status_msg.edit_text(f"❌ **Upload Error:** `{e}`")
+        await status_msg.edit_text(f"❌ <b>Upload Error:</b> <code>{e}</code>")
     finally:
         if temp_path and os.path.exists(temp_path):
             try:
@@ -2108,9 +2108,9 @@ async def paste_command_handler(client: Client, message: Message):
     if reply and reply.document:
         doc = reply.document
         if doc.file_size > 500 * 1024:
-            await message.reply_text("⚠️ **File too large!** Maximum 500 KB text file can be published to Telegraph.")
+            await message.reply_text("⚠️ <b>File too large!</b> Maximum 500 KB text file can be published to Telegraph.")
             return
-        status_msg = await message.reply_text("⏳ **Reading document content...**")
+        status_msg = await message.reply_text("⏳ <b>Reading document content...</b>")
         temp_file = None
         try:
             temp_file = await reply.download()
@@ -2118,7 +2118,7 @@ async def paste_command_handler(client: Client, message: Message):
                 content_to_publish = f.read()
             title = passed_text or doc.file_name or "Document"
         except Exception as e:
-            await status_msg.edit_text(f"❌ Failed to read document: `{e}`")
+            await status_msg.edit_text(f"❌ Failed to read document: <code>{e}</code>")
             return
         finally:
             if temp_file and os.path.exists(temp_file):
@@ -2130,7 +2130,7 @@ async def paste_command_handler(client: Client, message: Message):
     elif reply and (reply.text or reply.caption):
         content_to_publish = reply.text or reply.caption
         title = passed_text or (content_to_publish.split("\n")[0][:60] if content_to_publish else "Telegraph Article")
-        status_msg = await message.reply_text("⚡ **Publishing article to Telegraph (graph.org)...**")
+        status_msg = await message.reply_text("⚡ <b>Publishing article to Telegraph (graph.org)...</b>")
     # Case 3: Text provided directly in command arguments
     elif passed_text:
         if "|" in passed_text:
@@ -2141,7 +2141,7 @@ async def paste_command_handler(client: Client, message: Message):
             first_line = passed_text.split("\n")[0].strip()
             title = first_line[:60] if len(first_line) > 5 else "Telegraph Article"
             content_to_publish = passed_text
-        status_msg = await message.reply_text("⚡ **Publishing article to Telegraph (graph.org)...**")
+        status_msg = await message.reply_text("⚡ <b>Publishing article to Telegraph (graph.org)...</b>")
     else:
         # Help guide
         await message.reply_text(
@@ -2212,9 +2212,9 @@ async def edit_paste_command_handler(client: Client, message: Message):
         new_title = args[2].strip() if len(args) > 2 else ""
         doc = reply.document
         if doc.file_size > 500 * 1024:
-            await message.reply_text("⚠️ **File too large!** Maximum 500 KB text file can be published to Telegraph.")
+            await message.reply_text("⚠️ <b>File too large!</b> Maximum 500 KB text file can be published to Telegraph.")
             return
-        status_msg = await message.reply_text("⏳ **Reading updated document content...**")
+        status_msg = await message.reply_text("⏳ <b>Reading updated document content...</b>")
         temp_file = None
         try:
             temp_file = await reply.download()
@@ -2222,7 +2222,7 @@ async def edit_paste_command_handler(client: Client, message: Message):
                 content_to_update = f.read()
             new_title = new_title or doc.file_name or "Updated Document"
         except Exception as e:
-            await status_msg.edit_text(f"❌ Failed to read document: `{e}`")
+            await status_msg.edit_text(f"❌ Failed to read document: <code>{e}</code>")
             return
         finally:
             if temp_file and os.path.exists(temp_file):
@@ -2238,7 +2238,7 @@ async def edit_paste_command_handler(client: Client, message: Message):
         content_to_update = reply.text or reply.caption
         if not new_title:
             new_title = content_to_update.split("\n")[0][:60]
-        status_msg = await message.reply_text("⚡ **Updating Telegraph article...**")
+        status_msg = await message.reply_text("⚡ <b>Updating Telegraph article...</b>")
 
     # Case 3: Direct command format: /editpaste <url> | <content> or /editpaste <url> title | content
     elif len(message.text.split(maxsplit=1)) > 1:
@@ -2251,10 +2251,10 @@ async def edit_paste_command_handler(client: Client, message: Message):
             content_to_update = content_to_update.strip()
             if not new_title:
                 new_title = content_to_update.split("\n")[0][:60]
-            status_msg = await message.reply_text("⚡ **Updating Telegraph article...**")
+            status_msg = await message.reply_text("⚡ <b>Updating Telegraph article...</b>")
         else:
             await message.reply_text(
-                "⚠️ **Invalid format!**\n\n"
+                "⚠️ <b>Invalid format!</b>\n\n"
                 "<b>Usage:</b>\n"
                 "• Reply to text with: <code>/editpaste &lt;link&gt; [New Title]</code>\n"
                 "• Direct: <code>/editpaste &lt;link&gt; Title | New content here...</code>"
@@ -2345,11 +2345,11 @@ async def delete_paste_command_handler(client: Client, message: Message):
         )
         return
 
-    status_msg = await message.reply_text("⏳ **Wiping Telegraph article content...**")
+    status_msg = await message.reply_text("⏳ <b>Wiping Telegraph article content...</b>")
 
     wipe_content = (
-        "> ⚠️ **This article has been permanently removed by the author.**\n\n"
-        "_The content of this page is no longer available._"
+        "&gt; ⚠️ <b>This article has been permanently removed by the author.</b>\n\n"
+        "<i>The content of this page is no longer available.</i>"
     )
 
     updated_url = await edit_telegraph_page(

@@ -20,10 +20,10 @@ CUSTOM_WELCOME_TEXT = None
 CUSTOM_WELCOME_PIC = None
 
 DEFAULT_WELCOME_TEXT = (
-    "🎉 **Hello {mention},**\n\n"
-    "<blockquote>**YOUR REQUEST TO JOIN {title} HAS BEEN APPROVED! ✅**</blockquote>\n\n"
-    "🍿 **Welcome to AkMovieVerse!**\n"
-    "Search, find and download your favourite movies & web series directly here."
+    "🎉 <b>Hello {mention},</b>\n\n"
+    "<blockquote><b>YOUR REQUEST TO JOIN {title} HAS BEEN APPROVED! ✅</b></blockquote>\n\n"
+    "🍿 <b>Welcome to AkMovieVerse!</b>\n"
+    "Search, find and download your favourite movies &amp; web series directly here."
 )
 
 AUTO_APPROVE_CHANNELS_CACHE = None
@@ -170,11 +170,11 @@ async def auto_approve_join_request(client: Client, request: ChatJoinRequest):
                 await client.send_message(
                     chat_id=Config.LOG_CHANNEL,
                     text=(
-                        "👥 **#JoinRequestApproved (1s Auto-Accept)**\n\n"
-                        f"• **User:** {user_mention} ({uname_str})\n"
-                        f"• **User ID:** `{user.id}`\n"
-                        f"• **Channel / Group:** `{chat.title}`\n"
-                        f"• **Status:** Approved instantly"
+                        "👥 <b>#JoinRequestApproved (1s Auto-Accept)</b>\n\n"
+                        f"• <b>User:</b> {user_mention} ({uname_str})\n"
+                        f"• <b>User ID:</b> <code>{user.id}</code>\n"
+                        f"• <b>Channel / Group:</b> <code>{chat.title}</code>\n"
+                        f"• <b>Status:</b> Approved instantly"
                     )
                 )
             except Exception:
@@ -281,16 +281,16 @@ async def create_share_link_command(client: Client, message: Message):
 
     if not target_chat:
         await message.reply_text(
-            "🛡️ **Time-Based & Single-Use Channel Link Generator:**\n\n"
-            "**Usage:**\n"
-            "• `/sharelink [chat_id]` — Unlimited Join-Request link\n"
-            "• `/sharelink [chat_id] [time]` — Time-limited (e.g. `1h`, `24h`, `3d`)\n"
-            "• `/sharelink [chat_id] onetime` — 1-Person Single-Use link\n"
-            "• `/sharelink [chat_id] 1h 1` — 1 Hour + 1 Person limit\n\n"
-            "**Examples:**\n"
-            "`/sharelink -1002001671856 1h 1`\n"
-            "`/sharelink -1002001671856 24h`\n"
-            "`/sharelink -1002001671856 onetime`"
+            "🛡️ <b>Time-Based &amp; Single-Use Channel Link Generator:</b>\n\n"
+            "<b>Usage:</b>\n"
+            "• <code>/sharelink [chat_id]</code> — Unlimited Join-Request link\n"
+            "• <code>/sharelink [chat_id] [time]</code> — Time-limited (e.g. <code>1h</code>, <code>24h</code>, <code>3d</code>)\n"
+            "• <code>/sharelink [chat_id] onetime</code> — 1-Person Single-Use link\n"
+            "• <code>/sharelink [chat_id] 1h 1</code> — 1 Hour + 1 Person limit\n\n"
+            "<b>Examples:</b>\n"
+            "<code>/sharelink -1002001671856 1h 1</code>\n"
+            "<code>/sharelink -1002001671856 24h</code>\n"
+            "<code>/sharelink -1002001671856 onetime</code>"
         )
         return
 
@@ -320,18 +320,18 @@ async def create_share_link_command(client: Client, message: Message):
         invite_link = await client.create_chat_invite_link(**kwargs)
 
         await message.reply_text(
-            "🛡️ **Protected Channel Link Generated!**\n\n"
-            f"🔗 **Link:** `{invite_link.invite_link}`\n\n"
-            f"⏱️ **Validity:** `{duration_label}`\n"
-            f"👤 **Usage Limit:** `{limit_label}`\n"
-            f"🔒 **Mode:** `{'One-Time / Member-Limited' if limit_val else 'Auto-Approve Gatekeeper'}`\n\n"
-            "💡 **Why this is powerful:**\n"
+            "🛡️ <b>Protected Channel Link Generated!</b>\n\n"
+            f"🔗 <b>Link:</b> <code>{invite_link.invite_link}</code>\n\n"
+            f"⏱️ <b>Validity:</b> <code>{duration_label}</code>\n"
+            f"👤 <b>Usage Limit:</b> <code>{limit_label}</code>\n"
+            f"🔒 <b>Mode:</b> <code>{'One-Time / Member-Limited' if limit_val else 'Auto-Approve Gatekeeper'}</code>\n\n"
+            "💡 <b>Why this is powerful:</b>\n"
             "• Protects main channel from copyright strikes.\n"
             "• Automatically expires or self-destructs after set time/usage.\n"
             "• Auto-registers users into database for broadcast!"
         )
     except Exception as e:
-        await message.reply_text(f"❌ **Failed to generate link:** `{e}`\n\n💡 Ensure the bot is Administrator in the channel with 'Invite Users via Links' permission.")
+        await message.reply_text(f"❌ <b>Failed to generate link:</b> <code>{e}</code>\n\n💡 Ensure the bot is Administrator in the channel with 'Invite Users via Links' permission.")
 
 
 # 2. /test_welcome (Preview what users see when accepted)
@@ -373,7 +373,7 @@ async def test_welcome_command(client: Client, message: Message):
             reply_markup=markup
         )
     except Exception as e:
-        await message.reply_text(f"❌ Preview Error: `{e}`")
+        await message.reply_text(f"❌ Preview Error: <code>{e}</code>")
 
 
 # 3. /set_welcome_pic [photo_url] or reply to photo
@@ -392,9 +392,9 @@ async def set_welcome_pic_command(client: Client, message: Message):
 
     if not pic_url:
         await message.reply_text(
-            "⚠️ **Usage:**\n"
-            "• Reply to any photo with `/set_welcome_pic`\n"
-            "• Or send `/set_welcome_pic [image_direct_url]`"
+            "⚠️ <b>Usage:</b>\n"
+            "• Reply to any photo with <code>/set_welcome_pic</code>\n"
+            "• Or send <code>/set_welcome_pic [image_direct_url]</code>"
         )
         return
 
@@ -407,9 +407,9 @@ async def set_welcome_pic_command(client: Client, message: Message):
         )
         global CUSTOM_WELCOME_PIC
         CUSTOM_WELCOME_PIC = pic_url
-        await message.reply_text("✅ **Custom Auto-Approve Welcome Photo Saved!**\nUse `/test_welcome` to preview it.")
+        await message.reply_text("✅ <b>Custom Auto-Approve Welcome Photo Saved!</b>\nUse <code>/test_welcome</code> to preview it.")
     except Exception as e:
-        await message.reply_text(f"❌ Failed to save photo: `{e}`")
+        await message.reply_text(f"❌ Failed to save photo: <code>{e}</code>")
 
 
 @Client.on_message(filters.command(["del_welcome_pic", "delwelcomepic", "reset_welcome_pic"]))
@@ -422,7 +422,7 @@ async def del_welcome_pic_command(client: Client, message: Message):
     await mongo.db["bot_settings"].delete_one({"setting": "auto_approve_pic"})
     global CUSTOM_WELCOME_PIC
     CUSTOM_WELCOME_PIC = None
-    await message.reply_text("🔄 **Auto-Approve photo reset to dynamic anime art!**\nEach approved user will receive a fresh poster.")
+    await message.reply_text("🔄 <b>Auto-Approve photo reset to dynamic anime art!</b>\nEach approved user will receive a fresh poster.")
 
 
 # 4. /acceptall (Bulk Accept)
@@ -444,22 +444,22 @@ async def approve_all_pending_command(client: Client, message: Message):
         target_chat = message.chat.id
     else:
         await message.reply_text(
-            "⚠️ **Usage:**\n"
-            "• Send `/acceptall` inside your group/channel\n"
-            "• Or send `/acceptall [chat_id_or_username]` in PM\n\n"
-            "Example: `/acceptall -1002247400551`"
+            "⚠️ <b>Usage:</b>\n"
+            "• Send <code>/acceptall</code> inside your group/channel\n"
+            "• Or send <code>/acceptall [chat_id_or_username]</code> in PM\n\n"
+            "Example: <code>/acceptall -1002247400551</code>"
         )
         return
 
-    wait_msg = await message.reply_text(f"⏳ **Approving all pending requests for** `{target_chat}`...")
+    wait_msg = await message.reply_text(f"⏳ <b>Approving all pending requests for</b> <code>{target_chat}</code>...")
     try:
         success = await client.approve_all_chat_join_requests(chat_id=target_chat)
         if success:
-            await wait_msg.edit_text(f"✅ **All pending join requests for `{target_chat}` have been APPROVED!**")
+            await wait_msg.edit_text(f"✅ <b>All pending join requests for <code>{target_chat}</code> have been APPROVED!</b>")
         else:
             await wait_msg.edit_text("ℹ️ No pending join requests found or already approved.")
     except Exception as e:
-        await wait_msg.edit_text(f"❌ **Error:** `{e}`\n\n💡 Ensure the bot is added as **Administrator** in that channel with 'Add Users' / 'Invite via Link' permission.")
+        await wait_msg.edit_text(f"❌ <b>Error:</b> <code>{e}</code>\n\n💡 Ensure the bot is added as <b>Administrator</b> in that channel with 'Add Users' / 'Invite via Link' permission.")
 
 
 # 5. /declineall (Bulk Decline)
@@ -481,21 +481,21 @@ async def decline_all_pending_command(client: Client, message: Message):
         target_chat = message.chat.id
     else:
         await message.reply_text(
-            "⚠️ **Usage:**\n"
-            "• Send `/declineall` inside your group/channel\n"
-            "• Or send `/declineall [chat_id]` in PM"
+            "⚠️ <b>Usage:</b>\n"
+            "• Send <code>/declineall</code> inside your group/channel\n"
+            "• Or send <code>/declineall [chat_id]</code> in PM"
         )
         return
 
-    wait_msg = await message.reply_text(f"⏳ **Declining pending requests for** `{target_chat}`...")
+    wait_msg = await message.reply_text(f"⏳ <b>Declining pending requests for</b> <code>{target_chat}</code>...")
     try:
         success = await client.decline_all_chat_join_requests(chat_id=target_chat)
         if success:
-            await wait_msg.edit_text(f"🚫 **All pending join requests for `{target_chat}` have been DECLINED.**")
+            await wait_msg.edit_text(f"🚫 <b>All pending join requests for <code>{target_chat}</code> have been DECLINED.</b>")
         else:
             await wait_msg.edit_text("ℹ️ No pending join requests found or already processed.")
     except Exception as e:
-        await wait_msg.edit_text(f"❌ **Error:** `{e}`")
+        await wait_msg.edit_text(f"❌ <b>Error:</b> <code>{e}</code>")
 
 
 # 6. /autoapprove [on|off]
@@ -509,25 +509,25 @@ async def toggle_auto_approve_command(client: Client, message: Message):
     if len(args) < 2 or args[1].lower() not in ["on", "off", "status"]:
         status_str = "ENABLED ✅" if Config.AUTO_APPROVE else "DISABLED ❌"
         await message.reply_text(
-            f"🤖 **Auto Join Request Approver:** `{status_str}`\n\n"
-            "**Commands:**\n"
-            "• `/autoapprove on|off` — Toggle 1-sec auto-approval\n"
-            "• `/sharelink [chat_id]` — Create protected invite link\n"
-            "• `/acceptall [chat_id]` — Approve all pending requests\n"
-            "• `/declineall [chat_id]` — Decline all pending requests\n"
-            "• `/set_welcome_pic` — Set custom welcome photo\n"
-            "• `/set_welcome [text]` — Set custom welcome text\n"
-            "• `/test_welcome` — Preview welcome message card"
+            f"🤖 <b>Auto Join Request Approver:</b> <code>{status_str}</code>\n\n"
+            "<b>Commands:</b>\n"
+            "• <code>/autoapprove on|off</code> — Toggle 1-sec auto-approval\n"
+            "• <code>/sharelink [chat_id]</code> — Create protected invite link\n"
+            "• <code>/acceptall [chat_id]</code> — Approve all pending requests\n"
+            "• <code>/declineall [chat_id]</code> — Decline all pending requests\n"
+            "• <code>/set_welcome_pic</code> — Set custom welcome photo\n"
+            "• <code>/set_welcome [text]</code> — Set custom welcome text\n"
+            "• <code>/test_welcome</code> — Preview welcome message card"
         )
         return
 
     sub = args[1].lower()
     if sub == "on":
         Config.AUTO_APPROVE = True
-        await message.reply_text("✅ **Auto-Approve Enabled!** Join requests in all admin channels will be accepted in <1s.")
+        await message.reply_text("✅ <b>Auto-Approve Enabled!</b> Join requests in all admin channels will be accepted in <1s.")
     elif sub == "off":
         Config.AUTO_APPROVE = False
-        await message.reply_text("⛔ **Auto-Approve Disabled.** Join requests will not be accepted automatically.")
+        await message.reply_text("⛔ <b>Auto-Approve Disabled.</b> Join requests will not be accepted automatically.")
 
 
 # 7. /set_welcome [message]
@@ -540,16 +540,16 @@ async def set_welcome_command(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.reply_text(
-            "⚠️ **Usage:** `/set_welcome [your message]`\n\n"
-            "**Supported Placeholders:**\n"
-            "• `{mention}` — Clickable user mention\n"
-            "• `{name}` — User First Name\n"
-            "• `{title}` — Channel Title\n"
-            "• `{id}` — User ID\n"
-            "• `{username}` — @Username\n"
-            "• `<blockquote>...</blockquote>` — Blockquote styling\n\n"
-            "**Example:**\n"
-            "`/set_welcome ⁉️ **Hey {name},**\\n\\n<blockquote>**YOUR REQUEST TO JOIN {title} IS APPROVED!**</blockquote>`"
+            "⚠️ <b>Usage:</b> <code>/set_welcome [your message]</code>\n\n"
+            "<b>Supported Placeholders:</b>\n"
+            "• <code>{mention}</code> — Clickable user mention\n"
+            "• <code>{name}</code> — User First Name\n"
+            "• <code>{title}</code> — Channel Title\n"
+            "• <code>{id}</code> — User ID\n"
+            "• <code>{username}</code> — @Username\n"
+            "• <code>&lt;blockquote&gt;...&lt;/blockquote&gt;</code> — Blockquote styling\n\n"
+            "<b>Example:</b>\n"
+            "<code>/set_welcome ⁉️ &lt;b&gt;Hey {name},&lt;/b&gt;\\n\\n&lt;blockquote&gt;&lt;b&gt;YOUR REQUEST TO JOIN {title} IS APPROVED!&lt;/b&gt;&lt;/blockquote&gt;</code>"
         )
         return
 
@@ -563,9 +563,9 @@ async def set_welcome_command(client: Client, message: Message):
         )
         global CUSTOM_WELCOME_TEXT
         CUSTOM_WELCOME_TEXT = new_text
-        await message.reply_text("✅ **Custom Welcome Caption Saved!**\nUse `/test_welcome` to preview it.")
+        await message.reply_text("✅ <b>Custom Welcome Caption Saved!</b>\nUse <code>/test_welcome</code> to preview it.")
     except Exception as e:
-        await message.reply_text(f"❌ Failed to save custom welcome message: `{e}`")
+        await message.reply_text(f"❌ Failed to save custom welcome message: <code>{e}</code>")
 
 
 # 8. /get_welcome & /reset_welcome
@@ -581,14 +581,14 @@ async def get_welcome_command(client: Client, message: Message):
         await mongo.db["bot_settings"].delete_one({"setting": "auto_approve_welcome"})
         global CUSTOM_WELCOME_TEXT
         CUSTOM_WELCOME_TEXT = None
-        await message.reply_text("🔄 **Auto-Approve Welcome Message reset to SinGate default!**")
+        await message.reply_text("🔄 <b>Auto-Approve Welcome Message reset to SinGate default!</b>")
         return
 
     current = await get_welcome_text()
     await message.reply_text(
-        f"📝 **Current Auto-Approve Welcome Message:**\n\n{current}\n\n"
-        "💡 To change: `/set_welcome [text]`\n"
-        "💡 To reset: `/reset_welcome`"
+        f"📝 <b>Current Auto-Approve Welcome Message:</b>\n\n{current}\n\n"
+        "💡 To change: <code>/set_welcome [text]</code>\n"
+        "💡 To reset: <code>/reset_welcome</code>"
     )
 
 
@@ -609,7 +609,7 @@ async def add_auto_approve_command(client: Client, message: Message):
         target_chat = message.chat.id
 
     if not target_chat:
-        await message.reply_text("⚠️ **Usage:** `/add_autoapprove <chat_id>`\nExample: `/add_autoapprove -1003537939374`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/add_autoapprove &lt;chat_id&gt;</code>\nExample: <code>/add_autoapprove -1003537939374</code>")
         return
 
     await add_auto_approve_channel(target_chat)
@@ -620,7 +620,7 @@ async def add_auto_approve_command(client: Client, message: Message):
     except Exception:
         pass
 
-    await message.reply_text(f"✅ **Channel Added to Auto-Approve List!**\n• Chat ID: `{target_chat}`{chat_title}")
+    await message.reply_text(f"✅ <b>Channel Added to Auto-Approve List!</b>\n• Chat ID: <code>{target_chat}</code>{chat_title}")
 
 
 @Client.on_message(filters.command(["del_autoapprove", "delautoapprove", "remove_autoapprove"]))
@@ -639,11 +639,11 @@ async def del_auto_approve_command(client: Client, message: Message):
         target_chat = message.chat.id
 
     if not target_chat:
-        await message.reply_text("⚠️ **Usage:** `/del_autoapprove <chat_id>`\nExample: `/del_autoapprove -1003537939374`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/del_autoapprove &lt;chat_id&gt;</code>\nExample: <code>/del_autoapprove -1003537939374</code>")
         return
 
     await del_auto_approve_channel(target_chat)
-    await message.reply_text(f"🗑️ **Channel Removed from Auto-Approve List!**\n• Chat ID: `{target_chat}`")
+    await message.reply_text(f"🗑️ <b>Channel Removed from Auto-Approve List!</b>\n• Chat ID: <code>{target_chat}</code>")
 
 
 @Client.on_message(filters.command(["autoapprove_channels", "autoapprovechannels"]))
@@ -654,7 +654,7 @@ async def list_auto_approve_channels_command(client: Client, message: Message):
 
     channels = await get_auto_approve_channels()
     if not channels:
-        await message.reply_text("ℹ️ **No channels configured for Auto-Approve.**\nAdd one using `/add_autoapprove <chat_id>`.")
+        await message.reply_text("ℹ️ <b>No channels configured for Auto-Approve.</b>\nAdd one using <code>/add_autoapprove &lt;chat_id&gt;</code>.")
         return
 
     lines = []
@@ -662,18 +662,18 @@ async def list_auto_approve_channels_command(client: Client, message: Message):
         title = ""
         try:
             c_info = await client.get_chat(ch_id)
-            title = f" — **{c_info.title}**"
+            title = f" — <b>{c_info.title}</b>"
         except Exception:
             pass
-        lines.append(f"{idx}. `{ch_id}`{title}")
+        lines.append(f"{idx}. <code>{ch_id}</code>{title}")
 
     channels_txt = "\n".join(lines)
     await message.reply_text(
-        f"📋 **Auto-Approve Enabled Channels ({len(channels)}):**\n\n"
+        f"📋 <b>Auto-Approve Enabled Channels ({len(channels)}):</b>\n\n"
         f"{channels_txt}\n\n"
-        "💡 **Commands:**\n"
-        "• `/add_autoapprove <chat_id>` — Add channel\n"
-        "• `/del_autoapprove <chat_id>` — Remove channel"
+        "💡 <b>Commands:</b>\n"
+        "• <code>/add_autoapprove &lt;chat_id&gt;</code> — Add channel\n"
+        "• <code>/del_autoapprove &lt;chat_id&gt;</code> — Remove channel"
     )
 
 

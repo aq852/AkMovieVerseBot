@@ -60,15 +60,15 @@ class Bot(Client):
                 chats_count = await get_total_chats_count()
 
                 startup_text = (
-                    "🚀 **AutoFilterBot Online & Active!**\n\n"
-                    f"🤖 **Bot:** @{me.username}\n"
-                    f"📁 **Indexed Files:** `{files_count:,}`\n"
-                    f"👤 **Total Users:** `{users_count:,}`\n"
-                    f"👥 **Connected Groups:** `{chats_count:,}`\n"
-                    f"⚡ **Shortener:** `{'Enabled' if Config.SHORTENER_ENABLED else 'Disabled'}`\n"
-                    f"🍿 **Fast Streaming:** `{'Enabled' if Config.ENABLE_STREAMING else 'Disabled'}`\n"
-                    f"☁️ **Platform:** Hydrogram MTProto / Python 3.11\n"
-                    f"🌐 **Web Port:** `{Config.PORT}`"
+                    "🚀 <b>AutoFilterBot Online & Active!</b>\n\n"
+                    f"🤖 <b>Bot:</b> @{me.username}\n"
+                    f"📁 <b>Indexed Files:</b> <code>{files_count:,}</code>\n"
+                    f"👤 <b>Total Users:</b> <code>{users_count:,}</code>\n"
+                    f"👥 <b>Connected Groups:</b> <code>{chats_count:,}</code>\n"
+                    f"⚡ <b>Shortener:</b> <code>{'Enabled' if Config.SHORTENER_ENABLED else 'Disabled'}</code>\n"
+                    f"🍿 <b>Fast Streaming:</b> <code>{'Enabled' if Config.ENABLE_STREAMING else 'Disabled'}</code>\n"
+                    f"☁️ <b>Platform:</b> Hydrogram MTProto / Python 3.11\n"
+                    f"🌐 <b>Web Port:</b> <code>{Config.PORT}</code>"
                 )
                 await self.send_message(Config.LOG_CHANNEL, startup_text)
             except Exception as e:

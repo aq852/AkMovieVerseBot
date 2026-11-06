@@ -242,7 +242,7 @@ async def start_weekly_housekeeping_scheduler(client: Client):
 async def auto_clean_command(client: Client, message: Message):
     """Admin command: Run on-demand database housekeeping or toggle weekly auto-clean."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split()[1:]
     if args:

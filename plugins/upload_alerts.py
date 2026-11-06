@@ -188,8 +188,8 @@ async def my_alerts_command(client: Client, message: Message):
 
     if not alerts:
         return await message.reply_text(
-            "🔔 **Aapke paas abhi koi active upload alert nahi hai.**\n\n"
-            "Jab aap koi aisi movie search karte hain jo bot me nahi hoti, to aap **'Notify Me When Uploaded'** par click karke alert set kar sakte hain!"
+            "🔔 <b>Aapke paas abhi koi active upload alert nahi hai.</b>\n\n"
+            "Jab aap koi aisi movie search karte hain jo bot me nahi hoti, to aap <b>'Notify Me When Uploaded'</b> par click karke alert set kar sakte hain!"
         )
 
     lines = ["🔔 <b>Aapke Active Movie Alerts:</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"]

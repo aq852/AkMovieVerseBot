@@ -79,24 +79,24 @@ async def id_command_handler(client: Client, message: Message):
     reply = message.reply_to_message
 
     user_id = message.from_user.id if message.from_user else (message.sender_chat.id if message.sender_chat else "Anonymous")
-    text = f"👤 **Your ID:** `{user_id}`\n"
-    text += f"💬 **Chat ID:** `{chat.id}`\n"
+    text = f"👤 <b>Your ID:</b> <code>{user_id}</code>\n"
+    text += f"💬 <b>Chat ID:</b> <code>{chat.id}</code>\n"
     if not is_private_chat(chat):
-        text += f"🏷️ **Chat Type:** `{chat.type}`\n"
+        text += f"🏷️ <b>Chat Type:</b> <code>{chat.type}</code>\n"
 
     if reply:
         if reply.from_user:
-            text += f"↩️ **Replied User ID:** `{reply.from_user.id}`\n"
+            text += f"↩️ <b>Replied User ID:</b> <code>{reply.from_user.id}</code>\n"
         elif reply.sender_chat:
-            text += f"📢 **Replied Channel/Chat ID:** `{reply.sender_chat.id}`\n"
+            text += f"📢 <b>Replied Channel/Chat ID:</b> <code>{reply.sender_chat.id}</code>\n"
         if reply.forward_from_chat:
-            text += f"📢 **Forwarded Channel ID:** `{reply.forward_from_chat.id}`\n"
+            text += f"📢 <b>Forwarded Channel ID:</b> <code>{reply.forward_from_chat.id}</code>\n"
         media = reply.document or reply.video or reply.audio or reply.photo
         if media:
             file_id = getattr(media, "file_id", "N/A")
             unique_id = getattr(media, "file_unique_id", "N/A")
-            text += f"\n📁 **File Unique ID:** `{unique_id}`\n"
-            text += f"🔑 **File ID:** `{file_id}`\n"
+            text += f"\n📁 <b>File Unique ID:</b> <code>{unique_id}</code>\n"
+            text += f"🔑 <b>File ID:</b> <code>{file_id}</code>\n"
 
     await message.reply_text(text)
 
@@ -115,13 +115,13 @@ async def info_command_handler(client: Client, message: Message):
         dc_id = getattr(media, "dc_id", "N/A")
 
         text = (
-            f"ℹ️ **Media Information:**\n\n"
-            f"📄 **Name:** `{file_name}`\n"
-            f"📦 **Size:** `{file_size}`\n"
-            f"🏷️ **MIME:** `{mime}`\n"
-            f"⏱️ **Duration:** `{duration}s`\n"
-            f"🌐 **Data Center (DC):** `{dc_id}`\n"
-            f"🔑 **Unique ID:** `{getattr(media, 'file_unique_id', 'N/A')}`"
+            f"ℹ️ <b>Media Information:</b>\n\n"
+            f"📄 <b>Name:</b> <code>{file_name}</code>\n"
+            f"📦 <b>Size:</b> <code>{file_size}</code>\n"
+            f"🏷️ <b>MIME:</b> <code>{mime}</code>\n"
+            f"⏱️ <b>Duration:</b> <code>{duration}s</code>\n"
+            f"🌐 <b>Data Center (DC):</b> <code>{dc_id}</code>\n"
+            f"🔑 <b>Unique ID:</b> <code>{getattr(media, 'file_unique_id', 'N/A')}</code>"
         )
         await message.reply_text(text)
         return
@@ -200,15 +200,15 @@ async def imdb_lookup_command(client: Client, message: Message):
     """Direct lookup of movie or series details from IMDb."""
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.reply_text("⚠️ **Usage:** `/imdb [movie or series name]`\nExample: `/imdb Inception`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/imdb [movie or series name]</code>\nExample: <code>/imdb Inception</code>")
         return
 
     query = args[1]
-    wait_msg = await message.reply_text("🔎 **Searching IMDb...**")
+    wait_msg = await message.reply_text("🔎 <b>Searching IMDb...</b>")
 
     imdb_data = await get_imdb_details(query)
     if not imdb_data:
-        await wait_msg.edit_text(f"❌ No IMDb results found for: `{query}`")
+        await wait_msg.edit_text(f"❌ No IMDb results found for: <code>{query}</code>")
         return
 
     caption = (
@@ -225,11 +225,21 @@ async def imdb_lookup_command(client: Client, message: Message):
     clean_search_str = re.sub(r"[^\w\s]", " ", raw_title).strip()
     encoded_search = urllib.parse.quote_plus(clean_search_str)
 
+    cb_words = []
+    curr_len = 0
+    for w in clean_search_str.split():
+        if curr_len + len(w) + 1 <= 45:
+            cb_words.append(w)
+            curr_len += len(w) + 1
+        else:
+            break
+    cb_q = " ".join(cb_words) if cb_words else clean_search_str[:45]
+
     # In PM: Direct 1-click callback so search runs instantly without re-routing or START buttons!
     # In Groups: Deep-link URL to PM
     if is_private_chat(message):
         imdb_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🔍 Search '{raw_title[:24]}' in Bot", callback_data=f"imdbsearch_{clean_search_str[:35]}")]
+            [InlineKeyboardButton(f"🔍 Search '{raw_title[:24]}' in Bot", callback_data=f"imdbsearch_{cb_q}")]
         ])
     else:
         imdb_markup = InlineKeyboardMarkup([
@@ -268,10 +278,10 @@ async def help_command_handler(client: Client, message: Message):
             [InlineKeyboardButton("📖 VIEW HELP GUIDE IN PM ↗️", url=f"https://t.me/{bot_username}?start=help")]
         ])
         await message.reply_text(
-            "❓ **Auto Filter Bot — Help & Commands**\n\n"
+            "❓ <b>Auto Filter Bot — Help & Commands</b>\n\n"
             "• Search movies/series by typing the title directly in chat\n"
             "• Use sub-filters for Quality, Language, and Seasons\n"
-            "• Use `/settings` to configure group preferences\n\n"
+            "• Use <code>/settings</code> to configure group preferences\n\n"
             "👉 Tap below to view the complete guide in PM:",
             reply_markup=markup
         )
@@ -358,12 +368,12 @@ async def help_menu_callback(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^about_menu"))
 async def about_menu_callback(client: Client, query: CallbackQuery):
     text = (
-        "ℹ️ **About This Bot**\n\n"
-        "• **Engine:** Hydrogram (MTProto 2.0)\n"
-        "• **Database:** MongoDB Atlas (Motor Async)\n"
-        "• **Max File Size:** Up to 2GB (4GB for Premium)\n"
-        "• **Hosting:** Koyeb, Heroku, Render, VPS & Docker\n"
-        "• **Version:** v3.0 Pro Ultimate\n\n"
+        "ℹ️ <b>About This Bot</b>\n\n"
+        "• <b>Engine:</b> Hydrogram (MTProto 2.0)\n"
+        "• <b>Database:</b> MongoDB Atlas (Motor Async)\n"
+        "• <b>Max File Size:</b> Up to 2GB (4GB for Premium)\n"
+        "• <b>Hosting:</b> Koyeb, Heroku, Render, VPS & Docker\n"
+        "• <b>Version:</b> v3.0 Pro Ultimate\n\n"
         "Built with ❤️ for high-speed file sharing."
     )
     back_markup = InlineKeyboardMarkup([
@@ -384,9 +394,9 @@ async def back_home_callback(client: Client, query: CallbackQuery):
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
     name = query.from_user.first_name
     welcome_text = (
-        f"🚩_JAI SHRI RAM_🚩\n\n"
-        f"HEY **{name}**!\n\n"
-        f"🤖 I AM **{bot_username}**, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
+        f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
+        f"HEY <b>{name}</b>!\n\n"
+        f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
     )
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
@@ -452,15 +462,15 @@ async def buy_plan_callback(client: Client, query: CallbackQuery):
 
     if plan_key == "crypto":
         text = (
-            "🌐 **AKMOVIEVERSE VIP — CRYPTO / USDT TRC-20**\n\n"
+            "🌐 <b>AKMOVIEVERSE VIP — CRYPTO / USDT TRC-20</b>\n\n"
             "Pay using USDT on the TRC-20 network or Binance Pay.\n\n"
-            f"💎 **USDT TRC-20 Address:** (tap to copy)\n`{Config.USDT_TRC20}`\n\n"
-            "💰 **Crypto Pricing Equivalents:**\n"
-            "• **30 Days:** 1 USDT\n"
-            "• **60 Days:** 1.5 USDT\n"
-            "• **6 Months:** 3 USDT\n"
-            "• **1 Year (Max):** 6 USDT\n\n"
-            "📝 _After sending the transaction, click 'Send Crypto Proof' below or message @AK_ownerbot with your TXID._"
+            f"💎 <b>USDT TRC-20 Address:</b> (tap to copy)\n<code>{Config.USDT_TRC20}</code>\n\n"
+            "💰 <b>Crypto Pricing Equivalents:</b>\n"
+            "• <b>30 Days:</b> 1 USDT\n"
+            "• <b>60 Days:</b> 1.5 USDT\n"
+            "• <b>6 Months:</b> 3 USDT\n"
+            "• <b>1 Year (Max):</b> 6 USDT\n\n"
+            "📝 <i>After sending the transaction, click 'Send Crypto Proof' below or message @AK_ownerbot with your TXID.</i>"
         )
         markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("📸 Send Crypto Proof / TXID", callback_data="proof_start_crypto")],
@@ -483,14 +493,14 @@ async def buy_plan_callback(client: Client, query: CallbackQuery):
         return
 
     text = (
-        f"💎 **AKMOVIEVERSE VIP — {plan['name'].upper()}**\n"
-        f"💰 **Amount to Pay:** `{plan['price']}` ({plan['usd']})\n\n"
-        f"📲 **UPI ID:** (tap to copy)\n"
-        f"`{Config.UPI_ID}`\n\n"
-        f"📝 **Easy Steps to Activate:**\n"
-        f"1. Scan the QR code or pay **{plan['price']}** to `{Config.UPI_ID}`.\n"
+        f"💎 <b>AKMOVIEVERSE VIP — {plan['name'].upper()}</b>\n"
+        f"💰 <b>Amount to Pay:</b> <code>{plan['price']}</code> ({plan['usd']})\n\n"
+        f"📲 <b>UPI ID:</b> (tap to copy)\n"
+        f"<code>{Config.UPI_ID}</code>\n\n"
+        f"📝 <b>Easy Steps to Activate:</b>\n"
+        f"1. Scan the QR code or pay <b>{plan['price']}</b> to <code>{Config.UPI_ID}</code>.\n"
         f"2. Take a screenshot of the successful transaction.\n"
-        f"3. Click **'📸 Send Payment Proof'** below and upload your screenshot.\n"
+        f"3. Click <b>'📸 Send Payment Proof'</b> below and upload your screenshot.\n"
         f"4. Your VIP will be verified & activated within minutes!"
     )
     markup = InlineKeyboardMarkup([
@@ -531,10 +541,10 @@ async def proof_start_callback(client: Client, query: CallbackQuery):
     plan_price = VIP_PLANS.get(plan_key, {}).get("price", "") if plan_key != "crypto" else ""
 
     text = (
-        f"📸 **UPLOAD PAYMENT SCREENSHOT FOR {plan_title.upper()} {plan_price}**\n\n"
-        f"Please send your **payment screenshot** or transaction receipt right here in this chat.\n\n"
-        f"⚠️ **Important:** Ensure the UTR / Ref No / Transaction ID is clearly readable.\n\n"
-        f"_Send /cancel anytime to exit._"
+        f"📸 <b>UPLOAD PAYMENT SCREENSHOT FOR {plan_title.upper()} {plan_price}</b>\n\n"
+        f"Please send your <b>payment screenshot</b> or transaction receipt right here in this chat.\n\n"
+        f"⚠️ <b>Important:</b> Ensure the UTR / Ref No / Transaction ID is clearly readable.\n\n"
+        f"<i>Send /cancel anytime to exit.</i>"
     )
     await query.message.reply_text(text)
     await query.answer("Please send your payment screenshot now!", show_alert=False)
@@ -555,13 +565,13 @@ async def payment_proof_receiver(client: Client, message: Message):
     user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
 
     admin_caption = (
-        "📩 **NEW VIP PAYMENT PROOF RECEIVED!**\n\n"
-        f"👤 **User:** {user_mention} ({user_username})\n"
-        f"🆔 **User ID:** `{user_id}`\n"
-        f"📦 **Selected Plan:** {plan['name']} ({plan['price']})\n"
-        f"⏱️ **Duration to Grant:** `{days} Days`\n"
-        f"📅 **Submitted:** {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
-        "👇 _Click below to approve and automatically activate VIP for this user:_"
+        "📩 <b>NEW VIP PAYMENT PROOF RECEIVED!</b>\n\n"
+        f"👤 <b>User:</b> {user_mention} ({user_username})\n"
+        f"🆔 <b>User ID:</b> <code>{user_id}</code>\n"
+        f"📦 <b>Selected Plan:</b> {plan['name']} ({plan['price']})\n"
+        f"⏱️ <b>Duration to Grant:</b> <code>{days} Days</code>\n"
+        f"📅 <b>Submitted:</b> {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+        "👇 <i>Click below to approve and automatically activate VIP for this user:</i>"
     )
     admin_markup = InlineKeyboardMarkup([
         [
@@ -589,9 +599,9 @@ async def payment_proof_receiver(client: Client, message: Message):
             logger.error(f"Failed to forward proof to {target}: {e}")
 
     await message.reply_text(
-        "✅ **Payment Screenshot Received!**\n\n"
+        "✅ <b>Payment Screenshot Received!</b>\n\n"
         "Your receipt has been submitted to Admin for verification.\n"
-        "⏱️ Verification usually takes **2–5 minutes**.\n"
+        "⏱️ Verification usually takes <b>2–5 minutes</b>.\n"
         "You will receive an automated notification as soon as your VIP is activated!\n\n"
         f"💬 For urgent inquiries, contact {Config.SUPPORT_URL}"
     )
@@ -602,7 +612,7 @@ async def cancel_proof_command(client: Client, message: Message):
     user_id = message.from_user.id
     if user_id in AWAITING_PAYMENT_PROOF:
         AWAITING_PAYMENT_PROOF.pop(user_id, None)
-        await message.reply_text("❌ **Payment proof submission cancelled.**")
+        await message.reply_text("❌ <b>Payment proof submission cancelled.</b>")
         try:
             message.stop_propagation()
         except Exception:
@@ -630,8 +640,8 @@ async def vip_approve_callback(client: Client, query: CallbackQuery):
             await query.message.edit_caption(
                 caption=(
                     f"{query.message.caption}\n\n"
-                    f"✅ **APPROVED by {admin_name}**\n"
-                    f"🎉 `{days} Days` VIP added to user `{target_user_id}`!"
+                    f"✅ <b>APPROVED by {admin_name}</b>\n"
+                    f"🎉 <code>{days} Days</code> VIP added to user <code>{target_user_id}</code>!"
                 ),
                 reply_markup=None
             )
@@ -643,13 +653,13 @@ async def vip_approve_callback(client: Client, query: CallbackQuery):
             await client.send_message(
                 chat_id=target_user_id,
                 text=(
-                    f"🎉 **CONGRATULATIONS! PAYMENT VERIFIED!** 🎉\n\n"
-                    f"Your **AkMovieVerse VIP Premium Membership** has been activated for **{days} Days**!\n\n"
-                    f"🌟 **Your Active Perks:**\n"
-                    f"• 🚫 **100% Ad-Free:** Zero shorteners or waiting time!\n"
-                    f"• ⚡ **Direct PM Files:** Instant file delivery.\n"
-                    f"• 🔓 **Unlimited Daily Downloads:** No limits.\n"
-                    f"• 📦 **SEND ALL Packages:** 1-click batch download.\n\n"
+                    f"🎉 <b>CONGRATULATIONS! PAYMENT VERIFIED!</b> 🎉\n\n"
+                    f"Your <b>AkMovieVerse VIP Premium Membership</b> has been activated for <b>{days} Days</b>!\n\n"
+                    f"🌟 <b>Your Active Perks:</b>\n"
+                    f"• 🚫 <b>100% Ad-Free:</b> Zero shorteners or waiting time!\n"
+                    f"• ⚡ <b>Direct PM Files:</b> Instant file delivery.\n"
+                    f"• 🔓 <b>Unlimited Daily Downloads:</b> No limits.\n"
+                    f"• 📦 <b>SEND ALL Packages:</b> 1-click batch download.\n\n"
                     f"Enjoy your cinema experience! 🍿"
                 )
             )
@@ -672,7 +682,7 @@ async def vip_reject_callback(client: Client, query: CallbackQuery):
         await query.message.edit_caption(
             caption=(
                 f"{query.message.caption}\n\n"
-                f"❌ **REJECTED by {admin_name}**"
+                f"❌ <b>REJECTED by {admin_name}</b>"
             ),
             reply_markup=None
         )
@@ -684,7 +694,7 @@ async def vip_reject_callback(client: Client, query: CallbackQuery):
         await client.send_message(
             chat_id=target_user_id,
             text=(
-                "❌ **Payment Verification Unsuccessful**\n\n"
+                "❌ <b>Payment Verification Unsuccessful</b>\n\n"
                 "Your payment proof could not be verified by Admin.\n"
                 f"If you believe this is an error, please contact Support directly: {Config.SUPPORT_URL}"
             )
@@ -754,17 +764,17 @@ async def share_file_command(client: Client, message: Message):
 
     if not media:
         await message.reply_text(
-            "📦 **Time-Based & One-Time File Link Generator:**\n\n"
-            "**How to use:**\n"
-            "Reply to any file, video, or movie with `/share`:\n"
-            "• `/share onetime` — 1-Person Single-Use link (Burn after reading! 🔥)\n"
-            "• `/share 1h` — Valid for 1 Hour only\n"
-            "• `/share 10m onetime` — Expires in 10 mins OR after 1 user opens it\n"
-            "• `/share 24h 5` — Valid for 24 hours up to 5 users\n\n"
-            "**Examples:**\n"
-            "• Reply with `/share 1h onetime`\n"
-            "• Reply with `/share 24h`\n"
-            "• Reply with `/share onetime`"
+            "📦 <b>Time-Based & One-Time File Link Generator:</b>\n\n"
+            "<b>How to use:</b>\n"
+            "Reply to any file, video, or movie with <code>/share</code>:\n"
+            "• <code>/share onetime</code> — 1-Person Single-Use link (Burn after reading! 🔥)\n"
+            "• <code>/share 1h</code> — Valid for 1 Hour only\n"
+            "• <code>/share 10m onetime</code> — Expires in 10 mins OR after 1 user opens it\n"
+            "• <code>/share 24h 5</code> — Valid for 24 hours up to 5 users\n\n"
+            "<b>Examples:</b>\n"
+            "• Reply with <code>/share 1h onetime</code>\n"
+            "• Reply with <code>/share 24h</code>\n"
+            "• Reply with <code>/share onetime</code>"
         )
         return
 
@@ -812,11 +822,11 @@ async def share_file_command(client: Client, message: Message):
     uses_label = "Single-Use (1 Person Only - Self Destructing 🔥)" if max_uses == 1 else (f"{max_uses} Users" if max_uses else "Unlimited")
 
     await message.reply_text(
-        "🔐 **Secret File Share Link Created!**\n\n"
-        f"📁 **File:** `{file_name}`\n"
-        f"🔗 **Link:** `{secret_url}`\n\n"
-        f"⏱️ **Time Limit:** `{duration_label}`\n"
-        f"👤 **Access Limit:** `{uses_label}`\n\n"
+        "🔐 <b>Secret File Share Link Created!</b>\n\n"
+        f"📁 <b>File:</b> <code>{file_name}</code>\n"
+        f"🔗 <b>Link:</b> <code>{secret_url}</code>\n\n"
+        f"⏱️ <b>Time Limit:</b> <code>{duration_label}</code>\n"
+        f"👤 <b>Access Limit:</b> <code>{uses_label}</code>\n\n"
         "💡 When clicked, the recipient will instantly receive the file, and the link will automatically enforce your time and usage limits!"
     )
 

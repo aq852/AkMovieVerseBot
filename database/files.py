@@ -613,13 +613,13 @@ async def count_files(query: str, quality: str = None, language: str = None, sea
 async def get_file_by_id(file_identifier: str) -> dict | None:
     """Fetch file metadata by Telegram file_unique_id, file_id, or MongoDB _id across all clusters."""
     try:
-        is_obj_id = ObjectId.is_valid(file_identifier)
-        query = {"_id": ObjectId(file_identifier)} if is_obj_id else {
-            "$or": [
-                {"file_unique_id": file_identifier},
-                {"file_id": file_identifier}
-            ]
-        }
+        conditions = [
+            {"file_unique_id": file_identifier},
+            {"file_id": file_identifier}
+        ]
+        if ObjectId.is_valid(file_identifier):
+            conditions.append({"_id": ObjectId(file_identifier)})
+        query = {"$or": conditions}
 
         doc = await mongo.files.find_one(query)
         if doc:

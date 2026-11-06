@@ -56,13 +56,13 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
                     docs = await cursor.to_list(length=None)
                     count = len(docs)
                     total_docs += count
-                    stats_lines.append(f"• `{coll_name}`: **{count}** records")
+                    stats_lines.append(f"• <code>{coll_name}</code>: <b>{count}</b> records")
 
                     json_data = json_util.dumps(docs, indent=2)
                     zf.writestr(f"{coll_name}.json", json_data)
                 except Exception as coll_err:
                     logger.error(f"Error backing up collection {coll_name}: {coll_err}")
-                    stats_lines.append(f"• `{coll_name}`: ⚠️ Error ({coll_err})")
+                    stats_lines.append(f"• <code>{coll_name}</code>: ⚠️ Error ({coll_err})")
 
             # Backup secondary cluster files if connected
             if mongo.has_secondary:
@@ -70,7 +70,7 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
                     sec_docs = await mongo.files_secondary.find({}).to_list(length=None)
                     sec_count = len(sec_docs)
                     total_docs += sec_count
-                    stats_lines.append(f"• `{Config.COLLECTION_NAME}_secondary`: **{sec_count}** records")
+                    stats_lines.append(f"• <code>{Config.COLLECTION_NAME}_secondary</code>: <b>{sec_count}</b> records")
                     json_data2 = json_util.dumps(sec_docs, indent=2)
                     zf.writestr(f"{Config.COLLECTION_NAME}_secondary.json", json_data2)
                 except Exception as sec_err:
@@ -130,37 +130,37 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
 async def backup_database(client: Client, message: Message):
     """Admin command: Dump MongoDB collections to a compressed ZIP and send to Admin & Log Channel."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Only bot administrators can execute database backups.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Only bot administrators can execute database backups.")
 
-    status_msg = await message.reply_text("⏳ **Generating Database Backup...**\n_Reading MongoDB collections and serializing documents..._")
+    status_msg = await message.reply_text("⏳ <b>Generating Database Backup...</b>\n<i>Reading MongoDB collections and serializing documents...</i>")
     success, result_str = await generate_and_send_backup(client, message.chat.id, reason="Manual Admin Request (/backup)")
     if success:
         await status_msg.delete()
     else:
-        await status_msg.edit_text(f"❌ **Backup Failed**: `{result_str}`")
+        await status_msg.edit_text(f"❌ <b>Backup Failed</b>: <code>{result_str}</code>")
 
 
 @Client.on_message(filters.command(["restore", "dbrestore"]) & filters.private)
 async def restore_database(client: Client, message: Message):
     """Admin command: Reply to a backup ZIP document to restore collections to MongoDB via upsert."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Only bot administrators can restore database backups.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Only bot administrators can restore database backups.")
 
     reply = message.reply_to_message
     if not reply or not reply.document:
-        return await message.reply_text("ℹ️ **Usage**: Reply to an `autofilterbot_backup_*.zip` document with `/restore`.")
+        return await message.reply_text("ℹ️ <b>Usage</b>: Reply to an <code>autofilterbot_backup_*.zip</code> document with <code>/restore</code>.")
 
     if not reply.document.file_name.endswith(".zip"):
-        return await message.reply_text("⚠️ **Invalid File**: The replied document must be a `.zip` backup archive.")
+        return await message.reply_text("⚠️ <b>Invalid File</b>: The replied document must be a <code>.zip</code> backup archive.")
 
-    status_msg = await message.reply_text("⏳ **Downloading & Inspecting Backup Archive...**")
+    status_msg = await message.reply_text("⏳ <b>Downloading &amp; Inspecting Backup Archive...</b>")
     temp_dir = os.path.join(os.getcwd(), "temp_restore")
     os.makedirs(temp_dir, exist_ok=True)
     temp_zip = os.path.join(temp_dir, reply.document.file_name)
 
     try:
         await reply.download(file_name=temp_zip)
-        await status_msg.edit_text("⏳ **Extracting and restoring records to MongoDB...**\n_Using idempotent upserts to prevent duplicate errors..._")
+        await status_msg.edit_text("⏳ <b>Extracting and restoring records to MongoDB...</b>\n<i>Using idempotent upserts to prevent duplicate errors...</i>")
 
         restored_stats = []
         total_restored = 0
@@ -188,18 +188,18 @@ async def restore_database(client: Client, message: Message):
                         coll_count += 1
 
                 total_restored += coll_count
-                restored_stats.append(f"• `{coll_name}`: **{coll_count}** upserted")
+                restored_stats.append(f"• <code>{coll_name}</code>: <b>{coll_count}</b> upserted")
 
         await status_msg.edit_text(
-            f"✅ **Database Restoration Successful!**\n\n"
-            f"📊 **Collections Restored**: `{len(restored_stats)}`\n"
-            f"📄 **Total Documents Processed**: `{total_restored:,}`\n\n"
-            f"__Details:__\n" + "\n".join(restored_stats)
+            f"✅ <b>Database Restoration Successful!</b>\n\n"
+            f"📊 <b>Collections Restored</b>: <code>{len(restored_stats)}</code>\n"
+            f"📄 <b>Total Documents Processed</b>: <code>{total_restored:,}</code>\n\n"
+            f"<b>Details:</b>\n" + "\n".join(restored_stats)
         )
 
     except Exception as e:
         logger.error(f"Error restoring backup: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ **Restoration Failed**: `{e}`")
+        await status_msg.edit_text(f"❌ <b>Restoration Failed</b>: <code>{e}</code>")
     finally:
         if os.path.exists(temp_zip):
             try:
@@ -214,15 +214,15 @@ async def clone_channel_files(client: Client, message: Message):
     Copies messages from source storage channel to a backup channel and updates/links them.
     """
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     args = message.text.split()
     if len(args) < 3:
         return await message.reply_text(
-            "ℹ️ **Channel Cloner Usage**:\n"
-            "`/clonechannel <source_channel_id> <target_channel_id> [limit]`\n\n"
+            "ℹ️ <b>Channel Cloner Usage</b>:\n"
+            "<code>/clonechannel &lt;source_channel_id&gt; &lt;target_channel_id&gt; [limit]</code>\n\n"
             "Example:\n"
-            "`/clonechannel -1002001671856 -1009876543210 500`\n\n"
+            "<code>/clonechannel -1002001671856 -1009876543210 500</code>\n\n"
             "⚠️ Both channels must have the bot added as an administrator with posting rights."
         )
 
@@ -233,7 +233,7 @@ async def clone_channel_files(client: Client, message: Message):
     except ValueError:
         return await message.reply_text("❌ Channel IDs and limit must be valid integers.")
 
-    status_msg = await message.reply_text(f"⏳ **Starting channel clone from `{source_id}` to `{target_id}` (Limit: {limit})...**")
+    status_msg = await message.reply_text(f"⏳ <b>Starting channel clone from <code>{source_id}</code> to <code>{target_id}</code> (Limit: {limit})...</b>")
 
     copied_count = 0
     failed_count = 0
@@ -257,15 +257,15 @@ async def clone_channel_files(client: Client, message: Message):
                 logger.debug(f"Failed to clone msg {msg_id}: {copy_err}")
 
         await status_msg.edit_text(
-            f"✅ **Channel Cloning Complete!**\n\n"
-            f"📤 **Source Channel**: `{source_id}`\n"
-            f"📥 **Target Channel**: `{target_id}`\n"
-            f"✔️ **Successfully Copied**: `{copied_count}`\n"
-            f"⚠️ **Failed / Skipped**: `{failed_count}`"
+            f"✅ <b>Channel Cloning Complete!</b>\n\n"
+            f"📤 <b>Source Channel</b>: <code>{source_id}</code>\n"
+            f"📥 <b>Target Channel</b>: <code>{target_id}</code>\n"
+            f"✔️ <b>Successfully Copied</b>: <code>{copied_count}</code>\n"
+            f"⚠️ <b>Failed / Skipped</b>: <code>{failed_count}</code>"
         )
     except Exception as e:
         logger.error(f"Clone channel error: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ **Cloning Failed**: `{e}`")
+        await status_msg.edit_text(f"❌ <b>Cloning Failed</b>: <code>{e}</code>")
 
 
 # ==============================================================================
@@ -312,10 +312,10 @@ async def start_weekly_backup_scheduler(client: Client):
                                 docs = await coll.find({}).to_list(length=None)
                                 count = len(docs)
                                 total_docs += count
-                                stats_lines.append(f"• `{coll_name}`: **{count}**")
+                                stats_lines.append(f"• <code>{coll_name}</code>: <b>{count}</b>")
                                 zf.writestr(f"{coll_name}.json", json_util.dumps(docs, indent=2))
                             except Exception as c_err:
-                                stats_lines.append(f"• `{coll_name}`: ⚠️ {c_err}")
+                                stats_lines.append(f"• <code>{coll_name}</code>: ⚠️ {c_err}")
 
                     readable_size = get_readable_size(os.path.getsize(zip_path))
                     caption = (
@@ -361,7 +361,7 @@ async def start_weekly_backup_scheduler(client: Client):
 async def toggle_auto_backup_command(client: Client, message: Message):
     """Admin command: /autobackup [on|off] - Toggle automated Sunday database backup."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     from database.mongo import get_bot_setting, set_bot_setting
     args = message.text.split()
@@ -369,23 +369,23 @@ async def toggle_auto_backup_command(client: Client, message: Message):
         arg = args[1].lower()
         if arg == "on":
             await set_bot_setting("auto_backup_enabled", True)
-            return await message.reply_text("✅ **Automated Weekly Backup Enabled!**\nA full DB backup will be dispatched every Sunday at 23:00 IST.")
+            return await message.reply_text("✅ <b>Automated Weekly Backup Enabled!</b>\nA full DB backup will be dispatched every Sunday at 23:00 IST.")
         elif arg == "off":
             await set_bot_setting("auto_backup_enabled", False)
-            return await message.reply_text("⏸️ **Automated Weekly Backup Disabled.**")
+            return await message.reply_text("⏸️ <b>Automated Weekly Backup Disabled.</b>")
 
     enabled = await get_bot_setting("auto_backup_enabled", True)
     last_sent = await get_bot_setting("last_auto_backup_date", "None")
-    status_str = "🟢 **ENABLED**" if enabled else "🔴 **DISABLED**"
+    status_str = "🟢 <b>ENABLED</b>" if enabled else "🔴 <b>DISABLED</b>"
 
     await message.reply_text(
-        f"🛡️ **Automated Weekly Backup Status**\n\n"
-        f"• **Status:** {status_str}\n"
-        f"• **Schedule:** Every Sunday at 23:00 IST (11:00 PM)\n"
-        f"• **Last Backup Date:** `{last_sent}`\n"
-        f"• **Destination:** Log Channel & Admin PMs\n\n"
-        "**Commands:**\n"
-        "• `/autobackup on` — Enable weekly backups\n"
-        "• `/autobackup off` — Disable weekly backups\n"
-        "• `/backup` — Trigger manual backup immediately"
+        f"🛡️ <b>Automated Weekly Backup Status</b>\n\n"
+        f"• <b>Status:</b> {status_str}\n"
+        f"• <b>Schedule:</b> Every Sunday at 23:00 IST (11:00 PM)\n"
+        f"• <b>Last Backup Date:</b> <code>{last_sent}</code>\n"
+        f"• <b>Destination:</b> Log Channel &amp; Admin PMs\n\n"
+        "<b>Commands:</b>\n"
+        "• <code>/autobackup on</code> — Enable weekly backups\n"
+        "• <code>/autobackup off</code> — Disable weekly backups\n"
+        "• <code>/backup</code> — Trigger manual backup immediately"
     )

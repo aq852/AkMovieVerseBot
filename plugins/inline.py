@@ -35,7 +35,7 @@ async def inline_search_handler(client: Client, query: InlineQuery):
                 title="🔍 Search in Auto Filter Bot",
                 description="Type any movie or series name to search indexed files...",
                 input_message_content=InputTextMessageContent(
-                    "👉 **Type any movie, show, or document title to search our library!**"
+                    "👉 <b>Type any movie, show, or document title to search our library!</b>"
                 )
             )
         ]
@@ -59,9 +59,9 @@ async def inline_search_handler(client: Client, query: InlineQuery):
         ])
 
         message_content = InputTextMessageContent(
-            f"🎬 **Title:** `{title}`\n"
-            f"📁 **Type:** `{file_type}` | **Size:** `{size_str}`\n\n"
-            f"👉 _Click the button below to retrieve this file in bot PM:_"
+            f"🎬 <b>Title:</b> <code>{title}</code>\n"
+            f"📁 <b>Type:</b> <code>{file_type}</code> | <b>Size:</b> <code>{size_str}</code>\n\n"
+            f"👉 <i>Click the button below to retrieve this file in bot PM:</i>"
         )
 
         results.append(
@@ -79,7 +79,7 @@ async def inline_search_handler(client: Client, query: InlineQuery):
                 title="⚠️ No files found",
                 description=f"No results found for '{clean_q}'. Try a different keyword.",
                 input_message_content=InputTextMessageContent(
-                    f"⚠️ No files found matching: `{clean_q}`"
+                    f"⚠️ No files found matching: <code>{clean_q}</code>"
                 )
             )
         ]

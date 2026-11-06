@@ -39,7 +39,7 @@ async def is_admin_or_owner(client: Client, message: Message) -> bool:
 async def add_filter_command(client: Client, message: Message):
     """Add a custom keyword filter with text or replied media."""
     if not await is_admin_or_owner(client, message):
-        await message.reply_text("⛔ **Only group administrators can add custom filters!**")
+        await message.reply_text("⛔ <b>Only group administrators can add custom filters!</b>")
         return
 
     chat_id = message.chat.id
@@ -52,7 +52,7 @@ async def add_filter_command(client: Client, message: Message):
 
     if reply:
         if len(args) < 2:
-            await message.reply_text("⚠️ **Usage:** Reply to any message/media with `/filter [keyword]`")
+            await message.reply_text("⚠️ <b>Usage:</b> Reply to any message/media with <code>/filter [keyword]</code>")
             return
         keyword = args[1].lower().strip()
         reply_text = reply.caption or reply.text or f"Here is your file for {keyword}"
@@ -62,9 +62,9 @@ async def add_filter_command(client: Client, message: Message):
     else:
         if len(args) < 3:
             await message.reply_text(
-                "⚠️ **Usage:**\n"
-                "• `/filter [keyword] [reply_text]`\n"
-                "• Or reply to any media/message with `/filter [keyword]`"
+                "⚠️ <b>Usage:</b>\n"
+                "• <code>/filter [keyword] [reply_text]</code>\n"
+                "• Or reply to any media/message with <code>/filter [keyword]</code>"
             )
             return
         keyword = args[1].lower().strip()
@@ -77,10 +77,10 @@ async def add_filter_command(client: Client, message: Message):
     success = await add_manual_filter(chat_id, keyword, reply_text, file_id)
     if success:
         await message.reply_text(
-            f"✅ **Filter Added Successfully!**\n\n"
-            f"• **Keyword:** `{keyword}`\n"
-            f"• **Type:** `{'Media File 📁' if file_id else 'Text Message 📝'}`\n\n"
-            f"Whenever someone types `{keyword}`, the bot will automatically reply with this response!"
+            f"✅ <b>Filter Added Successfully!</b>\n\n"
+            f"• <b>Keyword:</b> <code>{keyword}</code>\n"
+            f"• <b>Type:</b> <code>{'Media File 📁' if file_id else 'Text Message 📝'}</code>\n\n"
+            f"Whenever someone types <code>{keyword}</code>, the bot will automatically reply with this response!"
         )
     else:
         await message.reply_text("❌ Failed to save filter to database.")
@@ -95,17 +95,17 @@ async def list_filters_command(client: Client, message: Message):
 
     if not filters_list:
         await message.reply_text(
-            "ℹ️ **No manual filters configured for this chat!**\n\n"
+            "ℹ️ <b>No manual filters configured for this chat!</b>\n\n"
             "To add a filter, send:\n"
-            "`/filter [keyword] [reply text]` or reply to any file with `/filter [keyword]`"
+            "<code>/filter [keyword] [reply text]</code> or reply to any file with <code>/filter [keyword]</code>"
         )
         return
 
-    lines = [f"📋 **Active Custom Filters in this Chat ({len(filters_list)} Total):**\n"]
+    lines = [f"📋 <b>Active Custom Filters in this Chat ({len(filters_list)} Total):</b>\n"]
     for i, kw in enumerate(filters_list, 1):
-        lines.append(f"{i}. `{kw}`")
+        lines.append(f"{i}. <code>{kw}</code>")
 
-    lines.append("\n💡 **Manage:**\n• `/stop [keyword]` — Delete a filter\n• `/stopall` — Clear all filters")
+    lines.append("\n💡 <b>Manage:</b>\n• <code>/stop [keyword]</code> — Delete a filter\n• <code>/stopall</code> — Clear all filters")
     await message.reply_text("\n".join(lines))
 
 
@@ -114,21 +114,21 @@ async def list_filters_command(client: Client, message: Message):
 async def stop_filter_command(client: Client, message: Message):
     """Delete a specific manual keyword filter."""
     if not await is_admin_or_owner(client, message):
-        await message.reply_text("⛔ **Only group administrators can remove filters!**")
+        await message.reply_text("⛔ <b>Only group administrators can remove filters!</b>")
         return
 
     chat_id = message.chat.id
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.reply_text("⚠️ **Usage:** `/stop [keyword]`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/stop [keyword]</code>")
         return
 
     keyword = args[1].lower().strip()
     success = await delete_manual_filter(chat_id, keyword)
     if success:
-        await message.reply_text(f"✅ Filter for `{keyword}` has been deleted.")
+        await message.reply_text(f"✅ Filter for <code>{keyword}</code> has been deleted.")
     else:
-        await message.reply_text(f"❌ Filter `{keyword}` not found in this chat.")
+        await message.reply_text(f"❌ Filter <code>{keyword}</code> not found in this chat.")
 
 
 # 4. /stopall (Clear all filters in this chat)
@@ -136,9 +136,9 @@ async def stop_filter_command(client: Client, message: Message):
 async def stop_all_filters_command(client: Client, message: Message):
     """Purge all manual keyword filters in this chat."""
     if not await is_admin_or_owner(client, message):
-        await message.reply_text("⛔ **Only group administrators can clear all filters!**")
+        await message.reply_text("⛔ <b>Only group administrators can clear all filters!</b>")
         return
 
     chat_id = message.chat.id
     deleted_count = await delete_all_manual_filters(chat_id)
-    await message.reply_text(f"💥 **Cleared `{deleted_count}` custom filters from this chat!**")
+    await message.reply_text(f"💥 <b>Cleared <code>{deleted_count}</code> custom filters from this chat!</b>")

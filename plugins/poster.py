@@ -183,28 +183,28 @@ async def poster_studio_command(client: Client, message: Message):
 
     if not query:
         await message.reply_text(
-            "🎨 **Poster & Leech Studio**\n\n"
+            "🎨 <b>Poster &amp; Leech Studio</b>\n\n"
             "Generate stunning studio posters with official logos, liquid glass badges, and multiple artworks!\n\n"
-            "**Usage:**\n"
-            "• `/poster [Movie, Anime or Series Name]`\n"
-            "• `/poster [OTT or IMDb URL]`\n"
-            "• Reply to any message or file with `/poster`\n\n"
-            "**Examples:**\n"
-            "• `/poster Avengers Doomsday`\n"
-            "• `/poster Inception`\n"
-            "• `/poster Solo Leveling`\n\n"
-            "💡 Use `/styles` to preview all styles!"
+            "<b>Usage:</b>\n"
+            "• <code>/poster [Movie, Anime or Series Name]</code>\n"
+            "• <code>/poster [OTT or IMDb URL]</code>\n"
+            "• Reply to any message or file with <code>/poster</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/poster Avengers Doomsday</code>\n"
+            "• <code>/poster Inception</code>\n"
+            "• <code>/poster Solo Leveling</code>\n\n"
+            "💡 Use <code>/styles</code> to preview all styles!"
         )
         return
 
-    status_msg = await message.reply_text(f"🎨 **Designing Poster Studio canvas for:** `{query[:40]}`...")
+    status_msg = await message.reply_text(f"🎨 <b>Designing Poster Studio canvas for:</b> <code>{query[:40]}</code>...")
 
     try:
         media_data, detected_platform = await resolve_media_metadata(query)
         if not media_data:
             await status_msg.edit_text(
-                f"❌ **Content Not Found.**\n\n"
-                f"Could not retrieve media metadata for: `{query}`.\n"
+                f"❌ <b>Content Not Found.</b>\n\n"
+                f"Could not retrieve media metadata for: <code>{query}</code>.\n"
                 f"Please check the spelling or send a direct OTT/IMDb link."
             )
             return
@@ -265,7 +265,7 @@ async def poster_studio_command(client: Client, message: Message):
 
     except Exception as e:
         logger.error(f"Error in poster studio: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ **Error generating poster:** `{e}`")
+        await status_msg.edit_text(f"❌ <b>Error generating poster:</b> <code>{e}</code>")
 
 
 # ======================================================================
@@ -402,7 +402,7 @@ async def send_posters_album_callback(client: Client, query: CallbackQuery):
     except Exception as e:
         logger.error(f"Error sending posters album: {e}")
         try:
-            await query.message.reply_text(f"❌ **Failed to send album:** `{e}`")
+            await query.message.reply_text(f"❌ <b>Failed to send album:</b> <code>{e}</code>")
         except Exception:
             pass
 
@@ -450,7 +450,7 @@ async def send_backdrops_album_callback(client: Client, query: CallbackQuery):
     except Exception as e:
         logger.error(f"Error sending backdrops album: {e}")
         try:
-            await query.message.reply_text(f"❌ **Failed to send album:** `{e}`")
+            await query.message.reply_text(f"❌ <b>Failed to send album:</b> <code>{e}</code>")
         except Exception:
             pass
 
@@ -484,7 +484,7 @@ async def send_uncompressed_callback(client: Client, query: CallbackQuery):
 
     await query.message.reply_document(
         document=canvas_io,
-        caption=f"📁 **Full HD Uncompressed File**\n🎨 Template: `{STYLE_NAMES.get(session['current_style'])}`"
+        caption=f"📁 <b>Full HD Uncompressed File</b>\n🎨 Template: <code>{STYLE_NAMES.get(session['current_style'])}</code>"
     )
 
 
@@ -515,9 +515,9 @@ async def upload_imgbb_callback(client: Client, query: CallbackQuery):
     img_url = await upload_to_imgbb(canvas_io)
     if img_url:
         await query.message.reply_text(
-            f"🌐 **ImgBB Direct CDN Image Link:**\n\n"
-            f"🔗 `{img_url}`\n\n"
-            f"💡 _You can use this direct link anywhere on websites or web players!_",
+            f"🌐 <b>ImgBB Direct CDN Image Link:</b>\n\n"
+            f"🔗 <code>{img_url}</code>\n\n"
+            f"💡 <i>You can use this direct link anywhere on websites or web players!</i>",
             disable_web_page_preview=False
         )
     else:
@@ -547,7 +547,7 @@ async def post_to_channel_callback(client: Client, query: CallbackQuery):
     if not target_channel:
         try:
             await query.answer(
-                "⚠️ No channel configured!\n\nUse `/set_poster_channel [channel_id]` to connect your channel first.",
+                "⚠️ No channel configured!\n\nUse /set_poster_channel [channel_id] to connect your channel first.",
                 show_alert=True
             )
         except Exception:
@@ -590,14 +590,14 @@ async def post_to_channel_callback(client: Client, query: CallbackQuery):
             reply_markup=channel_markup
         )
         await query.message.reply_text(
-            f"✅ **Successfully Published to Channel!**\n\n"
-            f"📢 **Channel:** `{target_channel}`\n"
-            f"🔗 **Message ID:** `{sent.id}`"
+            f"✅ <b>Successfully Published to Channel!</b>\n\n"
+            f"📢 <b>Channel:</b> <code>{target_channel}</code>\n"
+            f"🔗 <b>Message ID:</b> <code>{sent.id}</code>"
         )
     except Exception as e:
         logger.error(f"Failed to publish poster to channel {target_channel}: {e}")
         try:
-            await query.message.reply_text(f"❌ **Failed to publish to channel:** `{e}`\n\n_Make sure the bot is an admin in the channel with Post Messages permission!_")
+            await query.message.reply_text(f"❌ <b>Failed to publish to channel:</b> <code>{e}</code>\n\n<i>Make sure the bot is an admin in the channel with Post Messages permission!</i>")
         except Exception:
             pass
 
@@ -614,9 +614,9 @@ async def set_poster_brand_command(client: Client, message: Message):
     if len(args) < 2:
         current = await get_poster_brand(user_id)
         await message.reply_text(
-            f"🏷️ **Current Poster Branding:** `{current}`\n\n"
-            f"**Usage:** `/set_poster_brand [brand_name]`\n"
-            f"**Example:** `/set_poster_brand AkMoviesZone`\n\n"
+            f"🏷️ <b>Current Poster Branding:</b> <code>{current}</code>\n\n"
+            f"<b>Usage:</b> <code>/set_poster_brand [brand_name]</code>\n"
+            f"<b>Example:</b> <code>/set_poster_brand AkMoviesZone</code>\n\n"
             f"💡 When set, all your generated posters will feature this watermark at the top-right!"
         )
         return
@@ -625,8 +625,8 @@ async def set_poster_brand_command(client: Client, message: Message):
     success = await set_poster_brand(user_id, new_brand)
     if success:
         await message.reply_text(
-            f"✅ **Poster Branding Updated!**\n\n"
-            f"🏷️ **New Watermark:** `{new_brand}`\n"
+            f"✅ <b>Poster Branding Updated!</b>\n\n"
+            f"🏷️ <b>New Watermark:</b> <code>{new_brand}</code>\n"
             f"All future posters generated will render this brand badge."
         )
     else:
@@ -641,12 +641,12 @@ async def set_poster_channel_command(client: Client, message: Message):
 
     if len(args) < 2:
         current = await get_poster_channel(user_id)
-        current_str = f"`{current}`" if current else "`None (Not set)`"
+        current_str = f"<code>{current}</code>" if current else "<code>None (Not set)</code>"
         await message.reply_text(
-            f"📢 **Current Poster Publish Channel:** {current_str}\n\n"
-            f"**Usage:** `/set_poster_channel [channel_id]`\n"
-            f"**Example:** `/set_poster_channel -1002001671856`\n\n"
-            f"💡 Once set, clicking `📣 Post to Channel` on any poster will broadcast it immediately!"
+            f"📢 <b>Current Poster Publish Channel:</b> {current_str}\n\n"
+            f"<b>Usage:</b> <code>/set_poster_channel [channel_id]</code>\n"
+            f"<b>Example:</b> <code>/set_poster_channel -1002001671856</code>\n\n"
+            f"💡 Once set, clicking 📣 Post to Channel on any poster will broadcast it immediately!"
         )
         return
 
@@ -655,37 +655,37 @@ async def set_poster_channel_command(client: Client, message: Message):
         success = await set_poster_channel(user_id, ch_id)
         if success:
             await message.reply_text(
-                f"✅ **Publish Channel Configured!**\n\n"
-                f"📢 **Channel ID:** `{ch_id}`\n"
-                f"Make sure this bot is added as an **Admin** in the channel with 'Post Messages' permission."
+                f"✅ <b>Publish Channel Configured!</b>\n\n"
+                f"📢 <b>Channel ID:</b> <code>{ch_id}</code>\n"
+                f"Make sure this bot is added as an <b>Admin</b> in the channel with 'Post Messages' permission."
             )
         else:
             await message.reply_text("❌ Failed to save channel ID in database.")
     except ValueError:
-        await message.reply_text("⚠️ Invalid channel ID! It should be a number (e.g. `-1002001671856`).")
+        await message.reply_text("⚠️ Invalid channel ID! It should be a number (e.g. <code>-1002001671856</code>).")
 
 
 @Client.on_message(filters.command(["styles", "posterstyles"]))
 async def list_styles_command(client: Client, message: Message):
     """Display all 7 available Spatial & Clean poster styles and descriptions."""
     text = (
-        "🎨 **Poster Studio — 7 Clean & Spatial Styles:**\n\n"
-        "1. 📱 **Spatial Leech Poster (Portrait 2:3 - 1000×1500):**\n"
-        "   Clean textless artwork, official transparent title logo, liquid glass pill badge, 4K UHD tag. Ideal for **Leech bots, torrent releases, and movie files**!\n\n"
-        "2. 🌄 **Spatial Cinema Banner (Landscape 16:9 - 1920×1080):**\n"
-        "   Full 16:9 widescreen backdrop, official title logo, liquid glass pill badge. Ideal for **channel header posts & web players**!\n\n"
-        "3. 🖤 **Minimalist Letterbox (16:9):**\n"
+        "🎨 <b>Poster Studio — 7 Clean &amp; Spatial Styles:</b>\n\n"
+        "1. 📱 <b>Spatial Leech Poster (Portrait 2:3 - 1000×1500):</b>\n"
+        "   Clean textless artwork, official transparent title logo, liquid glass pill badge, 4K UHD tag. Ideal for <b>Leech bots, torrent releases, and movie files</b>!\n\n"
+        "2. 🌄 <b>Spatial Cinema Banner (Landscape 16:9 - 1920×1080):</b>\n"
+        "   Full 16:9 widescreen backdrop, official title logo, liquid glass pill badge. Ideal for <b>channel header posts &amp; web players</b>!\n\n"
+        "3. 🖤 <b>Minimalist Letterbox (16:9):</b>\n"
         "   Centered cinema typography layout with movie title and release year.\n\n"
-        "4. 💎 **Frosted Glass Floating Card (16:9):**\n"
+        "4. 💎 <b>Frosted Glass Floating Card (16:9):</b>\n"
         "   Ambient blurred background with floating vertical portrait card and metadata pill.\n\n"
-        "5. ⭐ **Multi-Ratings Studio Card (Portrait 2:3):**\n"
+        "5. ⭐ <b>Multi-Ratings Studio Card (Portrait 2:3):</b>\n"
         "   Clean vertical poster with official logo and multi-source ratings pill.\n\n"
-        "6. 🌸 **Anime Studio Edition (16:9):**\n"
+        "6. 🌸 <b>Anime Studio Edition (16:9):</b>\n"
         "   Japanese romaji/native subtitle + English title + studio tag.\n\n"
-        "7. 🖼️ **Pure Clean Artwork:**\n"
+        "7. 🖼️ <b>Pure Clean Artwork:</b>\n"
         "   Untouched high-res original backdrop artwork with subtle branding watermark only.\n\n"
-        "💡 **Generate any poster using:** `/poster [Movie / Anime / Series]`\n"
-        "Then use **`⏪ Prev Style` | `Next Style ⏩`** and **`◀️ Prev Art` | `Next Art ▶️`** to explore!"
+        "💡 <b>Generate any poster using:</b> <code>/poster [Movie / Anime / Series]</code>\n"
+        "Then use <b>⏪ Prev Style | Next Style ⏩</b> and <b>◀️ Prev Art | Next Art ▶️</b> to explore!"
     )
     await message.reply_text(text)
 

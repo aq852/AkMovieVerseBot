@@ -204,11 +204,11 @@ async def group_auto_filter_handler(client: Client, message: Message):
                 try:
                     await client.send_message(
                         Config.LOG_CHANNEL,
-                        f"🔍 **#MovieDemand (0 Results Found)**\n\n"
-                        f"• **Query:** `{clean_q}`\n"
-                        f"• **Requested By:** {u_mention} (`{u_id}`)\n"
-                        f"• **Chat:** `{c_name}`\n"
-                        f"💡 _Tip: Upload this movie to storage channel to satisfy demand!_"
+                        f"🔍 <b>#MovieDemand (0 Results Found)</b>\n\n"
+                        f"• <b>Query:</b> <code>{clean_q}</code>\n"
+                        f"• <b>Requested By:</b> {u_mention} (<code>{u_id}</code>)\n"
+                        f"• <b>Chat:</b> <code>{c_name}</code>\n"
+                        f"💡 <i>Tip: Upload this movie to storage channel to satisfy demand!</i>"
                     )
                 except Exception as ex:
                     logger.debug(f"Failed to send movie demand log: {ex}")
@@ -296,8 +296,18 @@ async def group_auto_filter_handler(client: Client, message: Message):
         if match:
             suggested_title = match[0].strip()
             disp_title = suggested_title if len(suggested_title) <= 32 else f"{suggested_title[:29]}..."
+            clean_sug = re.sub(r"[^\w\s]", " ", suggested_title).strip()
+            cb_words = []
+            curr_len = 0
+            for w in clean_sug.split():
+                if curr_len + len(w) + 1 <= 50:
+                    cb_words.append(w)
+                    curr_len += len(w) + 1
+                else:
+                    break
+            cb_query = " ".join(cb_words) if cb_words else clean_sug[:50]
             buttons = [
-                [InlineKeyboardButton(f"🔍 Search '{disp_title}'", callback_data=f"spell_{suggested_title[:25]}")],
+                [InlineKeyboardButton(f"🔍 Search '{disp_title}'", callback_data=f"spell_{cb_query}")],
                 [InlineKeyboardButton("🔔 Notify Me When Uploaded", callback_data=f"notifme_{clean_q[:25]}")],
                 [InlineKeyboardButton("🌐 Stream Online in HD ↗️", url=online_stream_url)],
                 [InlineKeyboardButton("💬 Request Movie", callback_data=f"reqmovie_{clean_q[:25]}")]

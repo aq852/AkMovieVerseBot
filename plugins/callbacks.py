@@ -345,7 +345,18 @@ async def spell_check_callback(client: Client, query: CallbackQuery):
     total_files = await count_files(suggested_q)
 
     if total_files == 0:
-        await query.answer("Files still not found for this suggestion.", show_alert=True)
+        tokens = suggested_q.split()
+        while len(tokens) > 1 and total_files == 0:
+            tokens.pop()
+            fallback_q = " ".join(tokens)
+            cnt = await count_files(fallback_q)
+            if cnt > 0:
+                suggested_q = fallback_q
+                total_files = cnt
+                break
+
+    if total_files == 0:
+        await query.answer("⚠️ Files not found for this suggestion.", show_alert=True)
         return
 
     results = await get_search_results(suggested_q, offset=0, limit=10)
@@ -535,8 +546,8 @@ async def alt_stream_callback(client: Client, query: CallbackQuery):
 
     buttons = []
     text_lines = [
-        f"🍿 **Available Releases & Versions for:** `{search_q}`\n",
-        f"👇 _Select which version you want to stream:_\n"
+        f"🍿 <b>Available Releases & Versions for:</b> <code>{search_q}</code>\n",
+        f"👇 <i>Select which version you want to stream:</i>\n"
     ]
 
     for i, item in enumerate(candidates[:5], 1):

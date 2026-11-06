@@ -82,8 +82,8 @@ async def request_movie_command(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.reply_text(
-            "⚠️ **Usage:** `/request [movie or series name]`\n\n"
-            "**Example:** `/request Inception 2010`"
+            "⚠️ <b>Usage:</b> <code>/request [movie or series name]</code>\n\n"
+            "<b>Example:</b> <code>/request Inception 2010</code>"
         )
         return
 
@@ -169,8 +169,8 @@ async def request_movie_callback(client: Client, query: CallbackQuery):
     await query.answer("✅ Request submitted! You will be notified when uploaded.", show_alert=True)
     try:
         await query.message.reply_text(
-            f"✅ **Request Registered!**\n"
-            f"Your request for `{movie_query}` (#{req_id}) has been forwarded to Admins."
+            f"✅ <b>Request Registered!</b>\n"
+            f"Your request for <code>{movie_query}</code> (#{req_id}) has been forwarded to Admins."
         )
     except Exception:
         pass
@@ -197,9 +197,9 @@ async def approve_request_callback(client: Client, query: CallbackQuery):
     updated_caption = (
         f"{query.message.text or query.message.caption}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"✅ **STATUS: UPLOADED TO DATABASE**\n"
-        f"👤 **Resolved By:** {admin_name}\n"
-        f"🔔 **User notified automatically in PM!**"
+        f"✅ <b>STATUS: UPLOADED TO DATABASE</b>\n"
+        f"👤 <b>Resolved By:</b> {admin_name}\n"
+        f"🔔 <b>User notified automatically in PM!</b>"
     )
     try:
         await query.message.edit_text(updated_caption, reply_markup=None)
@@ -221,8 +221,8 @@ async def approve_request_callback(client: Client, query: CallbackQuery):
         await client.send_message(
             chat_id=target_user_id,
             text=(
-                "🎉 **GREAT NEWS! YOUR REQUEST IS READY!** 🎉\n\n"
-                f"🎬 **Title:** `{movie_name}`\n\n"
+                "🎉 <b>GREAT NEWS! YOUR REQUEST IS READY!</b> 🎉\n\n"
+                f"🎬 <b>Title:</b> <code>{movie_name}</code>\n\n"
                 "Your requested movie/series has been added to our database!\n"
                 "👇 Click the button below to download your file instantly:"
             ),
@@ -252,8 +252,8 @@ async def reject_request_callback(client: Client, query: CallbackQuery):
     updated_caption = (
         f"{query.message.text or query.message.caption}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"❌ **STATUS: REJECTED / UNAVAILABLE**\n"
-        f"👤 **Marked By:** {admin_name}"
+        f"❌ <b>STATUS: REJECTED / UNAVAILABLE</b>\n"
+        f"👤 <b>Marked By:</b> {admin_name}"
     )
     try:
         await query.message.edit_text(updated_caption, reply_markup=None)
@@ -269,8 +269,8 @@ async def reject_request_callback(client: Client, query: CallbackQuery):
         await client.send_message(
             chat_id=target_user_id,
             text=(
-                "⚠️ **MOVIE REQUEST UPDATE** ⚠️\n\n"
-                f"🎬 **Movie:** `{movie_name}`\n\n"
+                "⚠️ <b>MOVIE REQUEST UPDATE</b> ⚠️\n\n"
+                f"🎬 <b>Movie:</b> <code>{movie_name}</code>\n\n"
                 "Sorry! We could not fulfill this request at the moment (e.g. not released on OTT yet, only poor CAM prints available, or unavailable).\n"
                 "Please check back later or request another title!"
             )

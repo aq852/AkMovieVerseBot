@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 async def stats_command(client: Client, message: Message):
     """Display comprehensive real-time system metrics, database health, user growth, and hardware stats."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
-    status_msg = await message.reply_text("⏳ **Compiling real-time system metrics...**")
+    status_msg = await message.reply_text("⏳ <b>Compiling real-time system metrics...</b>")
     t0 = time.time()
 
     now = datetime.datetime.utcnow()
@@ -330,14 +330,14 @@ async def trigger_quick_backup_callback(client: Client, query: CallbackQuery):
         from plugins.backup import backup_database
         await backup_database(client, query.message)
     except Exception as e:
-        await query.message.reply_text(f"❌ **Backup Error:** `{e}`")
+        await query.message.reply_text(f"❌ <b>Backup Error:</b> <code>{e}</code>")
 
 
 @Client.on_message(filters.command(["targetdb", "setwritedb"]))
 async def target_db_command(client: Client, message: Message):
     """View or switch active MongoDB write target ('1', '2', or 'auto')."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     from database.mongo import get_bot_setting, set_bot_setting
     from database.files import get_active_target_collection
@@ -382,7 +382,7 @@ async def user_broadcast_command(client: Client, message: Message):
 
     broadcast_msg = message.reply_to_message
     if not broadcast_msg:
-        await message.reply_text("⚠️ **Reply to the message you want to broadcast!**")
+        await message.reply_text("⚠️ <b>Reply to the message you want to broadcast!</b>")
         return
 
     user_ids = await get_all_user_ids()
@@ -391,7 +391,7 @@ async def user_broadcast_command(client: Client, message: Message):
         await message.reply_text("❌ No users found in database.")
         return
 
-    progress_msg = await message.reply_text(f"🚀 **Broadcasting to {total_users:,} users...**")
+    progress_msg = await message.reply_text(f"🚀 <b>Broadcasting to {total_users:,} users...</b>")
 
     sent = 0
     blocked = 0
@@ -422,21 +422,21 @@ async def user_broadcast_command(client: Client, message: Message):
             last_update = time.time()
             try:
                 await progress_msg.edit_text(
-                    f"📢 **Broadcast in Progress...**\n\n"
-                    f"**Total Users:** `{total_users:,}`\n"
-                    f"**Delivered:** `{sent:,}`\n"
-                    f"**Blocked/Deleted:** `{blocked:,}`\n"
-                    f"**Failed:** `{failed:,}`"
+                    f"📢 <b>Broadcast in Progress...</b>\n\n"
+                    f"<b>Total Users:</b> <code>{total_users:,}</code>\n"
+                    f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+                    f"<b>Blocked/Deleted:</b> <code>{blocked:,}</code>\n"
+                    f"<b>Failed:</b> <code>{failed:,}</code>"
                 )
             except Exception:
                 pass
 
     await progress_msg.edit_text(
-        f"🎉 **Broadcast Completed!**\n\n"
-        f"👥 **Total Users:** `{total_users:,}`\n"
-        f"✅ **Delivered:** `{sent:,}`\n"
-        f"🧹 **Blocked/Deleted (Purged from DB):** `{blocked:,}`\n"
-        f"⚠️ **Failed:** `{failed:,}`"
+        f"🎉 <b>Broadcast Completed!</b>\n\n"
+        f"👥 <b>Total Users:</b> <code>{total_users:,}</code>\n"
+        f"✅ <b>Delivered:</b> <code>{sent:,}</code>\n"
+        f"🧹 <b>Blocked/Deleted (Purged from DB):</b> <code>{blocked:,}</code>\n"
+        f"⚠️ <b>Failed:</b> <code>{failed:,}</code>"
     )
 
 
@@ -449,7 +449,7 @@ async def group_broadcast_command(client: Client, message: Message):
 
     broadcast_msg = message.reply_to_message
     if not broadcast_msg:
-        await message.reply_text("⚠️ **Reply to the message you want to broadcast to groups!**")
+        await message.reply_text("⚠️ <b>Reply to the message you want to broadcast to groups!</b>")
         return
 
     chat_ids = await get_all_chat_ids()
@@ -458,7 +458,7 @@ async def group_broadcast_command(client: Client, message: Message):
         await message.reply_text("❌ No groups found in database.")
         return
 
-    progress_msg = await message.reply_text(f"🚀 **Broadcasting to {total_chats:,} groups...**")
+    progress_msg = await message.reply_text(f"🚀 <b>Broadcasting to {total_chats:,} groups...</b>")
 
     sent = 0
     failed = 0
@@ -482,19 +482,19 @@ async def group_broadcast_command(client: Client, message: Message):
             last_update = time.time()
             try:
                 await progress_msg.edit_text(
-                    f"📢 **Group Broadcast in Progress...**\n\n"
-                    f"**Total Groups:** `{total_chats:,}`\n"
-                    f"**Delivered:** `{sent:,}`\n"
-                    f"**Failed/Left:** `{failed:,}`"
+                    f"📢 <b>Group Broadcast in Progress...</b>\n\n"
+                    f"<b>Total Groups:</b> <code>{total_chats:,}</code>\n"
+                    f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+                    f"<b>Failed/Left:</b> <code>{failed:,}</code>"
                 )
             except Exception:
                 pass
 
     await progress_msg.edit_text(
-        f"🎉 **Group Broadcast Completed!**\n\n"
-        f"**Total Groups:** `{total_chats:,}`\n"
-        f"**Delivered:** `{sent:,}`\n"
-        f"**Failed/Left:** `{failed:,}`"
+        f"🎉 <b>Group Broadcast Completed!</b>\n\n"
+        f"<b>Total Groups:</b> <code>{total_chats:,}</code>\n"
+        f"<b>Delivered:</b> <code>{sent:,}</code>\n"
+        f"<b>Failed/Left:</b> <code>{failed:,}</code>"
     )
 
 
@@ -505,9 +505,9 @@ async def purge_camrip_command(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
 
-    msg = await message.reply_text("🧹 **Scanning and deleting CamRip/PreDVD files...**")
+    msg = await message.reply_text("🧹 <b>Scanning and deleting CamRip/PreDVD files...</b>")
     deleted_count = await delete_camrip_files()
-    await msg.edit_text(f"✅ **Cleaned Up!** Purged `{deleted_count}` low-quality CamRip/PreDVD files from database.")
+    await msg.edit_text(f"✅ <b>Cleaned Up!</b> Purged <code>{deleted_count}</code> low-quality CamRip/PreDVD files from database.")
 
 
 # 5. /cleanfiles (Sanitize competitor site watermarks from stored filenames)
@@ -517,7 +517,7 @@ async def clean_filenames_command(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
 
-    status_msg = await message.reply_text("🧹 **Scanning database for competitor watermarks & website tags...**")
+    status_msg = await message.reply_text("🧹 <b>Scanning database for competitor watermarks & website tags...</b>")
 
     cleaned_count = 0
     total_scanned = 0
@@ -538,10 +538,10 @@ async def clean_filenames_command(client: Client, message: Message):
                 cleaned_count += 1
 
     await status_msg.edit_text(
-        f"✅ **Watermark Cleanup Completed!**\n\n"
-        f"• **Total Files Scanned:** `{total_scanned:,}`\n"
-        f"• **Filenames Cleaned:** `{cleaned_count:,}`\n\n"
-        f"✨ *All competitor websites, telegram handles, and ripper tags have been permanently removed from stored files while keeping movie titles, print qualities, and extensions 100% intact!*"
+        f"✅ <b>Watermark Cleanup Completed!</b>\n\n"
+        f"• <b>Total Files Scanned:</b> <code>{total_scanned:,}</code>\n"
+        f"• <b>Filenames Cleaned:</b> <code>{cleaned_count:,}</code>\n\n"
+        f"✨ <i>All competitor websites, telegram handles, and ripper tags have been permanently removed from stored files while keeping movie titles, print qualities, and extensions 100% intact!</i>"
     )
 
 
@@ -550,7 +550,7 @@ async def clean_filenames_command(client: Client, message: Message):
 async def delete_all_files_command(client: Client, message: Message):
     """Wipe indexed files & caches with mandatory pre-wipe safety backup and interactive confirmation."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split()
     if len(args) >= 2 and args[1].lower() in ["confirm", "yes", "force"]:
@@ -719,20 +719,20 @@ async def wipe_database_callback(client: Client, query: CallbackQuery):
 async def delete_by_name_command(client: Client, message: Message):
     """Admin command: Quick-purge all files matching a movie/series name for copyright risk protection."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
         return await message.reply_text(
-            "⚠️ **Usage:** `/delbyname <Movie or Series Name>`\n\n"
-            "**Examples:**\n"
-            "• `/delbyname Stree 2`\n"
-            "• `/delbyname Mirzapur`\n\n"
-            "💡 _Instantly deletes all 480p, 720p, 1080p, 4K files matching this title from the database!_"
+            "⚠️ <b>Usage:</b> <code>/delbyname &lt;Movie or Series Name&gt;</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/delbyname Stree 2</code>\n"
+            "• <code>/delbyname Mirzapur</code>\n\n"
+            "💡 <i>Instantly deletes all 480p, 720p, 1080p, 4K files matching this title from the database!</i>"
         )
 
     keyword = args[1].strip()
-    status = await message.reply_text(f"🔍 **Searching and purging all files matching:** `{keyword}`...")
+    status = await message.reply_text(f"🔍 <b>Searching and purging all files matching:</b> <code>{keyword}</code>...")
 
     try:
         from database.mongo import mongo
@@ -745,7 +745,7 @@ async def delete_by_name_command(client: Client, message: Message):
         matching_files = await cursor.to_list(length=500)
 
         if not matching_files:
-            return await status.edit_text(f"ℹ️ **No files found matching:** `{keyword}`")
+            return await status.edit_text(f"ℹ️ <b>No files found matching:</b> <code>{keyword}</code>")
 
         total_size = sum(f.get("file_size", 0) for f in matching_files)
         del_res = await mongo.files.delete_many({"file_name": {"$regex": escaped_k, "$options": "i"}})
@@ -768,7 +768,7 @@ async def delete_by_name_command(client: Client, message: Message):
 
     except Exception as e:
         logger.error(f"Error in delbyname command: {e}", exc_info=True)
-        await status.edit_text(f"❌ **Error purging files:** `{e}`")
+        await status.edit_text(f"❌ <b>Error purging files:</b> <code>{e}</code>")
 
 
 # 6. /ban & /unban
@@ -780,12 +780,12 @@ async def ban_user_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
-        await message.reply_text("⚠️ **Usage:** `/ban [user_id]`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/ban [user_id]</code>")
         return
 
     target_id = int(args[1])
     await set_ban_status(target_id, True)
-    await message.reply_text(f"🚫 User `{target_id}` has been blacklisted.")
+    await message.reply_text(f"🚫 User <code>{target_id}</code> has been blacklisted.")
 
 
 @Client.on_message(filters.command("unban"))
@@ -796,12 +796,12 @@ async def unban_user_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
-        await message.reply_text("⚠️ **Usage:** `/unban [user_id]`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/unban [user_id]</code>")
         return
 
     target_id = int(args[1])
     await set_ban_status(target_id, False)
-    await message.reply_text(f"✅ User `{target_id}` has been unbanned.")
+    await message.reply_text(f"✅ User <code>{target_id}</code> has been unbanned.")
 
 
 # 7. /add_premium & /remove_premium
@@ -813,7 +813,7 @@ async def add_premium_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
-        await message.reply_text("⚠️ **Usage:** `/add_premium [user_id] [days]`\nExample: `/add_premium 12345678 30`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/add_premium [user_id] [days]</code>\nExample: <code>/add_premium 12345678 30</code>")
         return
 
     target_id = int(args[1])
@@ -821,11 +821,11 @@ async def add_premium_command(client: Client, message: Message):
     seconds = days * 86400
 
     await add_premium(target_id, seconds)
-    await message.reply_text(f"💎 **Granted {days} days of VIP Premium to `{target_id}`!**")
+    await message.reply_text(f"💎 <b>Granted {days} days of VIP Premium to <code>{target_id}</code>!</b>")
     try:
         await client.send_message(
             target_id,
-            f"🎉 **You have been granted {days} days of VIP Premium Access!**\n\nEnjoy instant file downloads without any shorteners."
+            f"🎉 <b>You have been granted {days} days of VIP Premium Access!</b>\n\nEnjoy instant file downloads without any shorteners."
         )
     except Exception:
         pass
@@ -839,12 +839,12 @@ async def remove_premium_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
-        await message.reply_text("⚠️ **Usage:** `/remove_premium [user_id]`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/remove_premium [user_id]</code>")
         return
 
     target_id = int(args[1])
     await remove_premium(target_id)
-    await message.reply_text(f"✅ Revoked VIP status for `{target_id}`.")
+    await message.reply_text(f"✅ Revoked VIP status for <code>{target_id}</code>.")
 
 
 # 8. /premium_users or /premium_list
@@ -856,12 +856,12 @@ async def premium_users_command(client: Client, message: Message):
 
     users = await get_all_premium_users()
     if not users:
-        await message.reply_text("ℹ️ **No active VIP Premium users found.**")
+        await message.reply_text("ℹ️ <b>No active VIP Premium users found.</b>")
         return
 
     import datetime
     now = datetime.datetime.utcnow()
-    lines = [f"💎 **Active VIP Premium Members ({len(users)} Total):**\n"]
+    lines = [f"💎 <b>Active VIP Premium Members ({len(users)} Total):</b>\n"]
 
     for i, u in enumerate(users[:30], 1):
         uid = u.get("user_id")
@@ -876,9 +876,9 @@ async def premium_users_command(client: Client, message: Message):
         else:
             exp_str = "Unknown"
 
-        lines.append(f"{i}. **{name}** ({uname})\n   🆔 `{uid}` | ⏳ `{exp_str}`")
+        lines.append(f"{i}. <b>{name}</b> ({uname})\n   🆔 <code>{uid}</code> | ⏳ <code>{exp_str}</code>")
 
-    lines.append("\n💡 **Manage:**\n• `/add_premium [user_id] [days]`\n• `/remove_premium [user_id]`")
+    lines.append("\n💡 <b>Manage:</b>\n• <code>/add_premium [user_id] [days]</code>\n• <code>/remove_premium [user_id]</code>")
     await message.reply_text("\n".join(lines))
 
 
@@ -891,15 +891,15 @@ async def direct_send_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit() or not message.reply_to_message:
-        await message.reply_text("⚠️ **Usage:** Reply to any file/message with `/send [user_id]`")
+        await message.reply_text("⚠️ <b>Usage:</b> Reply to any file/message with <code>/send [user_id]</code>")
         return
 
     target_id = int(args[1])
     try:
         await message.reply_to_message.copy(chat_id=target_id)
-        await message.reply_text(f"✅ Dispatched media to `{target_id}` successfully.")
+        await message.reply_text(f"✅ Dispatched media to <code>{target_id}</code> successfully.")
     except Exception as e:
-        await message.reply_text(f"❌ Failed to dispatch media: `{e}`")
+        await message.reply_text(f"❌ Failed to dispatch media: <code>{e}</code>")
 
 
 # 9. /commands (Auto register commands with Telegram Menu)
@@ -910,18 +910,18 @@ async def setup_commands_menu(client: Client, message: Message):
         return
 
     from utils.bot_commands import register_all_bot_commands
-    wait_msg = await message.reply_text("🔄 **Syncing bot commands with Telegram servers across all scopes...**")
+    wait_msg = await message.reply_text("🔄 <b>Syncing bot commands with Telegram servers across all scopes...</b>")
 
     results = await register_all_bot_commands(client)
     text = (
-        "✅ **Bot Commands Successfully Registered in Telegram!**\n\n"
-        f"• 👤 **Private Chat Commands:** `{results['user_commands']}` commands set\n"
-        f"• 👥 **Group Admin Commands:** `{results['group_admin_commands']}` commands set\n"
-        f"• 👑 **Admin Scoped Chats:** `{results['admin_scoped']}` admin accounts configured\n\n"
-        "✨ Whenever you type `/` in this chat or tap the Menu button, all admin commands will automatically appear!"
+        "✅ <b>Bot Commands Successfully Registered in Telegram!</b>\n\n"
+        f"• 👤 <b>Private Chat Commands:</b> <code>{results['user_commands']}</code> commands set\n"
+        f"• 👥 <b>Group Admin Commands:</b> <code>{results['group_admin_commands']}</code> commands set\n"
+        f"• 👑 <b>Admin Scoped Chats:</b> <code>{results['admin_scoped']}</code> admin accounts configured\n\n"
+        "✨ Whenever you type <code>/</code> in this chat or tap the Menu button, all admin commands will automatically appear!"
     )
     if results["errors"]:
-        text += f"\n\n⚠️ **Notice:** Some scopes reported warnings: `{results['errors']}`"
+        text += f"\n\n⚠️ <b>Notice:</b> Some scopes reported warnings: <code>{results['errors']}</code>"
 
     await wait_msg.edit_text(text)
 
@@ -942,9 +942,9 @@ async def update_start_pic_command(client: Client, message: Message):
 
     if not pic_url:
         await message.reply_text(
-            "⚠️ **Usage:**\n"
-            "• `/set_pic [photo_or_gif_url]`\n"
-            "• Reply to any photo with `/set_pic`"
+            "⚠️ <b>Usage:</b>\n"
+            "• <code>/set_pic [photo_or_gif_url]</code>\n"
+            "• Reply to any photo with <code>/set_pic</code>"
         )
         return
 
@@ -952,8 +952,8 @@ async def update_start_pic_command(client: Client, message: Message):
     from database.mongo import set_bot_setting
     await set_bot_setting("start_pic", pic_url)
     await message.reply_text(
-        f"✅ **Welcome photo updated successfully!**\n\n"
-        f"• **New Pic:** `{pic_url[:40]}...`\n"
+        f"✅ <b>Welcome photo updated successfully!</b>\n\n"
+        f"• <b>New Pic:</b> <code>{pic_url[:40]}...</code>\n"
         f"💾 <i>Saved permanently to database (persists across restarts).</i>"
     )
 
@@ -1050,8 +1050,8 @@ async def add_shortener_command(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 3:
         await message.reply_text(
-            "⚠️ **Usage:** `/add_shortener [website_domain] [api_key]`\n\n"
-            "**Example:** `/add_shortener shareus.io 1234abcd5678efgh`"
+            "⚠️ <b>Usage:</b> <code>/add_shortener [website_domain] [api_key]</code>\n\n"
+            "<b>Example:</b> <code>/add_shortener shareus.io 1234abcd5678efgh</code>"
         )
         return
 
@@ -1062,10 +1062,10 @@ async def add_shortener_command(client: Client, message: Message):
     success = await add_custom_shortener(domain, api_key)
     if success:
         await message.reply_text(
-            f"✅ **Shortener Added to Rotation & Fallback!**\n\n"
-            f"• **Domain:** `{domain}`\n"
-            f"• **Status:** Active in rotation\n\n"
-            "View all active providers anytime via `/shorteners`."
+            f"✅ <b>Shortener Added to Rotation & Fallback!</b>\n\n"
+            f"• <b>Domain:</b> <code>{domain}</code>\n"
+            f"• <b>Status:</b> Active in rotation\n\n"
+            "View all active providers anytime via <code>/shorteners</code>."
         )
     else:
         await message.reply_text("❌ Failed to save shortener to database.")
@@ -1080,16 +1080,16 @@ async def delete_shortener_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ **Usage:** `/del_shortener [domain]`\nExample: `/del_shortener shareus.io`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/del_shortener [domain]</code>\nExample: <code>/del_shortener shareus.io</code>")
         return
 
     domain = args[1].strip()
     from utils.shortener import remove_custom_shortener
     success = await remove_custom_shortener(domain)
     if success:
-        await message.reply_text(f"✅ Shortener `{domain}` removed from database rotation.")
+        await message.reply_text(f"✅ Shortener <code>{domain}</code> removed from database rotation.")
     else:
-        await message.reply_text(f"❌ Shortener `{domain}` not found in database (or it is in .env file).")
+        await message.reply_text(f"❌ Shortener <code>{domain}</code> not found in database (or it is in .env file).")
 
 
 # 15. /set_web_url <url>
@@ -1101,11 +1101,11 @@ async def set_web_url_command(client: Client, message: Message):
 
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        current = f"`{Config.WEB_URL}`" if Config.WEB_URL else "`None (Disabled, using direct links)`"
+        current = f"<code>{Config.WEB_URL}</code>" if Config.WEB_URL else "<code>None (Disabled, using direct links)</code>"
         await message.reply_text(
-            f"🌐 **Fast-Redirect Gateway URL:** {current}\n\n"
-            "**Usage:** `/set_web_url [public_url]`\n"
-            "**Example:** `/set_web_url https://my-bot.koyeb.app`\n\n"
+            f"🌐 <b>Fast-Redirect Gateway URL:</b> {current}\n\n"
+            "<b>Usage:</b> <code>/set_web_url [public_url]</code>\n"
+            "<b>Example:</b> <code>/set_web_url https://my-bot.koyeb.app</code>\n\n"
             "💡 When set, Telegram verify buttons will mask raw shortener URLs and run the 5s animated countdown gateway page!"
         )
         return
@@ -1118,8 +1118,8 @@ async def set_web_url_command(client: Client, message: Message):
     from database.mongo import set_bot_setting
     await set_bot_setting("web_url", url)
     await message.reply_text(
-        f"✅ **Fast-Redirect Gateway URL Updated!**\n\n"
-        f"🌐 **New Gateway Base:** `{Config.WEB_URL}`\n\n"
+        f"✅ <b>Fast-Redirect Gateway URL Updated!</b>\n\n"
+        f"🌐 <b>New Gateway Base:</b> <code>{Config.WEB_URL}</code>\n\n"
         "All verify buttons will now route through this branded URL with the 5s animated background timer!\n"
         "💾 <i>Saved permanently to database (persists across restarts).</i>"
     )
@@ -1135,9 +1135,9 @@ async def set_tmdb_key_command(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.reply_text(
-            "🔑 **Set TMDB API Key (v3):**\n\n"
-            "**Usage:** `/set_tmdb_key [api_key]`\n"
-            "**Example:** `/set_tmdb_key 1a2b3c4d5e6f7g8h9i0j`\n\n"
+            "🔑 <b>Set TMDB API Key (v3):</b>\n\n"
+            "<b>Usage:</b> <code>/set_tmdb_key [api_key]</code>\n"
+            "<b>Example:</b> <code>/set_tmdb_key 1a2b3c4d5e6f7g8h9i0j</code>\n\n"
             "💡 Get your free API key from https://www.themoviedb.org/settings/api"
         )
         return
@@ -1149,8 +1149,8 @@ async def set_tmdb_key_command(client: Client, message: Message):
     await set_bot_setting("tmdb_api_key", new_key)
     Config.TMDB_API_KEY = new_key
     await message.reply_text(
-        f"✅ **Official TMDB API Key Saved!**\n\n"
-        f"🔑 **Key:** `{new_key[:6]}...{new_key[-4:]}`\n"
+        f"✅ <b>Official TMDB API Key Saved!</b>\n\n"
+        f"🔑 <b>Key:</b> <code>{new_key[:6]}...{new_key[-4:]}</code>\n"
         "Poster Studio will now query TMDB directly with maximum priority!\n"
         "💾 <i>Saved permanently to database (persists across restarts).</i>"
     )
@@ -1165,9 +1165,9 @@ async def set_tmdb_token_command(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.reply_text(
-            "🎟️ **Set TMDB Read Access Token (v4 Bearer):**\n\n"
-            "**Usage:** `/set_tmdb_token [token]`\n"
-            "**Example:** `/set_tmdb_token eyJhbGciOiJIUzI1NiJ9...`\n\n"
+            "🎟️ <b>Set TMDB Read Access Token (v4 Bearer):</b>\n\n"
+            "<b>Usage:</b> <code>/set_tmdb_token [token]</code>\n"
+            "<b>Example:</b> <code>/set_tmdb_token eyJhbGciOiJIUzI1NiJ9...</code>\n\n"
             "💡 Recommended for highest API performance and no rate limit issues!"
         )
         return
@@ -1179,8 +1179,8 @@ async def set_tmdb_token_command(client: Client, message: Message):
     await set_bot_setting("tmdb_read_access_token", new_token)
     Config.TMDB_READ_ACCESS_TOKEN = new_token
     await message.reply_text(
-        f"✅ **Official TMDB Read Access Token Saved!**\n\n"
-        f"🎟️ **Token:** `{new_token[:8]}...{new_token[-6:]}`\n"
+        f"✅ <b>Official TMDB Read Access Token Saved!</b>\n\n"
+        f"🎟️ <b>Token:</b> <code>{new_token[:8]}...{new_token[-6:]}</code>\n"
         "Direct v4 Bearer authorization is now active for all Poster Studio queries.\n"
         "💾 <i>Saved permanently to database (persists across restarts).</i>"
     )
@@ -1197,21 +1197,21 @@ async def tmdb_status_command(client: Client, message: Message):
     token = Config.TMDB_READ_ACCESS_TOKEN or creds.get("token", "")
     key = Config.TMDB_API_KEY or creds.get("api_key", "")
 
-    token_status = f"✅ Active (`{token[:8]}...{token[-4:]}`)" if token else "❌ Not configured"
-    key_status = f"✅ Active (`{key[:6]}...{key[-4:]}`)" if key else "❌ Not configured"
+    token_status = f"✅ Active (<code>{token[:8]}...{token[-4:]}</code>)" if token else "❌ Not configured"
+    key_status = f"✅ Active (<code>{key[:6]}...{key[-4:]}</code>)" if key else "❌ Not configured"
     fallback_status = "⚡ Public High-Speed Worker Proxy (Active)"
 
     primary = "Official v4 Bearer Token" if token else ("Official v3 API Key" if key else "Public Worker Proxy")
 
     text = (
-        "🎬 **TMDB Poster Scraper Connection Status:**\n\n"
-        f"• **Active Primary Engine:** `{primary}`\n"
-        f"• **v4 Read Access Token:** {token_status}\n"
-        f"• **v3 API Key:** {key_status}\n"
-        f"• **Automated Fallback:** {fallback_status}\n\n"
-        "💡 **Commands to configure:**\n"
-        "• `/set_tmdb_token [token]` — Recommended\n"
-        "• `/set_tmdb_key [api_key]`"
+        "🎬 <b>TMDB Poster Scraper Connection Status:</b>\n\n"
+        f"• <b>Active Primary Engine:</b> <code>{primary}</code>\n"
+        f"• <b>v4 Read Access Token:</b> {token_status}\n"
+        f"• <b>v3 API Key:</b> {key_status}\n"
+        f"• <b>Automated Fallback:</b> {fallback_status}\n\n"
+        "💡 <b>Commands to configure:</b>\n"
+        "• <code>/set_tmdb_token [token]</code> — Recommended\n"
+        "• <code>/set_tmdb_key [api_key]</code>"
     )
     await message.reply_text(text)
 
@@ -1244,7 +1244,7 @@ async def autodelete_settings_command(client: Client, message: Message):
         try:
             seconds = _parse_time_str(val_str)
         except ValueError:
-            await message.reply_text("❌ **Invalid time format.** Examples: `5m`, `10m`, `300`, `1h`")
+            await message.reply_text("❌ <b>Invalid time format.</b> Examples: <code>5m</code>, <code>10m</code>, <code>300</code>, <code>1h</code>")
             return
 
         if "file" in target:
@@ -1252,15 +1252,15 @@ async def autodelete_settings_command(client: Client, message: Message):
             lbl = f"{seconds // 60}m" if seconds >= 60 else f"{seconds}s"
             if seconds == 0:
                 lbl = "Disabled"
-            await message.reply_text(f"✅ **Delivered Files Auto-Delete updated to:** `{lbl}` ({seconds}s)")
+            await message.reply_text(f"✅ <b>Delivered Files Auto-Delete updated to:</b> <code>{lbl}</code> ({seconds}s)")
             return
         elif "search" in target:
             await set_bot_setting("search_auto_delete_time", seconds)
             lbl = f"{seconds // 60}m" if seconds >= 60 else f"{seconds}s"
-            await message.reply_text(f"✅ **Search Results Auto-Delete updated to:** `{lbl}` ({seconds}s)")
+            await message.reply_text(f"✅ <b>Search Results Auto-Delete updated to:</b> <code>{lbl}</code> ({seconds}s)")
             return
         else:
-            await message.reply_text("❌ Specify target: `file` or `search`.\nExample: `/set_autodelete file 10m`")
+            await message.reply_text("❌ Specify target: <code>file</code> or <code>search</code>.\nExample: <code>/set_autodelete file 10m</code>")
             return
 
     text, markup = await build_autodelete_panel()
@@ -1276,14 +1276,14 @@ async def build_autodelete_panel() -> tuple[str, InlineKeyboardMarkup]:
     s_lbl = f"{s_del // 60}m" if s_del >= 60 else f"{s_del}s"
 
     text = (
-        "⏱️ **AUTO-DELETE CONFIGURATION**\n"
+        "⏱️ <b>AUTO-DELETE CONFIGURATION</b>\n"
         "────────────────────────\n"
-        f"📁 **Delivered Movie Files Timer:** `{f_lbl}`\n"
-        f"🔍 **Search Results Timer (PM):** `{s_lbl}`\n"
+        f"📁 <b>Delivered Movie Files Timer:</b> <code>{f_lbl}</code>\n"
+        f"🔍 <b>Search Results Timer (PM):</b> <code>{s_lbl}</code>\n"
         "────────────────────────\n\n"
-        "👇 *Tap a button below to quickly set timer, or use commands:*\n"
-        "• `/set_autodelete file 10m`\n"
-        "• `/set_autodelete search 5m`"
+        "👇 <i>Tap a button below to quickly set timer, or use commands:</i>\n"
+        "• <code>/set_autodelete file 10m</code>\n"
+        "• <code>/set_autodelete search 5m</code>"
     )
 
     keyboard = [
@@ -1514,7 +1514,7 @@ async def shortener_stats_command(client: Client, message: Message):
 async def add_junk_command(client: Client, message: Message):
     """Add a new custom pirated site name or junk tag to the universal title cleaner."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
@@ -1539,7 +1539,7 @@ async def add_junk_command(client: Client, message: Message):
 async def del_junk_command(client: Client, message: Message):
     """Remove a custom junk word from the universal title cleaner."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
@@ -1558,7 +1558,7 @@ async def del_junk_command(client: Client, message: Message):
 async def list_junk_command(client: Client, message: Message):
     """List all custom blacklisted junk words."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     from utils.title_cleaner import get_dynamic_junk_words, STATIC_PIRATE_SITES
     dynamic_words = await get_dynamic_junk_words()

@@ -321,6 +321,9 @@ async def build_navigator_root_view(sid: str) -> tuple[str, InlineKeyboardMarkup
     # Case 2: Only Movies exist
     if analysis["has_movies"] and not analysis["has_series"]:
         update_nav_session(sid, media_type="movie")
+        # If only 1 file exists, jump directly to filtered results with instant download button!
+        if analysis.get("movie_count", 0) <= 1:
+            return await build_filtered_results_view(sid, page=1)
         return await build_movie_filter_view(sid, analysis)
 
     # Case 3: Both Movies and Series exist (like Mirzapur)
@@ -680,6 +683,24 @@ async def build_filtered_results_view(sid: str, page: int = 1) -> tuple[str, Inl
     text = "\n".join(text_lines).strip()
 
     keyboard = []
+
+    # Quick number download buttons for 1-click delivery
+    number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    if files:
+        num_row = []
+        for idx, item in enumerate(files):
+            f_id = item.get("file_unique_id")
+            icon = number_icons[idx] if idx < len(number_icons) else f"{idx + 1}"
+            if is_pm:
+                btn = InlineKeyboardButton(icon, callback_data=f"getfile_{f_id}")
+            else:
+                btn = InlineKeyboardButton(icon, url=f"https://t.me/{bot_username}?start=file_{f_id}")
+            num_row.append(btn)
+            if len(num_row) == 5:
+                keyboard.append(num_row)
+                num_row = []
+        if num_row:
+            keyboard.append(num_row)
 
     # Filter status bar with Clear Filter button
     filter_bar = [

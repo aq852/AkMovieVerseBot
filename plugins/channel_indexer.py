@@ -229,12 +229,12 @@ async def set_skip_command(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
-        await message.reply_text("⚠️ **Usage:** `/setskip [number]`\nExample: `/setskip 1000`")
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/setskip [number]</code>\nExample: <code>/setskip 1000</code>")
         return
 
     skip_count = int(args[1])
     SKIP_OFFSETS[message.from_user.id] = skip_count
-    await message.reply_text(f"✅ **Skip Offset Set:** Next `/index` will skip `{skip_count}` messages.")
+    await message.reply_text(f"✅ <b>Skip Offset Set:</b> Next <code>/index</code> will skip <code>{skip_count}</code> messages.")
 
 
 # 3. Stop active indexing: /stopindex
@@ -256,7 +256,7 @@ async def stop_index_command(client: Client, message: Message):
             ctrl["pause_event"].set()
 
     ACTIVE_INDEXES.clear()
-    await message.reply_text("⏹️ **Indexing Cancelled!** Crawling tasks will terminate and save bookmarks.")
+    await message.reply_text("⏹️ <b>Indexing Cancelled!</b> Crawling tasks will terminate and save bookmarks.")
 
 
 # 4. Core Indexing Engine (Ultra-Fast 50x Bulk + Checkpoints + Inline Controls)
@@ -327,11 +327,11 @@ async def run_channel_crawl(
                     pass
                 try:
                     await progress_msg.edit_text(
-                        "⏹️ **Indexing Aborted by Admin!**\n\n"
-                        f"📁 **Channel:** `{channel_title}`\n"
-                        f"📊 **Progress Saved:** Msg `{batch_start - 1}` / `{end_id}`\n"
-                        f"💾 **Files Indexed So Far:** `{saved_count}`\n\n"
-                        "💡 _Resume anytime by typing_ `/index resume` _or using checkpoints._"
+                        "⏹️ <b>Indexing Aborted by Admin!</b>\n\n"
+                        f"📁 <b>Channel:</b> <code>{channel_title}</code>\n"
+                        f"📊 <b>Progress Saved:</b> Msg <code>{batch_start - 1}</code> / <code>{end_id}</code>\n"
+                        f"💾 <b>Files Indexed So Far:</b> <code>{saved_count}</code>\n\n"
+                        "💡 <i>Resume anytime by typing</i> <code>/index resume</code> <i>or using checkpoints.</i>"
                     )
                 except Exception:
                     pass
@@ -435,16 +435,16 @@ async def run_channel_crawl(
                 eta_str = format_duration(eta_secs)
 
                 progress_text = (
-                    f"⚡ **Ultra-Fast Batch Indexing in Progress...**\n"
-                    f"📁 **Channel:** `{channel_title}`\n"
-                    f"📊 **Progress:** {bar}\n\n"
-                    f"🔢 **Messages Scanned:** `{batch_end}` / `{end_id}`\n"
-                    f"💾 **New Files Indexed:** `{saved_count:,}`\n"
-                    f"⏩ **Duplicates Skipped:** `{duplicate_count:,}`\n"
-                    f"🗑️ **Junk/Samples Filtered:** `{junk_count:,}`\n"
-                    f"⚠️ **Errors:** `{error_count}`\n\n"
-                    f"🚀 **Speed:** `{speed:.1f} msgs/sec`\n"
-                    f"⏳ **ETA:** `{eta_str}`\n\n"
+                    f"⚡ <b>Ultra-Fast Batch Indexing in Progress...</b>\n"
+                    f"📁 <b>Channel:</b> <code>{channel_title}</code>\n"
+                    f"📊 <b>Progress:</b> {bar}\n\n"
+                    f"🔢 <b>Messages Scanned:</b> <code>{batch_end}</code> / <code>{end_id}</code>\n"
+                    f"💾 <b>New Files Indexed:</b> <code>{saved_count:,}</code>\n"
+                    f"⏩ <b>Duplicates Skipped:</b> <code>{duplicate_count:,}</code>\n"
+                    f"🗑️ <b>Junk/Samples Filtered:</b> <code>{junk_count:,}</code>\n"
+                    f"⚠️ <b>Errors:</b> <code>{error_count}</code>\n\n"
+                    f"🚀 <b>Speed:</b> <code>{speed:.1f} msgs/sec</code>\n"
+                    f"⏳ <b>ETA:</b> <code>{eta_str}</code>\n\n"
                     f"<i>💡 Progress auto-checkpoints every 200 msgs. Control crawl below:</i>"
                 )
                 try:
@@ -480,13 +480,13 @@ async def run_channel_crawl(
 
         total_elapsed = format_duration(time.time() - start_time)
         final_text = (
-            f"🎉 **Indexing Completed Successfully!**\n\n"
-            f"📁 **Channel:** `{channel_title}`\n"
-            f"🔢 **Total Scanned:** `{total_scanned:,}` messages\n"
-            f"💾 **New Files Indexed:** `{saved_count:,}`\n"
-            f"⏩ **Duplicates Skipped:** `{duplicate_count:,}`\n"
-            f"🗑️ **Junk Files Filtered:** `{junk_count:,}`\n"
-            f"⏱️ **Time Taken:** `{total_elapsed}`\n\n"
+            f"🎉 <b>Indexing Completed Successfully!</b>\n\n"
+            f"📁 <b>Channel:</b> <code>{channel_title}</code>\n"
+            f"🔢 <b>Total Scanned:</b> <code>{total_scanned:,}</code> messages\n"
+            f"💾 <b>New Files Indexed:</b> <code>{saved_count:,}</code>\n"
+            f"⏩ <b>Duplicates Skipped:</b> <code>{duplicate_count:,}</code>\n"
+            f"🗑️ <b>Junk Files Filtered:</b> <code>{junk_count:,}</code>\n"
+            f"⏱️ <b>Time Taken:</b> <code>{total_elapsed}</code>\n\n"
             f"✨ All files are now searchable in bot PM, groups, and streaming website!"
         )
         try:
@@ -508,9 +508,9 @@ async def run_channel_crawl(
             pass
         try:
             await progress_msg.edit_text(
-                f"❌ **Indexing Interrupted due to error:** `{e}`\n\n"
-                f"📁 **Channel:** `{channel_title}`\n"
-                f"💾 **Saved So Far:** `{saved_count}` files\n\n"
+                f"❌ <b>Indexing Interrupted due to error:</b> <code>{e}</code>\n\n"
+                f"📁 <b>Channel:</b> <code>{channel_title}</code>\n"
+                f"💾 <b>Saved So Far:</b> <code>{saved_count}</code> files\n\n"
                 f"💡 <i>Your progress bookmark has been safely saved! You can resume anytime using:</i> <code>/index resume</code>"
             )
         except Exception:
@@ -607,13 +607,13 @@ async def batch_index_command(client: Client, message: Message):
 
     if not chat_id:
         await message.reply_text(
-            "⚠️ **How to Index a Channel:**\n\n"
-            "1. **Via Post Link:** `/index https://t.me/c/2001671856/20`\n"
-            "2. **Via Forward:** Forward the latest post from your channel here and reply to it with `/index`\n"
-            "3. **Via Channel ID & Message Count:** `/index -1002001671856 50`\n"
-            "4. **Resume Interrupted Job:** `/index resume`\n"
-            "5. **Index All Storage Channels:** `/indexall`\n\n"
-            "_Make sure the bot is an Admin in the channel with post reading rights!_"
+            "⚠️ <b>How to Index a Channel:</b>\n\n"
+            "1. <b>Via Post Link:</b> <code>/index https://t.me/c/2001671856/20</code>\n"
+            "2. <b>Via Forward:</b> Forward the latest post from your channel here and reply to it with <code>/index</code>\n"
+            "3. <b>Via Channel ID &amp; Message Count:</b> <code>/index -1002001671856 50</code>\n"
+            "4. <b>Resume Interrupted Job:</b> <code>/index resume</code>\n"
+            "5. <b>Index All Storage Channels:</b> <code>/indexall</code>\n\n"
+            "<i>Make sure the bot is an Admin in the channel with post reading rights!</i>"
         )
         return
 
@@ -623,7 +623,7 @@ async def batch_index_command(client: Client, message: Message):
         chat_id = chat_info.id
         channel_title = chat_info.title
     except Exception as e:
-        await message.reply_text(f"❌ **Error accessing channel:** `{e}`\nMake sure the bot is an Admin in the channel!")
+        await message.reply_text(f"❌ <b>Error accessing channel:</b> <code>{e}</code>\nMake sure the bot is an Admin in the channel!")
         return
 
     if chat_id in ACTIVE_INDEXES:
@@ -654,11 +654,11 @@ async def batch_index_command(client: Client, message: Message):
             start_id = skip_count + 1
             end_id = last_msg_id or 1000
 
-    heading_title = "🔄 **Resuming Indexing from Checkpoint:**" if is_resumed else "🔄 **Starting Batch Indexing for:**"
+    heading_title = "🔄 <b>Resuming Indexing from Checkpoint:</b>" if is_resumed else "🔄 <b>Starting Batch Indexing for:</b>"
     progress_msg = await message.reply_text(
-        f"{heading_title} `{channel_title}`\n"
-        f"📊 **Target Range:** Message `{start_id}` to `{end_id}`\n"
-        f"🚀 **Batch Size:** 200 messages / request\n"
+        f"{heading_title} <code>{channel_title}</code>\n"
+        f"📊 <b>Target Range:</b> Message <code>{start_id}</code> to <code>{end_id}</code>\n"
+        f"🚀 <b>Batch Size:</b> 200 messages / request\n"
         f"<i>💡 Progress bookmark is auto-saved every 200 msgs. Control below:</i>",
         reply_markup=get_indexer_keyboard(chat_id, status="running")
     )
@@ -688,11 +688,11 @@ async def index_all_channels_command(client: Client, message: Message):
         return
 
     if not Config.CHANNELS:
-        return await message.reply_text("⚠️ No storage channels configured in `Config.CHANNELS`!")
+        return await message.reply_text("⚠️ No storage channels configured in <code>Config.CHANNELS</code>!")
 
     status_msg = await message.reply_text(
-        f"🌐 **Multi-Channel Indexing Initializing...**\n"
-        f"Found `{len(Config.CHANNELS)}` channels in configuration.\n"
+        f"🌐 <b>Multi-Channel Indexing Initializing...</b>\n"
+        f"Found <code>{len(Config.CHANNELS)}</code> channels in configuration.\n"
         f"Starting sequential crawl with 50x bulk engine..."
     )
 
@@ -701,11 +701,11 @@ async def index_all_channels_command(client: Client, message: Message):
             chat_info = await client.get_chat(cid)
             channel_title = chat_info.title
         except Exception as e:
-            await message.reply_text(f"⚠️ Channel `{cid}` skipped: `{e}`")
+            await message.reply_text(f"⚠️ Channel <code>{cid}</code> skipped: <code>{e}</code>")
             continue
 
         if cid in ACTIVE_INDEXES:
-            await message.reply_text(f"⏩ Channel `{channel_title}` is already indexing. Skipping...")
+            await message.reply_text(f"⏩ Channel <code>{channel_title}</code> is already indexing. Skipping...")
             continue
 
         chk = await mongo.db["indexer_checkpoints"].find_one({"channel_id": cid})
@@ -721,8 +721,8 @@ async def index_all_channels_command(client: Client, message: Message):
             start_id = chk["last_scanned_id"] + 1
 
         sub_progress = await message.reply_text(
-            f"📁 **Channel {i}/{len(Config.CHANNELS)}:** `{channel_title}`\n"
-            f"Range: `{start_id}` to `{latest_id}`\n"
+            f"📁 <b>Channel {i}/{len(Config.CHANNELS)}:</b> <code>{channel_title}</code>\n"
+            f"Range: <code>{start_id}</code> to <code>{latest_id}</code>\n"
             f"Starting bulk crawl...",
             reply_markup=get_indexer_keyboard(cid, status="running")
         )
@@ -741,7 +741,7 @@ async def index_all_channels_command(client: Client, message: Message):
             channel_title=channel_title
         )
 
-    await status_msg.edit_text("🎉 **All configured storage channels have been indexed successfully!**")
+    await status_msg.edit_text("🎉 <b>All configured storage channels have been indexed successfully!</b>")
 
 
 # 7. Interactive Callback Handler for Live Progress Buttons ([⏸ Pause], [▶️ Resume], [⏹ Stop])
@@ -808,9 +808,9 @@ async def indexer_callback_handler(client: Client, query: CallbackQuery):
 
         await query.answer("🚀 Resuming indexing from checkpoint...")
         await query.message.edit_text(
-            f"🔄 **Resuming Indexing for:** `{channel_title}`\n"
-            f"📊 **Target Range:** Message `{start_id}` to `{end_id}`\n"
-            f"🚀 **Batch Size:** 200 messages / request",
+            f"🔄 <b>Resuming Indexing for:</b> <code>{channel_title}</code>\n"
+            f"📊 <b>Target Range:</b> Message <code>{start_id}</code> to <code>{end_id}</code>\n"
+            f"🚀 <b>Batch Size:</b> 200 messages / request",
             reply_markup=get_indexer_keyboard(cid, status="running")
         )
 
@@ -846,8 +846,8 @@ async def indexer_callback_handler(client: Client, query: CallbackQuery):
         INDEXING_CONTROLS.pop(cid, None)
         try:
             await query.message.edit_text(
-                "⏹️ **Indexing Cancelled by Admin!**\n\n"
-                "💡 _Progress bookmark has been saved to MongoDB. You can resume anytime using:_ `/index resume`"
+                "⏹️ <b>Indexing Cancelled by Admin!</b>\n\n"
+                "💡 <i>Progress bookmark has been saved to MongoDB. You can resume anytime using:</i> <code>/index resume</code>"
             )
         except Exception:
             pass
@@ -912,11 +912,11 @@ async def check_and_notify_interrupted_checkpoints(client: Client):
             saved = it.get("saved_count", 0)
 
             alert_text = (
-                f"⚠️ **Interrupted Indexing Job Detected!**\n\n"
+                f"⚠️ <b>Interrupted Indexing Job Detected!</b>\n\n"
                 f"Bot restart hone se pehle is channel ki indexing chal rahi thi:\n"
-                f"📁 **Channel:** `{channel_title}`\n"
-                f"🔢 **Last Scanned:** Msg `{last_id}` / `{end_id}`\n"
-                f"💾 **Files Indexed:** `{saved:,}` files\n\n"
+                f"📁 <b>Channel:</b> <code>{channel_title}</code>\n"
+                f"🔢 <b>Last Scanned:</b> Msg <code>{last_id}</code> / <code>{end_id}</code>\n"
+                f"💾 <b>Files Indexed:</b> <code>{saved:,}</code> files\n\n"
                 f"Ek click me vahi se continue karne ke liye neeche button dabayein:"
             )
             kb = InlineKeyboardMarkup([

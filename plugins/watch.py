@@ -19,18 +19,18 @@ async def watch_command_handler(client: Client, message: Message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         await message.reply_text(
-            "🍿 **How to Watch Movies & Series Online:**\n\n"
-            "Use the `/watch` command followed by the title of any movie or show:\n"
-            "👉 `/watch Thor`\n"
-            "👉 `/watch Inception`\n"
-            "👉 `/watch Kalki 2898 AD`\n"
-            "👉 `/watch Stranger Things 4`\n\n"
-            "⚡ _Opens instantly in our multi-server online cinema without downloading!_"
+            "🍿 <b>How to Watch Movies & Series Online:</b>\n\n"
+            "Use the <code>/watch</code> command followed by the title of any movie or show:\n"
+            "👉 <code>/watch Thor</code>\n"
+            "👉 <code>/watch Inception</code>\n"
+            "👉 <code>/watch Kalki 2898 AD</code>\n"
+            "👉 <code>/watch Stranger Things 4</code>\n\n"
+            "⚡ <i>Opens instantly in our multi-server online cinema without downloading!</i>"
         )
         return
 
     query = parts[1].strip()
-    status_msg = await message.reply_text(f"🔍 _Searching online streaming servers for:_ `{query}`...")
+    status_msg = await message.reply_text(f"🔍 <i>Searching online streaming servers for:</i> <code>{query}</code>...")
 
     online_meta = await search_online_meta(query)
     base_url = (Config.STREAM_URL or Config.WEB_URL or "").strip().rstrip("/")
@@ -43,7 +43,7 @@ async def watch_command_handler(client: Client, message: Message):
             [InlineKeyboardButton("💬 Request Movie", callback_data=f"reqmovie_{query[:25]}")]
         ]
         await status_msg.edit_text(
-            f"😕 **No direct online match found for:** `{query}`\n\n"
+            f"😕 <b>No direct online match found for:</b> <code>{query}</code>\n\n"
             "You can still try launching the online cinema search in your browser:",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
@@ -57,7 +57,7 @@ async def watch_command_handler(client: Client, message: Message):
     season = online_meta.get("season", 1)
     episode = online_meta.get("episode", 1)
     year_val = f" ({online_meta['year']})" if online_meta.get("year") else ""
-    rating_val = f"⭐ `{online_meta['rating']}/10 IMDb`" if online_meta.get("rating") else "⭐ `8.0/10`"
+    rating_val = f"⭐ <code>{online_meta['rating']}/10 IMDb</code>" if online_meta.get("rating") else "⭐ <code>8.0/10</code>"
     genres_val = f" • 🎭 {online_meta['genres']}" if online_meta.get("genres") else ""
     type_label = "TV Series / Anime" if media_type == "series" else "Movie"
     season_label = f" [Season {season}]" if season > 1 else ""
@@ -81,12 +81,12 @@ async def watch_command_handler(client: Client, message: Message):
         overview_text = overview_text[:237] + "..."
 
     caption = (
-        f"🍿 **AkMovieVerse Online Cinema**\n\n"
-        f"🎬 **{type_label}:** {m_title}{year_val}{season_label}\n"
+        f"🍿 <b>AkMovieVerse Online Cinema</b>\n\n"
+        f"🎬 <b>{type_label}:</b> {m_title}{year_val}{season_label}\n"
         f"{rating_val}{genres_val}\n\n"
-        f"⚡ **11+ Multi-Server Streaming Ready (VidLink, VidEm, VidSrc, Smashy, AutoEmbed, 2Embed, Vidy, VidZee, NontonGo, SuperEmbed)!**\n"
-        f"_{overview_text}_\n\n"
-        f"👇 _Tap the button below to watch directly in your browser:_"
+        f"⚡ <b>11+ Multi-Server Streaming Ready (VidLink, VidEm, VidSrc, Smashy, AutoEmbed, 2Embed, Vidy, VidZee, NontonGo, SuperEmbed)!</b>\n"
+        f"<i>{overview_text}</i>\n\n"
+        f"👇 <i>Tap the button below to watch directly in your browser:</i>"
     )
 
     poster_url = online_meta.get("poster")

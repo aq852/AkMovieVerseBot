@@ -55,11 +55,11 @@ async def new_chat_member_listener(client: Client, message: Message):
                     total_groups = await get_total_chats_count()
                     added_by = message.from_user.mention if message.from_user else "Unknown"
                     log_text = (
-                        "👥 **#NewGroup Added!**\n\n"
-                        f"• **Group Title:** `{message.chat.title}`\n"
-                        f"• **Group ID:** `{message.chat.id}`\n"
-                        f"• **Added By:** {added_by}\n"
-                        f"• **Total Groups Now:** `{total_groups:,}`"
+                        "👥 <b>#NewGroup Added!</b>\n\n"
+                        f"• <b>Group Title:</b> <code>{message.chat.title}</code>\n"
+                        f"• <b>Group ID:</b> <code>{message.chat.id}</code>\n"
+                        f"• <b>Added By:</b> {added_by}\n"
+                        f"• <b>Total Groups Now:</b> <code>{total_groups:,}</code>"
                     )
                     await client.send_message(Config.LOG_CHANNEL, log_text)
                 except Exception as e:
@@ -82,11 +82,11 @@ async def chat_settings_command(client: Client, message: Message):
         connected_chats = await get_user_connected_chats(user_id)
         if not connected_chats:
             await message.reply_text(
-                "ℹ️ **No Connected Groups Found!**\n\n"
+                "ℹ️ <b>No Connected Groups Found!</b>\n\n"
                 "To manage a group's settings from your PM:\n"
                 "1. Add me as an Admin in your group.\n"
-                "2. Send `/connect` inside your group.\n"
-                "3. Then use `/settings` here in PM to manage it privately!"
+                "2. Send <code>/connect</code> inside your group.\n"
+                "3. Then use <code>/settings</code> here in PM to manage it privately!"
             )
             return
 
@@ -95,7 +95,7 @@ async def chat_settings_command(client: Client, message: Message):
             title = chat.get("title", f"Group {chat['chat_id']}")
             buttons.append([InlineKeyboardButton(f"⚙️ {title[:30]}", callback_data=f"openset_{chat['chat_id']}")])
 
-        await message.reply_text("👉 **Select a connected group to configure:**", reply_markup=InlineKeyboardMarkup(buttons))
+        await message.reply_text("👉 <b>Select a connected group to configure:</b>", reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     # In Group: Verify user is group admin
@@ -103,7 +103,7 @@ async def chat_settings_command(client: Client, message: Message):
     try:
         member = await client.get_chat_member(chat_id, user_id)
         if member.status not in ["creator", "administrator"] and not Config.is_admin(user_id):
-            await message.reply_text("⛔ **Only group administrators can modify bot settings!**")
+            await message.reply_text("⛔ <b>Only group administrators can modify bot settings!</b>")
             return
     except Exception:
         return
@@ -113,7 +113,7 @@ async def chat_settings_command(client: Client, message: Message):
     markup = build_settings_keyboard(chat_id, settings)
 
     await message.reply_text(
-        f"⚙️ **Settings for:** `{message.chat.title}`\n"
+        f"⚙️ <b>Settings for:</b> <code>{message.chat.title}</code>\n"
         f"Configure auto-delete, button layouts, and monetization below:",
         reply_markup=markup
     )
@@ -139,8 +139,8 @@ async def connect_group_command(client: Client, message: Message):
     await connect_user_to_chat(user_id, chat_id)
 
     await message.reply_text(
-        f"✅ **Successfully Connected!**\n\n"
-        f"You can now manage `{message.chat.title}` settings privately by sending `/settings` in my PM!"
+        f"✅ <b>Successfully Connected!</b>\n\n"
+        f"You can now manage <code>{message.chat.title}</code> settings privately by sending <code>/settings</code> in my PM!"
     )
 
 
@@ -153,7 +153,7 @@ async def disconnect_group_command(client: Client, message: Message):
     chat_id = message.chat.id
 
     await disconnect_user_from_chat(user_id, chat_id)
-    await message.reply_text("✅ **Group disconnected from your PM settings list.**")
+    await message.reply_text("✅ <b>Group disconnected from your PM settings list.</b>")
 
 
 # Group Admin Custom Shortener: /shortlink <domain> <api_key>
@@ -163,7 +163,7 @@ async def set_group_shortener_command(client: Client, message: Message):
     if not message.from_user:
         return
     if is_private_chat(message):
-        await message.reply_text("⚠️ **Usage:** Please send `/shortlink [domain] [api_key]` inside the group you want to configure.")
+        await message.reply_text("⚠️ <b>Usage:</b> Please send <code>/shortlink [domain] [api_key]</code> inside the group you want to configure.")
         return
 
     user_id = message.from_user.id
@@ -171,8 +171,8 @@ async def set_group_shortener_command(client: Client, message: Message):
 
     if len(args) < 3:
         await message.reply_text(
-            "⚠️ **Usage:** `/shortlink [shortener_website] [api_key]`\n"
-            "Example: `/shortlink shareus.io my_secret_api_key_123`"
+            "⚠️ <b>Usage:</b> <code>/shortlink [shortener_website] [api_key]</code>\n"
+            "Example: <code>/shortlink shareus.io my_secret_api_key_123</code>"
         )
         return
 
@@ -188,7 +188,7 @@ async def set_group_shortener_command(client: Client, message: Message):
     await update_chat_setting(chat_id, "custom_shortener_url", domain)
     await update_chat_setting(chat_id, "custom_shortener_api", api_key)
 
-    await message.reply_text(f"✅ **Custom Shortener Configured!**\n\n**Website:** `{domain}`\n**API Key:** `{api_key[:6]}******`")
+    await message.reply_text(f"✅ <b>Custom Shortener Configured!</b>\n\n<b>Website:</b> <code>{domain}</code>\n<b>API Key:</b> <code>{api_key[:6]}******</code>")
 
 
 # Settings Callbacks
@@ -197,7 +197,7 @@ async def open_settings_callback(client: Client, query: CallbackQuery):
     chat_id = int(query.data.split("openset_")[1])
     settings = await get_chat_settings(chat_id)
     markup = build_settings_keyboard(chat_id, settings)
-    await query.message.edit_text(f"⚙️ **Configuring Group:** `{chat_id}`", reply_markup=markup)
+    await query.message.edit_text(f"⚙️ <b>Configuring Group:</b> <code>{chat_id}</code>", reply_markup=markup)
     await query.answer()
 
 

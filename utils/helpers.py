@@ -494,6 +494,24 @@ def build_filter_buttons(
         btn_vip = InlineKeyboardButton(f"{btn_label} ↗️", url=plans_url)
     keyboard.append([btn_vip, btn_send_all])
 
+    # Row 3: Quick Number Buttons for direct 1-click file delivery
+    number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    if results:
+        num_row = []
+        for idx, item in enumerate(results):
+            f_id = item.get("file_unique_id")
+            icon = number_icons[idx] if idx < len(number_icons) else f"{idx + 1}"
+            if is_pm:
+                btn = InlineKeyboardButton(icon, callback_data=f"getfile_{f_id}")
+            else:
+                btn = InlineKeyboardButton(icon, url=f"https://t.me/{bot_username}?start=file_{f_id}")
+            num_row.append(btn)
+            if len(num_row) == 5:
+                keyboard.append(num_row)
+                num_row = []
+        if num_row:
+            keyboard.append(num_row)
+
     # Pagination navigation row
     if total_pages <= 1:
         keyboard.append([InlineKeyboardButton("↔️ NO MORE PAGES AVAILABLE ↔️", callback_data="noop_pages")])

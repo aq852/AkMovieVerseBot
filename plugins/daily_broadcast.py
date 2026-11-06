@@ -151,26 +151,26 @@ async def init_gems_collection():
 def get_rating_badge(rating: float) -> str:
     """Return dynamic badge text based on rating value."""
     if rating >= 8.5:
-        return f"🏆 **ALL-TIME MASTERPIECE (IMDb: {rating}/10)**"
+        return f"🏆 <b>ALL-TIME MASTERPIECE (IMDb: {rating}/10)</b>"
     elif rating >= 7.8:
-        return f"🔥 **MUST WATCH MASTERPIECE (IMDb: {rating}/10)**"
+        return f"🔥 <b>MUST WATCH MASTERPIECE (IMDb: {rating}/10)</b>"
     elif rating >= 7.0:
-        return f"⭐ **HIGHLY RECOMMENDED (IMDb: {rating}/10)**"
+        return f"⭐ <b>HIGHLY RECOMMENDED (IMDb: {rating}/10)</b>"
     else:
-        return f"🍿 **POPULAR BINGE WATCH (IMDb: {rating}/10)**"
+        return f"🍿 <b>POPULAR BINGE WATCH (IMDb: {rating}/10)</b>"
 
 
 def get_category_label(c_type: str) -> str:
     """Format category icon & name."""
     c = (c_type or "").lower()
     if "anime" in c:
-        return "⛩️ **Anime Series**"
+        return "⛩️ <b>Anime Series</b>"
     elif "series" in c or "web" in c:
-        return "📺 **Web Series**"
+        return "📺 <b>Web Series</b>"
     elif "kdrama" in c or "k-drama" in c or "drama" in c:
-        return "🎭 **K-Drama / Asian Drama**"
+        return "🎭 <b>K-Drama / Asian Drama</b>"
     else:
-        return "🎬 **Movie**"
+        return "🎬 <b>Movie</b>"
 
 
 def clean_media_title(raw: str) -> str:
@@ -681,36 +681,36 @@ async def start_daily_broadcast_scheduler(client: Client):
 async def toggle_daily_broadcast_command(client: Client, message: Message):
     """Admin command: /dailybroadcast [on|off|status]"""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split()
     if len(args) > 1:
         arg = args[1].lower()
         if arg == "on":
             await set_bot_setting("daily_broadcast_enabled", True)
-            return await message.reply_text("✅ **Daily Auto-Broadcast Enabled!**\nScheduled broadcasts will run daily at the configured time.")
+            return await message.reply_text("✅ <b>Daily Auto-Broadcast Enabled!</b>\nScheduled broadcasts will run daily at the configured time.")
         elif arg == "off":
             await set_bot_setting("daily_broadcast_enabled", False)
-            return await message.reply_text("⏸️ **Daily Auto-Broadcast Paused!**\nNo automated broadcasts will be sent until re-enabled.")
+            return await message.reply_text("⏸️ <b>Daily Auto-Broadcast Paused!</b>\nNo automated broadcasts will be sent until re-enabled.")
 
     enabled = await get_bot_setting("daily_broadcast_enabled", True)
     sched_time = await get_bot_setting("daily_broadcast_time", "20:00")
     last_sent = await get_bot_setting("last_broadcast_date", "None")
 
-    status_str = "🟢 **ENABLED**" if enabled else "🔴 **DISABLED**"
+    status_str = "🟢 <b>ENABLED</b>" if enabled else "🔴 <b>DISABLED</b>"
     await message.reply_text(
-        f"📊 **Daily Auto-Broadcast Status**\n\n"
-        f"• **Status:** {status_str}\n"
-        f"• **Scheduled Time (IST):** `{sched_time}` (8:00 PM)\n"
-        f"• **Last Sent Date:** `{last_sent}`\n"
-        f"• **Schedule Format:**\n"
-        f"  - _Mon–Thu:_ 🚀 Fresh Drops (Vertical Blockquote List)\n"
-        f"  - _Fri–Sun:_ 🌟 Hidden Gem (Movie/Anime/Series/K-Drama)\n\n"
-        f"**Commands:**\n"
-        f"• `/dailybroadcast [on|off]`\n"
-        f"• `/set_broadcast_time <HH:MM>` (e.g. `/set_broadcast_time 20:30`)\n"
-        f"• `/test_broadcast [fresh|gem]` (Preview in your PM)\n"
-        f"• `/send_broadcast [fresh|gem]` (Send to all users now)"
+        f"📊 <b>Daily Auto-Broadcast Status</b>\n\n"
+        f"• <b>Status:</b> {status_str}\n"
+        f"• <b>Scheduled Time (IST):</b> <code>{sched_time}</code> (8:00 PM)\n"
+        f"• <b>Last Sent Date:</b> <code>{last_sent}</code>\n"
+        f"• <b>Schedule Format:</b>\n"
+        f"  - <i>Mon–Thu:</i> 🚀 Fresh Drops (Vertical Blockquote List)\n"
+        f"  - <i>Fri–Sun:</i> 🌟 Hidden Gem (Movie/Anime/Series/K-Drama)\n\n"
+        f"<b>Commands:</b>\n"
+        f"• <code>/dailybroadcast [on|off]</code>\n"
+        f"• <code>/set_broadcast_time &lt;HH:MM&gt;</code> (e.g. <code>/set_broadcast_time 20:30</code>)\n"
+        f"• <code>/test_broadcast [fresh|gem]</code> (Preview in your PM)\n"
+        f"• <code>/send_broadcast [fresh|gem]</code> (Send to all users now)"
     )
 
 
@@ -718,28 +718,28 @@ async def toggle_daily_broadcast_command(client: Client, message: Message):
 async def set_broadcast_time_command(client: Client, message: Message):
     """Admin command: /set_broadcast_time <HH:MM> (e.g. 20:00 for 8 PM IST)"""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     args = message.text.split()
     if len(args) < 2 or not re.match(r"^([01]\d|2[0-3]):([0-5]\d)$", args[1]):
-        return await message.reply_text("⚠️ **Usage:** `/set_broadcast_time <HH:MM>` in 24-hour IST format.\nExample: `/set_broadcast_time 20:00` (8:00 PM)")
+        return await message.reply_text("⚠️ <b>Usage:</b> <code>/set_broadcast_time &lt;HH:MM&gt;</code> in 24-hour IST format.\nExample: <code>/set_broadcast_time 20:00</code> (8:00 PM)")
 
     new_time = args[1]
     await set_bot_setting("daily_broadcast_time", new_time)
-    await message.reply_text(f"✅ **Broadcast Time Updated!**\nDaily auto-broadcast will now trigger at **{new_time} IST**.")
+    await message.reply_text(f"✅ <b>Broadcast Time Updated!</b>\nDaily auto-broadcast will now trigger at <b>{new_time} IST</b>.")
 
 
 @Client.on_message(filters.command("test_broadcast") & filters.private)
 async def test_broadcast_command(client: Client, message: Message):
     """Admin command: /test_broadcast [card|text] - Send preview to Admin PM only."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     args = message.text.split()
     b_type = args[1].lower() if len(args) > 1 else "card"
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
 
-    status = await message.reply_text("⏳ **Generating test preview...**")
+    status = await message.reply_text("⏳ <b>Generating test preview...</b>")
 
     try:
         if b_type.startswith("fresh") or b_type.startswith("text"):
@@ -753,20 +753,20 @@ async def test_broadcast_command(client: Client, message: Message):
             await message.reply_photo(photo=photo, caption=text, reply_markup=markup)
     except Exception as e:
         logger.error(f"Error in test broadcast: {e}", exc_info=True)
-        await status.edit_text(f"❌ **Error generating preview:** `{e}`")
+        await status.edit_text(f"❌ <b>Error generating preview:</b> <code>{e}</code>")
 
 
 @Client.on_message(filters.command("send_broadcast") & filters.private)
 async def manual_send_broadcast_command(client: Client, message: Message):
     """Admin command: /send_broadcast [card|text] - Manually broadcast to all users right now."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     args = message.text.split()
     b_type = args[1].lower() if len(args) > 1 else "card"
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
 
-    status = await message.reply_text(f"🚀 **Preparing and launching manual `{b_type}` broadcast...**")
+    status = await message.reply_text(f"🚀 <b>Preparing and launching manual <code>{b_type}</code> broadcast...</b>")
 
     try:
         if b_type.startswith("fresh") or b_type.startswith("text"):
@@ -776,20 +776,20 @@ async def manual_send_broadcast_command(client: Client, message: Message):
             text, markup, photo = await build_hidden_gem_content(bot_username)
             photo = photo or getattr(Config, "START_PIC", "https://api.aniwallpaper.workers.dev/random")
 
-        await status.edit_text("📢 **Broadcasting to all registered users... Auto-purging blocked accounts...**")
+        await status.edit_text("📢 <b>Broadcasting to all registered users... Auto-purging blocked accounts...</b>")
         stats = await execute_broadcast_with_dead_user_purging(client, text, markup, photo)
 
         await status.edit_text(
-            f"🎉 **Manual Broadcast Complete!**\n\n"
-            f"🎯 **Type:** `{b_type.upper()}`\n"
-            f"👥 **Total Users:** `{stats['total']:,}`\n"
-            f"✅ **Delivered:** `{stats['sent']:,}`\n"
-            f"🧹 **Blocked/Deleted Purged from DB:** `{stats['purged']:,}`\n"
-            f"⚠️ **Failed:** `{stats['failed']:,}`"
+            f"🎉 <b>Manual Broadcast Complete!</b>\n\n"
+            f"🎯 <b>Type:</b> <code>{b_type.upper()}</code>\n"
+            f"👥 <b>Total Users:</b> <code>{stats['total']:,}</code>\n"
+            f"✅ <b>Delivered:</b> <code>{stats['sent']:,}</code>\n"
+            f"🧹 <b>Blocked/Deleted Purged from DB:</b> <code>{stats['purged']:,}</code>\n"
+            f"⚠️ <b>Failed:</b> <code>{stats['failed']:,}</code>"
         )
     except Exception as e:
         logger.error(f"Error in manual broadcast: {e}", exc_info=True)
-        await status.edit_text(f"❌ **Broadcast Failed:** `{e}`")
+        await status.edit_text(f"❌ <b>Broadcast Failed:</b> <code>{e}</code>")
 
 
 @Client.on_message(filters.command("addgem") & filters.private)
@@ -799,20 +799,20 @@ async def add_gem_command(client: Client, message: Message):
     /addgem Death Note | anime | 8.9 | Ek aisi diary jisme naam likhne se maut hoti hai...
     """
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     raw = message.text.split(maxsplit=1)
     if len(raw) < 2 or "|" not in raw[1]:
         return await message.reply_text(
-            "ℹ️ **Usage to Add a Hidden Gem:**\n"
-            "`/addgem <Title> | <Category: movie/anime/series/kdrama> | <Rating: 1-10> | <Hook Description> [| Poster URL]`\n\n"
+            "ℹ️ <b>Usage to Add a Hidden Gem:</b>\n"
+            "<code>/addgem &lt;Title&gt; | &lt;Category: movie/anime/series/kdrama&gt; | &lt;Rating: 1-10&gt; | &lt;Hook Description&gt; [| Poster URL]</code>\n\n"
             "Example:\n"
-            "`/addgem Maharaja | movie | 8.5 | Ek barber ka dustbin chori ho jata hai aur aakhri 30 min hosh uda denge!`"
+            "<code>/addgem Maharaja | movie | 8.5 | Ek barber ka dustbin chori ho jata hai aur aakhri 30 min hosh uda denge!</code>"
         )
 
     parts = [p.strip() for p in raw[1].split("|")]
     if len(parts) < 4:
-        return await message.reply_text("❌ Please provide at least 4 fields: `Title | Type | Rating | Hook`.")
+        return await message.reply_text("❌ Please provide at least 4 fields: <code>Title | Type | Rating | Hook</code>.")
 
     title = parts[0]
     g_type = parts[1].lower()
@@ -840,11 +840,11 @@ async def add_gem_command(client: Client, message: Message):
     await mongo.db["hidden_gems"].insert_one(doc)
     badge = get_rating_badge(rating)
     await message.reply_text(
-        f"✅ **Added to Hidden Gems Rotation!**\n\n"
-        f"🎬 **Title:** `{title}`\n"
-        f"🏷️ **Category:** {get_category_label(g_type)}\n"
-        f"⭐ **Rating Badge:** {badge}\n"
-        f"💬 **Hook:** _{hook}_"
+        f"✅ <b>Added to Hidden Gems Rotation!</b>\n\n"
+        f"🎬 <b>Title:</b> <code>{title}</code>\n"
+        f"🏷️ <b>Category:</b> {get_category_label(g_type)}\n"
+        f"⭐ <b>Rating Badge:</b> {badge}\n"
+        f"💬 <b>Hook:</b> <i>{hook}</i>"
     )
 
 
@@ -852,7 +852,7 @@ async def add_gem_command(client: Client, message: Message):
 async def list_gems_command(client: Client, message: Message):
     """Admin command: /listgems - List active gems in database rotation."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
     await init_gems_collection()
     cursor = mongo.db["hidden_gems"].find({}).sort("rating", -1)
@@ -864,13 +864,13 @@ async def list_gems_command(client: Client, message: Message):
     lines = []
     for idx, g in enumerate(gems, start=1):
         c_label = get_category_label(g.get("type", "movie"))
-        lines.append(f"{idx}. **{g['title']}** — {c_label} • ⭐ `{g.get('rating')}/10`")
+        lines.append(f"{idx}. <b>{g['title']}</b> — {c_label} • ⭐ <code>{g.get('rating')}/10</code>")
 
     text = (
-        f"💎 **Active Hidden Gems Pool ({len(gems)} items)**\n"
+        f"💎 <b>Active Hidden Gems Pool ({len(gems)} items)</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
         "\n".join(lines[:30]) +
-        f"\n\n_To add a new gem: use /addgem_"
+        f"\n\n<i>To add a new gem: use /addgem</i>"
     )
 
     await message.reply_text(text)

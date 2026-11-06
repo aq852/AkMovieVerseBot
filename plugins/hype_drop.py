@@ -285,22 +285,22 @@ async def check_and_notify_high_demand(client: Client, media_info: dict):
 async def hype_drop_command(client: Client, message: Message):
     """Admin command: /hypedrop <Movie Name> - Preview and broadcast a high-hype blockbuster alert."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**: Admin privileges required.")
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     args = message.text.split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
         return await message.reply_text(
-            "⚠️ **Usage:** `/hypedrop <Movie / Series Name>`\n\n"
-            "**Examples:**\n"
-            "• `/hypedrop Stree 2`\n"
-            "• `/hypedrop Mirzapur`\n"
-            "• `/hypedrop Pushpa 2`\n\n"
-            "💡 _Bot will fetch HD poster, IMDb rating, audio & quality badges, and show you an instant preview before broadcasting!_"
+            "⚠️ <b>Usage:</b> <code>/hypedrop &lt;Movie / Series Name&gt;</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/hypedrop Stree 2</code>\n"
+            "• <code>/hypedrop Mirzapur</code>\n"
+            "• <code>/hypedrop Pushpa 2</code>\n\n"
+            "💡 <i>Bot will fetch HD poster, IMDb rating, audio & quality badges, and show you an instant preview before broadcasting!</i>"
         )
 
     query = args[1].strip()
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
-    status = await message.reply_text(f"⏳ **Building Hype Alert for:** `{query}`...")
+    status = await message.reply_text(f"⏳ <b>Building Hype Alert for:</b> <code>{query}</code>...")
 
     try:
         caption, public_markup, photo_url, meta = await build_hype_card(bot_username, query)
@@ -339,22 +339,22 @@ async def hype_drop_command(client: Client, message: Message):
 
     except Exception as e:
         logger.error(f"Error in hypedrop command: {e}", exc_info=True)
-        await status.edit_text(f"❌ **Error creating hype alert:** `{e}`")
+        await status.edit_text(f"❌ <b>Error creating hype alert:</b> <code>{e}</code>")
 
 
 @Client.on_message(filters.command(["demands", "topdemands"]) & filters.private)
 async def top_demands_command(client: Client, message: Message):
     """Admin command: View top unfulfilled movie searches by users."""
     if not Config.is_admin(message.from_user.id):
-        return await message.reply_text("⛔ **Access Denied**.")
+        return await message.reply_text("⛔ <b>Access Denied</b>.")
 
-    status = await message.reply_text("⏳ **Analyzing user search demand...**")
+    status = await message.reply_text("⏳ <b>Analyzing user search demand...</b>")
     try:
         cursor = mongo.db["search_demand"].find({}).sort("count", -1).limit(15)
         docs = await cursor.to_list(length=15)
 
         if not docs:
-            return await status.edit_text("ℹ️ **Abhi tak koi unfulfilled search record nahi hui hai.**")
+            return await status.edit_text("ℹ️ <b>Abhi tak koi unfulfilled search record nahi hui hai.</b>")
 
         lines = ["📊 <b>TOP DEMANDED MOVIES (USER SEARCHES)</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"]
         for idx, doc in enumerate(docs, 1):
@@ -368,7 +368,7 @@ async def top_demands_command(client: Client, message: Message):
         await status.edit_text("\n".join(lines))
     except Exception as e:
         logger.error(f"Error listing demands: {e}")
-        await status.edit_text(f"❌ **Error:** `{e}`")
+        await status.edit_text(f"❌ <b>Error:</b> <code>{e}</code>")
 
 
 # ==============================================================================
@@ -423,7 +423,7 @@ async def execute_hype_broadcast_callback(client: Client, query: CallbackQuery):
 
     except Exception as e:
         logger.error(f"Hype broadcast execution error: {e}", exc_info=True)
-        await progress_msg.edit_text(f"❌ **Broadcast Failed:** `{e}`")
+        await progress_msg.edit_text(f"❌ <b>Broadcast Failed:</b> <code>{e}</code>")
 
 
 @Client.on_callback_query(filters.regex(r"^hypecnl_"))
