@@ -153,21 +153,12 @@ ADMIN_COMMANDS = [
     BotCommand("listgems", "List all active gems: /listgems"),
     BotCommand("showthumb", "View active custom thumbnail"),
     BotCommand("delthumb", "Delete custom thumbnail"),
-    BotCommand("plans", "View VIP subscription plans"),
-    BotCommand("myplan", "Check VIP subscription status"),
-    BotCommand("refer", "Referral link & rewards"),
-    BotCommand("settings", "Configure group settings"),
-    BotCommand("filter", "Add manual filter in group"),
-    BotCommand("filters", "List manual filters in group"),
-    BotCommand("stop", "Remove manual filter in group"),
-    BotCommand("stopall", "Clear all manual filters in group"),
-    BotCommand("imdb", "Search IMDb rating: /imdb <movie>"),
-    BotCommand("watch", "Stream movie/series online: /watch <name>"),
-    BotCommand("stream", "Generate streaming link: reply /stream"),
-    BotCommand("request", "Request movie/series: /request <name>"),
-    BotCommand("id", "Get Telegram user / chat ID"),
-    BotCommand("info", "Get detailed profile info"),
-    BotCommand("cancel", "Cancel active payment or action")
+    BotCommand("genpromo", "Generate VIP promo code: /genpromo <days> <users>"),
+    BotCommand("promos", "Active promo coupons dashboard"),
+    BotCommand("delpromo", "Revoke promo code: /delpromo <code>"),
+    BotCommand("abroadcast", "Advanced broadcast with buttons: /abroadcast"),
+    BotCommand("preview_broadcast", "Test & preview broadcast in PM"),
+    BotCommand("agrp_broadcast", "Advanced broadcast to all groups")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:
@@ -200,9 +191,9 @@ async def register_all_bot_commands(client: Client) -> dict:
     # 3. Dedicated Admin Scope for each Bot Admin
     for admin_id in Config.ADMINS:
         try:
-            await client.set_bot_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
+            await client.set_bot_commands(ADMIN_COMMANDS[:100], scope=BotCommandScopeChat(chat_id=admin_id))
             results["admin_scoped"] += 1
-            logger.info(f"Registered {len(ADMIN_COMMANDS)} full admin commands for chat {admin_id}")
+            logger.info(f"Registered {len(ADMIN_COMMANDS[:100])} full admin commands for chat {admin_id}")
         except Exception as e:
             logger.warning(f"Failed to set admin commands for {admin_id}: {e}")
             results["errors"].append(f"Admin {admin_id}: {e}")
