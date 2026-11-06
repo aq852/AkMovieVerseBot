@@ -236,7 +236,8 @@ class TestAutoFilterEngine(unittest.TestCase):
             CATEGORY_KEYS, CATEGORY_CONTENT, CHEAT_SHEET_TEXT,
             get_admin_hub_markup, get_category_markup
         )
-        self.assertGreaterEqual(len(CATEGORY_KEYS), 8)
+        from utils.bot_commands import ADMIN_COMMANDS
+        self.assertGreaterEqual(len(CATEGORY_KEYS), 13)
         # Telegram 4096 character safety limit
         self.assertLess(len(CHEAT_SHEET_TEXT), 4096)
         for cat in CATEGORY_KEYS:
@@ -244,9 +245,19 @@ class TestAutoFilterEngine(unittest.TestCase):
             self.assertLess(len(CATEGORY_CONTENT[cat]), 4096)
             mk = get_category_markup(cat)
             self.assertIsNotNone(mk)
+            cbs = [btn.callback_data for row in mk.inline_keyboard for btn in row]
+            self.assertIn("ahelp_home", cbs)
 
         hub = get_admin_hub_markup()
         self.assertIsNotNone(hub)
+        hub_cbs = [btn.callback_data for row in hub.inline_keyboard for btn in row]
+        self.assertIn("ahelp_close", hub_cbs)
+        for cat in CATEGORY_KEYS:
+            self.assertIn(f"ahelp_cat:{cat}", hub_cbs)
+
+        # Ensure all admin commands are present in cheat sheet
+        for cmd in ADMIN_COMMANDS:
+            self.assertIn(f"/{cmd.command}", CHEAT_SHEET_TEXT)
 
     def test_channel_post_caption_and_buttons(self):
         from plugins.channel_post import format_post_caption, build_post_buttons
