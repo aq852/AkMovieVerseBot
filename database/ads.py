@@ -6,29 +6,34 @@ from database.mongo import mongo
 
 logger = logging.getLogger(__name__)
 
-DURATION_REGEX = re.compile(r"^(\d+)\s*([hdmyw])$", re.IGNORECASE)
+DURATION_REGEX = re.compile(r"^<?(\d+)\s*([a-zA-Z]+)?>?$", re.IGNORECASE)
 
 
 def parse_duration_string(dur_str: str) -> Optional[int]:
-    """Parse duration string like '24h', '3d', '7d', '1w', '30d' into seconds.
+    """Parse duration string like '<1h>', '1h', '24h', '3d', '7d', '1w', '30m' into seconds.
     Returns seconds or None if invalid.
     """
-    match = DURATION_REGEX.match(dur_str.strip())
+    clean_str = dur_str.strip().strip("<>").strip()
+    match = re.match(r"^(\d+)\s*([a-zA-Z]+)?$", clean_str)
     if not match:
         return None
 
     val = int(match.group(1))
-    unit = match.group(2).lower()
+    unit = (match.group(2) or "h").lower()
 
-    if unit == "h":
+    if unit in ("s", "sec", "secs", "second", "seconds"):
+        return val
+    elif unit in ("min", "mins", "minute", "minutes"):
+        return val * 60
+    elif unit in ("h", "hr", "hrs", "hour", "hours"):
         return val * 3600
-    elif unit == "d":
+    elif unit in ("d", "day", "days"):
         return val * 86400
-    elif unit == "w":
+    elif unit in ("w", "wk", "week", "weeks"):
         return val * 7 * 86400
-    elif unit == "m":
+    elif unit in ("m", "mo", "mon", "month", "months"):
         return val * 30 * 86400
-    elif unit == "y":
+    elif unit in ("y", "yr", "year", "years"):
         return val * 365 * 86400
     return None
 
@@ -52,8 +57,8 @@ async def set_sponsor_ad(
     if not clean_url.startswith(("http://", "https://", "tg://")):
         return False, "URL must start with http://, https://, or tg://", None
 
-    if duration_seconds <= 0 or duration_seconds > (365 * 86400):
-        return False, "Duration must be between 1 hour and 365 days.", None
+    if duration_seconds < 60 or duration_seconds > (365 * 86400):
+        return False, "Duration must be between 1 minute and 365 days.", None
 
     now = datetime.datetime.utcnow()
     expires_at = now + datetime.timedelta(seconds=duration_seconds)

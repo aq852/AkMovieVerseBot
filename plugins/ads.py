@@ -32,32 +32,51 @@ async def set_ad_command(client: Client, message: Message):
         return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
     text = message.text or ""
-    # Parse format: /setad <duration> [Ad Text | URL]
-    match = re.search(r"^/setad\s+([0-9]+[hdmywHDMYW])\s+\[([^\|\]]+)\|\s*([^\]]+)\]", text.strip())
-    if not match:
+    body = re.sub(r"^/(?:setad|addad|createad)(?:@\w+)?\s*", "", text.strip(), flags=re.I).strip()
+    if not body:
         return await message.reply_text(
             "📢 <b>SET TIME-BASED SPONSOR AD</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<b>Usage:</b>\n"
-            "<code>/setad &lt;duration&gt; [Ad Title | Target URL]</code>\n\n"
+            "<b>Usage (With or without brackets):</b>\n"
+            "• <code>/setad 1h Ad Title | Target URL</code>\n"
+            "• <code>/setad &lt;duration&gt; [Ad Title | Target URL]</code>\n\n"
             "<b>Duration Formats:</b>\n"
-            "• <code>24h</code> : 24 Hours\n"
+            "• <code>1h</code> : 1 Hour (Flash Ad)\n"
+            "• <code>24h</code> : 24 Hours (1 Day)\n"
             "• <code>3d</code> : 3 Days\n"
             "• <code>7d</code> : 7 Days (1 Week)\n"
             "• <code>30d</code> : 30 Days (1 Month)\n\n"
             "<b>Examples:</b>\n"
-            "• <code>/setad 7d [🔥 1XBet - 100% Welcome Bonus | https://1xbet.com]</code>\n"
-            "• <code>/setad 24h [📢 Join @Akmovieszone for 4K Drops | https://t.me/Akmovieszone]</code>\n\n"
+            "• <code>/setad 1h Join AkMovieVerse | https://t.me/AkMovieVerse</code>\n"
+            "• <code>/setad 24h [🔥 1XBet 100% Bonus | https://1xbet.com]</code>\n\n"
             "💡 <i>Active ads auto-expire on the exact second. VIP members never see ads!</i>"
         )
 
-    dur_str = match.group(1).strip()
-    ad_title = match.group(2).strip()
-    ad_url = match.group(3).strip()
+    # 1. Extract duration (supports <1h>, 1h, 1hr, 24h, 3d, etc.)
+    dur_match = re.match(r"^(?:<)?([0-9]+\s*[a-zA-Z]*)(?:>)?\s+", body)
+    if not dur_match:
+        return await message.reply_text("❌ <b>Missing duration.</b> Example: <code>/setad 1h Title | https://url</code>")
+
+    dur_str = dur_match.group(1).strip()
+    rest = body[dur_match.end():].strip()
+
+    # 2. Extract title and URL (with or without [ ... ])
+    if rest.startswith("[") and rest.endswith("]"):
+        rest = rest[1:-1].strip()
+
+    if "|" not in rest:
+        return await message.reply_text(
+            "❌ <b>Invalid format.</b> Title and URL must be separated by a <code>|</code> pipe.\n"
+            "<b>Example:</b> <code>/setad 1h Ad Title | https://t.me/mychannel</code>"
+        )
+
+    parts = rest.split("|", 1)
+    ad_title = parts[0].strip()
+    ad_url = parts[1].strip()
 
     dur_seconds = parse_duration_string(dur_str)
     if not dur_seconds:
-        return await message.reply_text("❌ <b>Invalid duration format.</b> Use <code>24h</code>, <code>3d</code>, <code>7d</code>, <code>30d</code>.")
+        return await message.reply_text("❌ <b>Invalid duration format.</b> Use <code>1h</code>, <code>24h</code>, <code>3d</code>, <code>7d</code>, <code>30d</code>.")
 
     success, msg, doc = await set_sponsor_ad(
         text=ad_title,
