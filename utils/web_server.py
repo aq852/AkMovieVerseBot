@@ -1666,6 +1666,104 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                 grid-column: span 3;
             }}
         }}
+        /* Mobile Responsive Player Controls Guard */
+        @media (max-width: 640px) {{
+            body {{
+                padding: 8px 10px 24px 10px;
+            }}
+            .header {{
+                padding: 4px 2px 10px 2px;
+                gap: 8px;
+            }}
+            .brand {{
+                font-size: 16px;
+                gap: 5px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }}
+            .btn-channel {{
+                font-size: 11px;
+                padding: 5px 10px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }}
+            .player-wrapper {{
+                height: 56.25vw;
+                min-height: 200px;
+                border-radius: 12px;
+            }}
+            /* Artplayer Bottom Bar & Controls Flex Overrides */
+            .art-video-player .art-bottom {{
+                padding: 0 4px 2px 4px !important;
+            }}
+            .art-video-player .art-controls {{
+                padding: 0 2px !important;
+                gap: 3px !important;
+            }}
+            .art-video-player .art-controls-left {{
+                gap: 4px !important;
+                min-width: 0 !important;
+                flex-shrink: 1 !important;
+            }}
+            .art-video-player .art-controls-right {{
+                gap: 2px !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+            }}
+            /* Hide non-essential buttons on mobile portrait to prevent controls overflow */
+            .art-video-player .art-control-screenshot,
+            .art-video-player .art-control-pip,
+            .art-video-player .art-control-fullscreenWeb,
+            .art-video-player .art-control-aspectRatio,
+            .art-video-player .art-control-flip,
+            .art-video-player .art-control-airplay {{
+                display: none !important;
+            }}
+            /* Mobile Volume: hide width-eating slider so touch doesn't misfire */
+            .art-video-player .art-control-volume .art-volume-slider,
+            .art-video-player .art-control-volume-slider {{
+                display: none !important;
+            }}
+            .art-video-player .art-control-volume {{
+                min-width: 26px !important;
+                padding: 0 2px !important;
+            }}
+            /* Compact Time Display */
+            .art-video-player .art-control-time {{
+                font-size: 11px !important;
+                padding: 0 3px !important;
+                margin: 0 !important;
+                white-space: nowrap !important;
+            }}
+            /* Quality pill in bottom bar */
+            .art-video-player .art-control-quality {{
+                font-size: 11px !important;
+                padding: 0 4px !important;
+                max-width: 80px !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+            }}
+            /* Settings Gear */
+            .art-video-player .art-control-setting {{
+                min-width: 28px !important;
+                padding: 0 2px !important;
+                display: flex !important;
+                align-items: center !important;
+            }}
+            /* Fullscreen button: ALWAYS visible, prioritized */
+            .art-video-player .art-control-fullscreen {{
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                min-width: 32px !important;
+                min-height: 32px !important;
+                padding: 0 4px !important;
+                margin-left: 2px !important;
+                z-index: 20 !important;
+            }}
+        }}
     </style>
 </head>
 <body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
@@ -4248,7 +4346,7 @@ async def watch_handler(request: web.Request):
 
                 artplayer_quality_json.append({
                     "default": is_active,
-                    "html": f"{pf_q} {codecs[0] if codecs else ''} ({pf_sz})".strip(),
+                    "html": f"{pf_q} ({pf_sz})".strip(),
                     "url": pf_stream_url
                 })
 
@@ -5768,6 +5866,7 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             color: #f3f4f6;
             min-height: 100vh;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow-x: hidden;
         }}
         .player-stage {{
             position: relative;
@@ -5789,12 +5888,22 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
         }}
         .server-btn {{
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            -webkit-user-select: none;
         }}
         .server-btn.active {{
-            background-color: #e50914;
-            color: #ffffff;
-            box-shadow: 0 0 15px rgba(229, 9, 20, 0.4);
-            border-color: #ef4444;
+            background: linear-gradient(135deg, #e50914, #b91c1c) !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 16px rgba(229, 9, 20, 0.5) !important;
+            border-color: #ef4444 !important;
+            font-weight: 700 !important;
+        }}
+        .no-scrollbar::-webkit-scrollbar {{
+            display: none;
+        }}
+        .no-scrollbar {{
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }}
         .glass-panel {{
             background: rgba(17, 24, 39, 0.7);
@@ -5804,71 +5913,60 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
         }}
     </style>
 </head>
-<body class="p-3 sm:p-6 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
-    <div class="w-full max-w-5xl space-y-4">
+<body class="p-2.5 sm:p-6 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
+    <div class="w-full max-w-5xl space-y-3 sm:space-y-4">
         <!-- Header -->
-        <header class="flex items-center justify-between glass-panel px-4 py-3 sm:px-6 sm:py-4 rounded-2xl">
-            <div class="flex items-center space-x-3">
-                <a href="/browse" class="text-2xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-2" title="Browse Catalog">
+        <header class="flex items-center justify-between glass-panel px-3.5 py-2.5 sm:px-6 sm:py-4 rounded-2xl">
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <a href="/browse" class="text-lg sm:text-2xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap" title="Browse Catalog">
                     <span>🍿</span> <span>AkMovieVerse</span>
                 </a>
-                <a href="/browse" class="hidden sm:inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 bg-red-950/80 hover:bg-red-900/80 text-red-400 border border-red-500/30 rounded-full transition">
+                <a href="/browse" class="hidden md:inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 bg-red-950/80 hover:bg-red-900/80 text-red-400 border border-red-500/30 rounded-full transition">
                     <span>🎬</span> <span>Browse Catalog</span>
                 </a>
             </div>
-            <div class="flex items-center gap-2">
-                <a href="/browse" class="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <a href="/browse" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10 whitespace-nowrap">
                     <span>🎬</span> <span>Browse</span>
                 </a>
-                <a href="{bot_url}" class="text-xs sm:text-sm font-medium px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10">
-                    <span>🤖</span> <span>Telegram Bot</span>
+                <a href="{bot_url}" class="text-xs sm:text-sm font-medium px-2.5 sm:px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10 whitespace-nowrap">
+                    <span>🤖</span> <span>Bot</span><span class="hidden sm:inline">&nbsp;Help</span>
                 </a>
             </div>
         </header>
 
-        <!-- Server Selector Bar -->
-        <div class="glass-panel p-3 rounded-2xl space-y-2">
-            <div class="flex items-center justify-between px-1">
-                <span class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Select Web Streaming Server:
-                </span>
-                <span id="active-server-name" class="text-xs font-medium text-red-400">⚡ Server 1: VidLink Pro (Fast / HD)</span>
-            </div>
-            <div class="flex flex-wrap gap-2" id="server-buttons-container">
-                {server_buttons_html}
-            </div>
-        </div>
-
-        <!-- Third-Party Stream Disclaimer & Server Switch Tip -->
-        <div class="glass-panel p-3 sm:p-4 rounded-2xl border-l-4 border-l-amber-500 bg-amber-950/25 text-amber-200/90 text-xs sm:text-sm space-y-1 shadow-lg">
-            <div class="flex items-center gap-2 font-bold text-amber-400">
-                <span class="text-base">⚠️</span> <span>Online Stream Notice & Tips:</span>
-            </div>
-            <p class="leading-relaxed text-xs text-amber-100/80">
-                Stream sources are aggregated via third-party web scrapers. 100% exact match or uninterrupted playback is not guaranteed. 
-                If video buffers, fails to load, or audio/version doesn't match, <strong>please switch between the streaming servers above</strong> or request the official file on our Telegram bot!
-            </p>
-        </div>
-
-        {series_controls_html}
-
-        <!-- Player Stage Container -->
+        <!-- Player Stage Container (TOP PRIORITY - ALWAYS FIRST) -->
         <div class="player-stage">
             <iframe id="cinema-iframe" src="{initial_stream_url}" allowfullscreen allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
         </div>
 
+        <!-- Server Selector Bar (Horizontally scrollable swipe strip directly below player) -->
+        <div class="glass-panel p-2.5 sm:p-3 rounded-2xl space-y-2">
+            <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Streaming Servers:</span>
+                </span>
+                <span id="active-server-name" class="text-xs font-bold text-red-400 truncate max-w-[190px] sm:max-w-none">⚡ Server 1: VidLink Pro (Fast / HD)</span>
+            </div>
+            <div class="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar flex-nowrap" id="server-buttons-container">
+                {server_buttons_html}
+            </div>
+        </div>
+
+        {series_controls_html}
+
         <!-- Movie Details & Quick Launch -->
-        <div class="glass-panel p-4 sm:p-6 rounded-2xl flex flex-col sm:flex-row gap-5 items-start">
+        <div class="glass-panel p-3.5 sm:p-6 rounded-2xl flex flex-col sm:flex-row gap-4 sm:gap-5 items-start">
             {poster_html}
             <div class="flex-1 space-y-3 w-full">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-3">
                     <div>
-                        <h1 class="text-lg sm:text-2xl font-black text-white flex items-center gap-2.5 flex-wrap">
+                        <h1 class="text-base sm:text-2xl font-black text-white flex items-center gap-2 flex-wrap">
                             {title}
                             {year_badge}
                         </h1>
-                        <div class="flex items-center gap-3 text-xs sm:text-sm text-gray-400 mt-1.5 flex-wrap">
+                        <div class="flex items-center gap-2.5 text-xs sm:text-sm text-gray-400 mt-1 flex-wrap">
                             {rating_badge}
                             <span class="w-1 h-1 rounded-full bg-gray-600"></span>
                             <span>{genres_info}</span>
@@ -5883,7 +5981,7 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
                         </a>
                     </div>
                 </div>
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Storyline:</h3>
                     <p class="text-xs sm:text-sm text-gray-300 leading-relaxed">
                         {overview_text}
@@ -5892,7 +5990,17 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             </div>
         </div>
 
-        <footer class="text-center text-xs text-gray-500 py-2">
+        <!-- Third-Party Stream Disclaimer & Server Switch Tip -->
+        <div class="glass-panel p-3 sm:p-3.5 rounded-2xl border-l-4 border-l-amber-500/80 bg-amber-950/20 text-amber-200/90 text-xs space-y-1 shadow-sm">
+            <div class="flex items-center gap-1.5 font-bold text-amber-400">
+                <span>💡</span> <span>Streaming Tips:</span>
+            </div>
+            <p class="leading-relaxed text-[11px] sm:text-xs text-amber-100/70">
+                Stream sources are aggregated via third-party web scrapers. If video buffers or fails to load, <strong>swipe and switch between the streaming servers above</strong>, or request the high-speed file on our Telegram bot!
+            </p>
+        </div>
+
+        <footer class="text-center text-[11px] text-gray-500 py-2">
             Powered by AkMovieVerse Bot & Multi-Stream Gateways • Non-commercial streaming interface
         </footer>
     </div>
@@ -5910,7 +6018,10 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             }}
             document.querySelectorAll('.server-btn').forEach(btn => {{
                 btn.classList.remove('active');
-                if (btn.dataset.key === key) btn.classList.add('active');
+                if (btn.dataset.key === key) {{
+                    btn.classList.add('active');
+                    btn.scrollIntoView({{ behavior: 'smooth', block: 'nearest', inline: 'center' }});
+                }}
             }});
             const label = document.getElementById('active-server-name');
             if (label) {{
@@ -6038,16 +6149,22 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
 
             document.addEventListener('keydown', function (e) {{
                 if (e.key === 'Enter') {{
-                    const el = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-target-url]');
-                    if (el) el.click();
+                    const el = e.target && e.target.closest && e.target.closest('[data-target-url]');
+                    if (el) {{
+                        const url = el.getAttribute('data-target-url');
+                        if (url) {{
+                            const target = el.getAttribute('target');
+                            const isNewTab = (target === '_blank');
+                            window.openSafeUrl(url, isNewTab);
+                        }}
+                    }}
                 }}
-            }});
+            }}, false);
         }})();
     </script>
 </body>
 </html>
 """
-
 
 async def watch_online_handler(request: web.Request):
     """Serve responsive multi-server online cinema player for movies/series not found locally."""
@@ -6105,11 +6222,26 @@ async def watch_online_handler(request: web.Request):
     initial_url = servers.get("vidlink", {}).get("url") or (list(servers.values())[0]["url"] if servers else "")
 
     btns = []
+    short_labels = {
+        "vidlink": ("⚡", "S1: VidLink Pro"),
+        "videm": ("🎬", "S2: VidEm"),
+        "vidsrc": ("🌐", "S3: VidSrc.pm"),
+        "smashystream": ("🚀", "S4: Smashy"),
+        "twoembed": ("🍿", "S5: 2Embed"),
+        "autoembed": ("🔥", "S6: AutoEmbed"),
+        "vidsrc_su": ("🛰️", "S7: VidSrc.su"),
+        "vidy": ("🎥", "S8: Vidy Stream"),
+        "vidzee": ("⚡", "S9: VidZee"),
+        "nontongo": ("💎", "S10: NontonGo"),
+        "embedsu": ("✨", "S11: SuperEmbed")
+    }
+
     for key, s in servers.items():
         is_active = " active" if key == "vidlink" else ""
+        icon, label = short_labels.get(key, (s.get("icon", "⚡"), s.get("name", key)))
         btns.append(
-            f'<button class="server-btn{is_active} px-3 py-1.5 text-xs font-semibold rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-gray-200" data-key="{key}" onclick="switchServer(\'{key}\')">'
-            f'{s["icon"]} {html_escape(s["name"])}'
+            f'<button class="server-btn{is_active} shrink-0 px-3.5 py-2 text-xs font-semibold rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-gray-200 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer" data-key="{key}" onclick="switchServer(\'{key}\')">'
+            f'<span>{icon}</span> <span>{html_escape(label)}</span>'
             f'</button>'
         )
     server_buttons_html = "\n".join(btns)
