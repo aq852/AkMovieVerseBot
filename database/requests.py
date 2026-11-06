@@ -92,6 +92,16 @@ async def get_pending_requests_count() -> int:
         return 0
 
 
+async def get_user_requests(user_id: int, limit: int = 10) -> list[dict]:
+    """Retrieve recent movie requests submitted by a specific user."""
+    try:
+        cursor = mongo.requests.find({"user_id": user_id}).sort("created_at", -1).limit(limit)
+        return await cursor.to_list(length=limit)
+    except Exception as e:
+        logger.error(f"Error getting requests for user {user_id}: {e}")
+        return []
+
+
 async def record_log_message_for_request(request_id: str, chat_id: int, message_id: int):
     """Store the log channel message reference to auto-update upon resolution."""
     try:

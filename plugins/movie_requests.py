@@ -39,6 +39,12 @@ async def dispatch_request_to_admin(
         header_text = "📩 <b>#MovieRequest Ticket</b>\n\n"
         vip_line = "👤 <b>Membership:</b> <code>Standard User</code>\n"
 
+    import re
+    import urllib.parse
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+    clean_search = re.sub(r"[^\w\s]", " ", movie_name).strip()
+    encoded_search = urllib.parse.quote_plus(clean_search)
+
     ticket_text = (
         f"{header_text}"
         f"🎬 <b>Movie / Series:</b> <code>{movie_name}</code>\n"
@@ -48,12 +54,15 @@ async def dispatch_request_to_admin(
         f"💬 <b>Source:</b> <code>{chat_title}</code>\n"
         f"⏳ <b>Status:</b> <code>Pending Review 🟡</code>\n"
         f"📅 <b>Date:</b> {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-        "👇 _Admins: Tap below once the movie has been uploaded or if unavailable:_"
+        "👇 <i>Admins: Tap below once the movie has been uploaded or if unavailable:</i>"
     )
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Mark Uploaded", callback_data=f"reqappr_{req_id}"),
             InlineKeyboardButton("❌ Reject / Unavailable", callback_data=f"reqrej_{req_id}")
+        ],
+        [
+            InlineKeyboardButton(f"🔍 Check '{clean_search[:20]}' in Bot ↗️", url=f"https://t.me/{bot_uname}?start=filter_{encoded_search}")
         ]
     ])
 
@@ -304,7 +313,7 @@ async def auto_notify_pending_requesters(client: Client, media_info: dict):
 
         buttons = [
             [
-                InlineKeyboardButton("📥 Download Movie Now", url=f"https://t.me/{bot_username}?start=file_{f_unique_id}")
+                InlineKeyboardButton("📥 Download Movie (1-Click)", callback_data=f"getfile_{f_unique_id}")
             ]
         ]
         if Config.ENABLE_STREAMING:
@@ -356,3 +365,47 @@ async def auto_notify_pending_requesters(client: Client, media_info: dict):
                 )
             except Exception:
                 pass
+
+
+@Client.on_message(filters.command(["myrequests", "myrequest"]) & filters.private)
+async def my_requests_command(client: Client, message: Message):
+    """User command to view status of their recent movie requests."""
+    user_id = message.from_user.id
+    from database.requests import get_user_requests
+
+    requests_list = await get_user_requests(user_id, limit=10)
+    if not requests_list:
+        return await message.reply_text(
+            "📭 <b>Aapne abhi tak koi movie request submit nahi ki hai.</b>\n\n"
+            "💡 Agar aapko search me koi movie na mile, to <code>/request &lt;movie name&gt;</code> use karein ya <b>'Request Movie'</b> button dabayein!"
+        )
+
+    bot_username = client.me.username if client.me else Config.BOT_USERNAME
+    lines = ["📋 <b>YOUR RECENT MOVIE REQUESTS</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"]
+    buttons = []
+
+    for idx, req in enumerate(requests_list, 1):
+        m_name = req.get("movie_name", "Unknown")
+        status = req.get("status", "pending")
+        dt = req.get("created_at")
+        date_str = dt.strftime("%d %b") if dt else ""
+
+        if status in ("uploaded", "auto_uploaded"):
+            status_badge = "🟢 <b>Available Now!</b>"
+            lines.append(f"<b>{idx}. {m_name}</b> — {status_badge} <i>({date_str})</i>")
+            import urllib.parse
+            enc_name = urllib.parse.quote_plus(m_name)
+            buttons.append([
+                InlineKeyboardButton(f"📥 Get '{m_name[:20]}'", url=f"https://t.me/{bot_username}?start=filter_{enc_name}")
+            ])
+        elif status == "rejected":
+            status_badge = "🔴 <b>Unavailable</b>"
+            lines.append(f"<b>{idx}. {m_name}</b> — {status_badge} <i>({date_str})</i>")
+        else:
+            status_badge = "🟡 <b>Pending Review</b>"
+            lines.append(f"<b>{idx}. {m_name}</b> — {status_badge} <i>({date_str})</i>")
+
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 <i>Jaise hi movie channel me aayegi, bot aapko direct PM me download link bhej dega!</i>")
+
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
+    await message.reply_text("\n".join(lines), reply_markup=markup, disable_web_page_preview=True)

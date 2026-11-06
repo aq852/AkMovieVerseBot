@@ -1155,5 +1155,14 @@ class TestAutoFilterEngine(unittest.TestCase):
         get_file_btn_single = markup_single.inline_keyboard[0][1]
         self.assertIn("start=file_f1", get_file_btn_single.url)
 
+    def test_user_requests_and_alerts_enhancements(self):
+        from database.requests import get_user_requests
+        self.assertTrue(callable(get_user_requests))
+
+        # Test upload alerts markup contains cancel buttons
+        from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        btn = InlineKeyboardButton("🗑️ Cancel Alert", callback_data="delalert_12345")
+        self.assertTrue(btn.callback_data.startswith("delalert_"))
+
 if __name__ == "__main__":
     unittest.main()

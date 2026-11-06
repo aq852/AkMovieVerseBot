@@ -75,13 +75,18 @@ async def auto_notify_alert_subscribers(client: Client, media_info: dict):
 
         bot_username = client.me.username if client.me else Config.BOT_USERNAME
         clean_slug = re.sub(r"[^a-zA-Z0-9]+", "_", base_name).strip("_")[:55]
-        deep_link = f"https://t.me/{bot_username}?start=search_{clean_slug}"
-        channel_url = Config.CHANNEL_URL or f"https://t.me/{bot_username}"
+        f_uid = media_info.get("file_unique_id")
 
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📥 Download Now (1-Click)", url=deep_link)],
-            [InlineKeyboardButton("📢 Updates Channel", url=channel_url)]
-        ])
+        buttons = []
+        if f_uid:
+            buttons.append([InlineKeyboardButton("📥 Download File (1-Click)", callback_data=f"getfile_{f_uid}")])
+        buttons.append([InlineKeyboardButton("🔍 View All Prints ↗️", url=f"https://t.me/{bot_username}?start=filter_{clean_slug}")])
+
+        channel_url = Config.CHANNEL_URL or f"https://t.me/{bot_username}"
+        if channel_url:
+            buttons.append([InlineKeyboardButton("📢 Updates Channel ↗️", url=channel_url)])
+
+        markup = InlineKeyboardMarkup(buttons)
 
         notified_ids = []
         for sub in subscribers:
@@ -193,9 +198,58 @@ async def my_alerts_command(client: Client, message: Message):
         )
 
     lines = ["🔔 <b>Aapke Active Movie Alerts:</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"]
+    keyboard = []
     for idx, a in enumerate(alerts, 1):
+        a_id = str(a.get("_id"))
+        title = a.get("title", "Movie")
         dt_str = a.get("created_at", datetime.datetime.utcnow()).strftime("%d %b")
-        lines.append(f"<b>{idx}. {a.get('title')}</b> <i>(Set on {dt_str})</i>")
+        lines.append(f"<b>{idx}. {title}</b> <i>(Set on {dt_str})</i>")
+        keyboard.append([
+            InlineKeyboardButton(f"🗑️ Cancel Alert: '{title[:18]}'", callback_data=f"delalert_{a_id}")
+        ])
 
-    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━\n<i>Jaise hi ye upload hongi, bot aapko turant PM me download link bhej dega!</i>")
-    await message.reply_text("\n".join(lines))
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 <i>Jaise hi ye upload hongi, bot aapko turant PM me download link bhej dega!</i>")
+    markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    await message.reply_text("\n".join(lines), reply_markup=markup, disable_web_page_preview=True)
+
+
+@Client.on_callback_query(filters.regex(r"^delalert_(.+)"))
+async def delete_alert_callback_handler(client: Client, query: CallbackQuery):
+    """Allow user to cancel/delete a pending upload alert."""
+    alert_id = query.matches[0].group(1).strip()
+    from bson import ObjectId
+
+    try:
+        if ObjectId.is_valid(alert_id):
+            doc = await mongo.db["upload_alerts"].find_one_and_delete({"_id": ObjectId(alert_id), "user_id": query.from_user.id})
+        else:
+            doc = await mongo.db["upload_alerts"].find_one_and_delete({"query": alert_id, "user_id": query.from_user.id})
+
+        if doc:
+            title = doc.get("title", "Movie")
+            await query.answer(f"🗑️ Alert for '{title}' cancelled successfully!", show_alert=True)
+            cursor = mongo.db["upload_alerts"].find({"user_id": query.from_user.id, "status": "pending"}).sort("created_at", -1).limit(10)
+            remaining = await cursor.to_list(length=10)
+            if not remaining:
+                await query.message.edit_text(
+                    "🔔 <b>Aapke paas abhi koi active upload alert nahi hai.</b>\n\n"
+                    "Jab aap koi aisi movie search karte hain jo bot me nahi hoti, to aap <b>'Notify Me When Uploaded'</b> par click karke alert set kar sakte hain!"
+                )
+            else:
+                k = []
+                l = ["🔔 <b>Aapke Active Movie Alerts:</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"]
+                for idx, a in enumerate(remaining, 1):
+                    aid = str(a.get("_id"))
+                    t = a.get("title", "Movie")
+                    dt_str = a.get("created_at", datetime.datetime.utcnow()).strftime("%d %b")
+                    l.append(f"<b>{idx}. {t}</b> <i>(Set on {dt_str})</i>")
+                    k.append([
+                        InlineKeyboardButton(f"🗑️ Cancel Alert: '{t[:18]}'", callback_data=f"delalert_{aid}")
+                    ])
+                l.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 <i>Jaise hi ye upload hongi, bot aapko turant PM me download link bhej dega!</i>")
+                await query.message.edit_text("\n".join(l), reply_markup=InlineKeyboardMarkup(k), disable_web_page_preview=True)
+        else:
+            await query.answer("Alert already removed or expired.", show_alert=True)
+    except Exception as e:
+        logger.error(f"Error deleting alert {alert_id}: {e}")
+        await query.answer("Error deleting alert.", show_alert=True)

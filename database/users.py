@@ -180,9 +180,16 @@ async def record_referral(referrer_id: int, new_user_id: int) -> tuple[bool, str
         if not updated_referrer:
             return False, "already_counted"
 
-        # Award 1 day (86400s) VIP for every 5 unique referrals
+        # Award 1 day (86400s) VIP on 1st referral (instant starter perk) OR every 5 unique referrals
         count = updated_referrer.get("refer_count", 0)
-        if count > 0 and count % 5 == 0:
+        if count == 1:
+            await add_premium(referrer_id, 86400)
+            await mongo.users.update_one(
+                {"user_id": referrer_id},
+                {"$inc": {"refer_rewards_earned": 1}}
+            )
+            return True, "awarded_first_referral"
+        elif count > 0 and count % 5 == 0:
             await add_premium(referrer_id, 86400)
             await mongo.users.update_one(
                 {"user_id": referrer_id},

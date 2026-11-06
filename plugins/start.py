@@ -252,11 +252,24 @@ async def start_command_handler(client: Client, message: Message):
         if referrer_str.isdigit():
             referrer_id = int(referrer_str)
             success, msg = await record_referral(referrer_id, user_id)
-            if success and msg == "awarded_premium":
+            if success and msg == "awarded_first_referral":
                 try:
                     await client.send_message(
                         referrer_id,
-                        "🎉 <b>Congratulations!</b> You invited 5 friends and have unlocked <b>1 Day of Free VIP Premium Access</b>!"
+                        "🎉 <b>CONGRATULATIONS! FIRST REFERRAL BONUS UNLOCKED!</b> 👑\n\n"
+                        "Your friend just joined using your personal invite link!\n"
+                        "🎁 You have been awarded <b>1 Day of Free VIP Premium Access</b> as a welcome starter bonus!\n\n"
+                        "💡 <i>Keep inviting! For every 5 friends, you unlock another 1 Day of Free VIP!</i>"
+                    )
+                except Exception:
+                    pass
+            elif success and msg == "awarded_premium":
+                try:
+                    await client.send_message(
+                        referrer_id,
+                        "🎉 <b>CONGRATULATIONS! REFERRAL MILESTONE REACHED!</b> 👑\n\n"
+                        "You reached another referral tier and unlocked <b>1 Day of Free VIP Premium Access</b>!\n\n"
+                        "Enjoy unlimited, instant file downloads without any shorteners."
                     )
                 except Exception:
                     pass
@@ -651,7 +664,8 @@ async def refer_command(client: Client, message: Message):
     text = (
         "👥 <b><u>REFER & EARN FREE VIP ACCESS</u></b> 👥\n\n"
         "Invite your friends to the bot and unlock <b>Free VIP Membership Days</b>!\n"
-        "• For every <b>5 unique friends</b> who start the bot via your link, you get <b>1 Day of Free VIP Premium</b> automatically!\n\n"
+        "🎁 <b>Starter Perk:</b> Invite your <b>1st friend</b> to unlock <b>1 Day of Free VIP Premium</b> instantly!\n"
+        "🌟 <b>Ongoing Perk:</b> For every <b>5 friends</b> after that, get another <b>1 Day of Free VIP</b> automatically!\n\n"
         f"📊 <b>Your Referral Performance:</b>\n"
         f"• <b>Total Friends Invited:</b> <code>{refer_count}</code>\n"
         f"• <b>Free VIP Days Earned:</b> <code>{rewards_earned} Days 👑</code>\n"
