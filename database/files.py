@@ -380,6 +380,31 @@ SEASON_PATTERNS = {
     "s06": r"(s06\b|season[\s\._-]*6\b|s6\b)",
 }
 
+COMPOUND_WORDS = {
+    "ironman": r"iron[\s\.\-_]*man",
+    "spiderman": r"spider[\s\.\-_]*man",
+    "batman": r"bat[\s\.\-_]*man",
+    "superman": r"super[\s\.\-_]*man",
+    "deadpool": r"dead[\s\.\-_]*pool",
+    "aquaman": r"aqua[\s\.\-_]*man",
+    "antman": r"ant[\s\.\-_]*man",
+    "starwars": r"star[\s\.\-_]*wars",
+    "topgun": r"top[\s\.\-_]*gun",
+    "startrek": r"star[\s\.\-_]*trek",
+    "kingsman": r"kings[\s\.\-_]*man",
+    "pacman": r"pac[\s\.\-_]*man",
+}
+
+def _token_to_regex(token: str) -> str:
+    """Convert search token into a flexible regex matching spaces, dots, and common compounding."""
+    t_lower = token.lower()
+    if t_lower in COMPOUND_WORDS:
+        return COMPOUND_WORDS[t_lower]
+    # Flexible matching for short acronyms like kgf -> k[\.\s\-_]*g[\.\s\-_]*f, rrr, pk, etc.
+    if 2 <= len(token) <= 4 and token.isalpha():
+        return r"[\.\s\-_]*".join(list(re.escape(token)))
+    return re.escape(token)
+
 def _extract_query_episode_target(query: str) -> int | None:
     """Extract requested episode number from query if present (e.g. 'Sweet Teeth 5' -> 5)."""
     if not query:
@@ -456,7 +481,8 @@ def _build_search_filter(query: str, quality: str = None, language: str = None, 
                     )
                     regex_patterns.append({"file_name": {"$regex": ep_or_combined_regex, "$options": "i"}})
                 else:
-                    regex_patterns.append({"file_name": {"$regex": re.escape(token), "$options": "i"}})
+                    pat = _token_to_regex(token)
+                    regex_patterns.append({"file_name": {"$regex": pat, "$options": "i"}})
             filter_dict["$and"] = regex_patterns
 
     # Quality constraint
@@ -694,17 +720,19 @@ async def get_total_files_count() -> int:
         return 0
 
 
-async def get_sample_titles(limit: int = 2000) -> list[str]:
-    """Retrieve sample file titles for fuzzy matching and spell-checking index across all clusters."""
+async def get_sample_titles(limit: int = 3000) -> list[str]:
+    """Retrieve sample file titles for fuzzy matching and spell-checking index across all clusters.
+    Sorts by recent uploads (_id desc) to ensure latest catalog is prioritized in suggestions.
+    """
     try:
         if not mongo.has_secondary:
-            cursor = mongo.files.find({}, {"file_name": 1}).limit(limit)
+            cursor = mongo.files.find({}, {"file_name": 1}).sort([("_id", -1)]).limit(limit)
             docs = await cursor.to_list(length=limit)
             return [doc.get("file_name", "") for doc in docs if doc.get("file_name")]
 
         half = max(1, limit // 2)
-        task1 = mongo.files.find({}, {"file_name": 1}).limit(half).to_list(length=half)
-        task2 = mongo.files_secondary.find({}, {"file_name": 1}).limit(half).to_list(length=half)
+        task1 = mongo.files.find({}, {"file_name": 1}).sort([("_id", -1)]).limit(half).to_list(length=half)
+        task2 = mongo.files_secondary.find({}, {"file_name": 1}).sort([("_id", -1)]).limit(half).to_list(length=half)
         r1, r2 = await asyncio.gather(task1, task2, return_exceptions=True)
         docs1 = r1 if isinstance(r1, list) else []
         docs2 = r2 if isinstance(r2, list) else []

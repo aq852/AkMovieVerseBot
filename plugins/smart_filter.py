@@ -71,27 +71,29 @@ async def smart_nav_callback_handler(client: Client, query: CallbackQuery):
         msg_text = query.message.text or query.message.caption or ""
         q_match = re.search(r"(?:Title|Series|Query)\s*:\s*`?([^`\n]+)`?", msg_text, re.I)
         if q_match:
-            recovered_q = q_match.group(1).strip()
-            bot_uname = client.me.username if client.me else Config.BOT_USERNAME
-            is_pm = is_private_chat(query)
-            new_sid = create_nav_session(
-                query=recovered_q,
-                user_id=query.from_user.id,
-                chat_id=query.message.chat.id,
-                is_pm=is_pm,
-                bot_username=bot_uname
-            )
-            # Re-render root view with restored session
-            text, markup = await build_navigator_root_view(new_sid)
-            try:
-                await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-            except Exception:
-                pass
-            await query.answer("🔄 Session restored!")
-            return
-        else:
-            await query.answer("⚠️ Session expired. Please search again.", show_alert=True)
-            return
+            raw_match = q_match.group(1).strip()
+            # Cleanly strip HTML tags like </b>, <code>, </code> and backticks
+            recovered_q = re.sub(r"<[^>]+>", "", raw_match).replace("`", "").strip()
+            if recovered_q:
+                bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+                is_pm = is_private_chat(query)
+                new_sid = create_nav_session(
+                    query=recovered_q,
+                    user_id=query.from_user.id,
+                    chat_id=query.message.chat.id,
+                    is_pm=is_pm,
+                    bot_username=bot_uname
+                )
+                # Re-render root view with restored session
+                text, markup = await build_navigator_root_view(new_sid)
+                try:
+                    await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+                except Exception:
+                    pass
+                await query.answer("🔄 Session restored!")
+                return
+        await query.answer("⚠️ Session expired. Please search again.", show_alert=True)
+        return
 
     # Security / authorization check (only requester can use the filter)
     req_uid = sess.get("user_id")

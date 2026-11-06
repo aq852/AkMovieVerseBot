@@ -128,6 +128,18 @@ async def group_auto_filter_handler(client: Client, message: Message):
         return
 
     total_files = await count_files(clean_q)
+    # Smart Year Fallback: if user typed a year (e.g. Jawan 2023) but filenames lack the release year, retry without the year
+    if total_files == 0:
+        year_m = re.search(r"\b(19\d{2}|20\d{2})\b", clean_q)
+        if year_m:
+            fallback_q = re.sub(r"\b(19\d{2}|20\d{2})\b", "", clean_q).strip()
+            fallback_q = re.sub(r"\s+", " ", fallback_q)
+            if len(fallback_q) >= 2:
+                fallback_count = await count_files(fallback_q)
+                if fallback_count > 0:
+                    total_files = fallback_count
+                    clean_q = fallback_q
+
     button_mode = "single" if chat_settings.get("single_button", True) else "double"
 
     if total_files > 0:
@@ -223,11 +235,22 @@ async def group_auto_filter_handler(client: Client, message: Message):
                 cleaned = clean_search_title(raw_title).lower().strip()
                 if not cleaned:
                     continue
-                # Require at least one shared keyword (len > 2) to prevent false positives like 'rise and fall' -> 'Warrior Princess'
-                if q_words and not any(w in cleaned for w in q_words):
+                c_words = cleaned.split()
+
+                # At least one query word should fuzzy-match a candidate word (>= 70 ratio)
+                word_match = any(
+                    any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
+                    for qw in q_words
+                ) if q_words else True
+
+                if not word_match:
                     continue
-                score = fuzz.token_sort_ratio(clean_q_lower, cleaned)
-                if score > best_score and score >= 72:
+
+                w_score = fuzz.WRatio(clean_q_lower, cleaned)
+                p_score = fuzz.partial_ratio(clean_q_lower, cleaned)
+                score = max(w_score, (p_score + w_score) / 2)
+
+                if score > best_score and score >= 65:
                     best_score = score
                     best_candidate = raw_title
 
@@ -265,7 +288,9 @@ async def group_auto_filter_handler(client: Client, message: Message):
             online_stream_url = google_url
 
         if match:
-            suggested_title = match[0]
+            suggested_raw = match[0]
+            from utils.online_stream import clean_search_title
+            suggested_title = clean_search_title(suggested_raw).strip() or suggested_raw
             buttons = [
                 [InlineKeyboardButton(f"🔍 Search '{suggested_title[:30]}'", callback_data=f"spell_{suggested_title[:25]}")],
                 [InlineKeyboardButton("🔔 Notify Me When Uploaded", callback_data=f"notifme_{clean_q[:25]}")],

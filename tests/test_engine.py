@@ -848,5 +848,91 @@ class TestAutoFilterEngine(unittest.TestCase):
             res2 = asyncio.run(resolve_draft_group("dexter-2006"))
             self.assertEqual(res2["title"], "Dexter (2006)")
 
+    def test_smart_token_compounding_and_acronyms(self):
+        import re
+        from database.files import _token_to_regex, _build_search_filter
+
+        # 1. Test acronym flexible pattern
+        kgf_pat = _token_to_regex("kgf")
+        self.assertTrue(re.search(kgf_pat, "K.G.F Chapter 2 2022", re.I))
+        self.assertTrue(re.search(kgf_pat, "K G F 2", re.I))
+        self.assertTrue(re.search(kgf_pat, "KGF 2", re.I))
+
+        rrr_pat = _token_to_regex("rrr")
+        self.assertTrue(re.search(rrr_pat, "R.R.R 2022 Hindi", re.I))
+
+        # 2. Test compound words (ironman -> iron man, spiderman -> spider-man)
+        iron_pat = _token_to_regex("ironman")
+        self.assertTrue(re.search(iron_pat, "Iron Man (2008)", re.I))
+        self.assertTrue(re.search(iron_pat, "Iron-Man 2", re.I))
+        self.assertTrue(re.search(iron_pat, "Ironman", re.I))
+
+        spider_pat = _token_to_regex("spiderman")
+        self.assertTrue(re.search(spider_pat, "The Amazing Spider-Man", re.I))
+        self.assertTrue(re.search(spider_pat, "Spider Man No Way Home", re.I))
+
+        # 3. Test _build_search_filter uses token compounding
+        built = _build_search_filter("ironman 1080p")
+        self.assertIn("$and", built)
+        patterns = [elem["file_name"]["$regex"] for elem in built["$and"]]
+        self.assertIn(iron_pat, patterns)
+
+    def test_session_restore_html_cleaning(self):
+        import re
+        # Verify that HTML tags and backticks are cleanly stripped during smart_nav restore
+        raw_msg = "🏷️ <b>TITLE :</b> <code>Iron Man</code>\n📦 <b>TOTAL FILES :</b> <code>5</code>"
+        q_match = re.search(r"(?:Title|Series|Query)\s*:\s*`?([^`\n]+)`?", raw_msg, re.I)
+        self.assertIsNotNone(q_match)
+        raw_match = q_match.group(1).strip()
+        cleaned_q = re.sub(r"<[^>]+>", "", raw_match).replace("`", "").strip()
+        self.assertEqual(cleaned_q, "Iron Man")
+
+    def test_fuzzy_spellcheck_on_actual_typos(self):
+        from rapidfuzz import fuzz
+        from utils.online_stream import clean_search_title
+
+        catalog = [
+            "The.Avengers.2012.1080p.BluRay.x264",
+            "Spider-Man.No.Way.Home.2021.1080p",
+            "Oppenheimer.2023.IMAX.1080p",
+            "Interstellar.2014.1080p.BluRay"
+        ]
+
+        test_typos = {
+            "avengrs": "The Avengers",
+            "spidrman": "Spider Man",
+            "openheimer": "Oppenheimer",
+            "interstelar": "Interstellar"
+        }
+
+        for typo, expected_prefix in test_typos.items():
+            best_candidate = None
+            best_score = 0
+            clean_q_lower = typo.lower().strip()
+            q_words = [w for w in clean_q_lower.split() if len(w) > 2]
+
+            for item in catalog:
+                cleaned = clean_search_title(item).lower().strip()
+                c_words = cleaned.split()
+                word_match = any(
+                    any(fuzz.ratio(qw, cw) >= 70 for cw in c_words)
+                    for qw in q_words
+                ) if q_words else True
+
+                if not word_match:
+                    continue
+
+                w_score = fuzz.WRatio(clean_q_lower, cleaned)
+                p_score = fuzz.partial_ratio(clean_q_lower, cleaned)
+                score = max(w_score, (p_score + w_score) / 2)
+
+                if score > best_score and score >= 65:
+                    best_score = score
+                    best_candidate = item
+
+            self.assertIsNotNone(best_candidate, f"Failed to match typo: {typo}")
+            clean_res = clean_search_title(best_candidate)
+            self.assertTrue(clean_res.startswith(expected_prefix), f"Expected prefix {expected_prefix}, got {clean_res}")
+
 if __name__ == "__main__":
     unittest.main()
