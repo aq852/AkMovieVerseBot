@@ -60,7 +60,7 @@ class Config:
     # UI & Search Preferences
     ENABLE_IMDB = os.environ.get("ENABLE_IMDB", "True").lower() == "true"
     ENABLE_POSTER = os.environ.get("ENABLE_POSTER", "False").lower() == "true"
-    DEFAULT_POSTER_BRAND = os.environ.get("DEFAULT_POSTER_BRAND", "AkMoviesZone")
+    DEFAULT_POSTER_BRAND = os.environ.get("DEFAULT_POSTER_BRAND", "Akmovieverse")
     IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY", "")
     TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
     TMDB_READ_ACCESS_TOKEN = os.environ.get("TMDB_READ_ACCESS_TOKEN", "")
