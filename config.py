@@ -69,6 +69,7 @@ class Config:
     AUTO_DELETE_TIME = int(os.environ.get("AUTO_DELETE_TIME", "300"))  # 5 minutes (Search Results)
     FILE_AUTO_DELETE_TIME = int(os.environ.get("FILE_AUTO_DELETE_TIME", "300"))  # 5 minutes (Delivered Files)
     PROTECT_CONTENT = os.environ.get("PROTECT_CONTENT", "False").lower() == "true"
+    SHOW_NUM_BUTTONS = os.environ.get("SHOW_NUM_BUTTONS", "False").lower() == "true"
 
     # Web Server & Fast-Redirect Gateway URL (Koyeb, Render, VPS or Custom Domain)
     PORT = int(os.environ.get("PORT", "8080"))

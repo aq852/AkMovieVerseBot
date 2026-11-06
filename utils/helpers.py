@@ -447,7 +447,8 @@ def format_search_results_text(
     lines.append("🧾 <u><b>Your Requested Files Are Here</b></u> 👇")
     lines.append("")
 
-    for idx, item in enumerate(results, start=1):
+    start_idx = (page - 1) * 10 + 1 if page > 1 else 1
+    for idx, item in enumerate(results, start=start_idx):
         f_id = item.get("file_unique_id")
         raw_name = item.get("file_name", "File")
         # Replace underscores with spaces so Telegram word-wraps cleanly without line breaks
@@ -455,8 +456,8 @@ def format_search_results_text(
         size_str = get_readable_size(item.get("file_size", 0))
         link = f"https://t.me/{bot_username}?start=file_{f_id}"
 
-        # Exact 2nd photo style: size is inside the clickable link right with title
-        lines.append(f"<b>{idx}.</b> <a href=\"{link}\">[{size_str}] {clean_name}</a>\n")
+        # Bold link with size & title so results pop out vibrantly in Telegram chat
+        lines.append(f"<b>{idx}. <a href=\"{link}\">[{size_str}] {clean_name}</a></b>\n")
 
     # Dynamic Sponsor Ad Text Link (Clean, non-intrusive, zero keyboard clutter)
     if sponsor_ad and sponsor_ad.get("text") and sponsor_ad.get("url"):
@@ -503,9 +504,9 @@ def build_filter_buttons(
         btn_vip = InlineKeyboardButton(f"{btn_label} ↗️", url=plans_url)
     keyboard.append([btn_vip, btn_send_all])
 
-    # Row 3: Quick Number Buttons for direct 1-click file delivery
-    number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    if results:
+    # Optional Quick Number Buttons (default OFF to eliminate mobile screen clutter; direct title clicks handle file delivery)
+    if getattr(Config, "SHOW_NUM_BUTTONS", False) and results:
+        number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         num_row = []
         for idx, item in enumerate(results):
             f_id = item.get("file_unique_id")

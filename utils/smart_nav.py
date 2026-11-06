@@ -676,15 +676,15 @@ async def build_filtered_results_view(sid: str, page: int = 1) -> tuple[str, Inl
         ""
     ]
 
-    for idx, item in enumerate(files, start=1):
+    for idx, item in enumerate(files, start=offset + 1):
         f_id = item.get("file_unique_id")
         raw_name = item.get("file_name", "File")
         clean_name = html.escape(raw_name.replace("_", " "))
         size_str = get_readable_size(item.get("file_size", 0))
         link = f"https://t.me/{bot_username}?start=file_{f_id}"
 
-        # Exact 2nd photo style: size is inside the clickable link right with title
-        text_lines.append(f"<b>{idx}.</b> <a href=\"{link}\">[{size_str}] {clean_name}</a>\n")
+        # Bold link with size & title so results pop out vibrantly in Telegram chat
+        text_lines.append(f"<b>{idx}. <a href=\"{link}\">[{size_str}] {clean_name}</a></b>\n")
 
     user_id = sess.get("user_id", 0)
     try:
@@ -704,9 +704,10 @@ async def build_filtered_results_view(sid: str, page: int = 1) -> tuple[str, Inl
 
     keyboard = []
 
-    # Quick number download buttons for 1-click delivery
-    number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    if files:
+    # Quick number download buttons (optional, default OFF for clean modern layout)
+    from config import Config
+    if getattr(Config, "SHOW_NUM_BUTTONS", False) and files:
+        number_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         num_row = []
         for idx, item in enumerate(files):
             f_id = item.get("file_unique_id")

@@ -45,6 +45,10 @@ class TestAutoFilterEngine(unittest.TestCase):
         # Check that Remove Ads and Send All exist in second row
         self.assertIn("Remove ads", single_markup.inline_keyboard[1][0].text)
         self.assertIn("SEND ALL", single_markup.inline_keyboard[1][1].text)
+        # Verify that number buttons are not present by default (clean UI)
+        all_texts = [btn.text for row in single_markup.inline_keyboard for btn in row]
+        self.assertNotIn("1️⃣", all_texts)
+        self.assertNotIn("2️⃣", all_texts)
 
     def test_category_keyboard(self):
         qual_markup = build_category_keyboard("Inception", cat_type="quality")
@@ -1334,6 +1338,7 @@ class TestAutoFilterEngine(unittest.TestCase):
             sponsor_ad=None
         )
         self.assertNotIn("📢 <b>Sponsor:</b>", text_no_ad)
+        self.assertIn("<b>1. <a href=\"https://t.me/testbot?start=file_u123\">[100.00 MB] One Piece Episode 100.mkv</a></b>", text_no_ad)
 
         # With active sponsor ad
         ad = {"text": "Join AkMovies Official", "url": "https://t.me/akmovies"}
