@@ -18,12 +18,47 @@ from utils.helpers import format_clean_title, get_readable_size, get_random_star
 
 logger = logging.getLogger(__name__)
 
-async def auto_delete_messages(messages: list, delay: int = 300):
-    """Background task to delete delivered media and warning after delay."""
+async def auto_delete_messages(
+    messages: list,
+    delay: int = 300,
+    file_unique_id: str | None = None,
+    clean_name: str | None = None,
+    bot_username: str | None = None
+):
+    """Background task to delete delivered media and convert warning to a re-download tombstone."""
     await asyncio.sleep(delay)
-    for m in messages:
+    file_msg = messages[0] if len(messages) > 0 else None
+    warn_msg = messages[1] if len(messages) > 1 else None
+
+    # Delete the media file message to comply with Telegram copyright policy
+    if file_msg:
         try:
-            await m.delete()
+            await file_msg.delete()
+        except Exception:
+            pass
+
+    # If we have file details and a warning message, replace warning with a clean re-download tombstone!
+    if warn_msg and file_unique_id and bot_username:
+        try:
+            import html
+            disp_title = html.escape(clean_name or "Movie / Series File")
+            tombstone_text = (
+                "⚠️ <b>This file has been auto-deleted due to copyright policy!</b>\n\n"
+                f"📁 <b>File:</b> <code>{disp_title}</code>\n\n"
+                "<i>Don't worry! Tap below to instantly re-download this file anytime:</i>"
+            )
+            re_dl_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Re-download File ↗️", url=f"https://t.me/{bot_username}?start=file_{file_unique_id}")]
+            ])
+            await warn_msg.edit_text(tombstone_text, reply_markup=re_dl_markup)
+            return
+        except Exception:
+            pass
+
+    # Fallback delete warning message if tombstone couldn't be edited
+    if warn_msg:
+        try:
+            await warn_msg.delete()
         except Exception:
             pass
 
@@ -40,9 +75,13 @@ async def deliver_file_with_copyright_warning(
     # Resolve backup/updates channel link (safe against raw channel IDs like -100...)
     backup_name, backup_url = await resolve_channel_display_and_url(client)
 
+    import html
+    escaped_title = html.escape(clean_name)
+    escaped_backup = html.escape(backup_name)
+
     caption = (
-        f"{clean_name}\n\n"
-        f"⚜️ **Join Backup** 🤝: [{backup_name}]({backup_url})"
+        f"🎬 <b>{escaped_title}</b>\n\n"
+        f"⚜️ <b>Join Backup</b> 🤝: <a href=\"{backup_url}\">{escaped_backup}</a>"
     )
 
     btn_rows = [
@@ -139,15 +178,24 @@ async def deliver_file_with_copyright_warning(
             )
         else:
             warning_text = (
-                "❗️❗️❗️ **<u>IMPORTANT</u>** ❗️❗️❗️\n\n"
-                f"**THIS MOVIE FILE/VIDEO WILL BE DELETED IN {del_label} 😐 (DUE TO COPYRIGHT ISSUES).**\n\n"
-                "• _PLEASE FORWARD THIS FILE TO SAVED MESSAGES AND START DOWNLOADING THERE_\n"
+                "❗️❗️❗️ <b><u>IMPORTANT</u></b> ❗️❗️❗️\n\n"
+                f"<b>THIS MOVIE FILE/VIDEO WILL BE DELETED IN {del_label} 😐 (DUE TO COPYRIGHT ISSUES).</b>\n\n"
+                "• <i>PLEASE FORWARD THIS FILE TO SAVED MESSAGES AND START DOWNLOADING THERE</i>\n"
                 "• <i>Want 30-Minute extended time? Upgrade to VIP via /plans!</i>"
             )
 
     if del_seconds > 0 and file_msg:
         warn_msg = await client.send_message(chat_id=user_id, text=warning_text)
-        asyncio.create_task(auto_delete_messages([file_msg, warn_msg], delay=del_seconds))
+        bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+        asyncio.create_task(
+            auto_delete_messages(
+                [file_msg, warn_msg],
+                delay=del_seconds,
+                file_unique_id=file_doc.get("file_unique_id"),
+                clean_name=clean_name,
+                bot_username=bot_uname
+            )
+        )
 
 def get_time_greeting() -> str:
     """Return greeting based on current time of day."""

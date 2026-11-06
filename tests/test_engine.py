@@ -696,6 +696,46 @@ class TestAutoFilterEngine(unittest.TestCase):
         # Reset back to True for other tests
         Config.SHORTENER_ENABLED = True
 
+    def test_auto_delete_messages_tombstone(self):
+        import asyncio
+        from plugins.start import auto_delete_messages
+        
+        deleted = []
+        edited = []
+        
+        class MockMsg:
+            def __init__(self, mid):
+                self.id = mid
+            async def delete(self):
+                deleted.append(self.id)
+            async def edit_text(self, text, reply_markup=None):
+                edited.append((self.id, text, reply_markup))
+
+        file_msg = MockMsg(101)
+        warn_msg = MockMsg(102)
+
+        async def run_test():
+            await auto_delete_messages(
+                [file_msg, warn_msg],
+                delay=0,
+                file_unique_id="uniq_abc123",
+                clean_name="Kantara (2022) 1080p",
+                bot_username="TestMovieBot"
+            )
+
+        asyncio.run(run_test())
+        self.assertIn(101, deleted)
+        self.assertEqual(len(edited), 1)
+        self.assertEqual(edited[0][0], 102)
+        self.assertIn("auto-deleted", edited[0][1])
+        self.assertIn("Kantara (2022) 1080p", edited[0][1])
+        # Check re-download button
+        kb = edited[0][2]
+        self.assertIsNotNone(kb)
+        btn = kb.inline_keyboard[0][0]
+        self.assertIn("Re-download", btn.text)
+        self.assertIn("start=file_uniq_abc123", btn.url)
+
     def test_dynamic_settings_caster(self):
         from database.mongo import load_dynamic_settings
         from config import Config
