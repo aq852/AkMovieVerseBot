@@ -145,7 +145,7 @@ Configure these environment variables in your `.env` file or cloud dashboard:
 | :--- | :---: | :---: | :--- |
 | `TMDB_API_KEY` | No | — | TMDb API Key for poster and synopsis metadata |
 | `TMDB_READ_ACCESS_TOKEN` | No | — | TMDb v4 Bearer Read Access Token |
-| `DEFAULT_POSTER_BRAND` | No | `AkMoviesZone` | Default watermark text on generated posters |
+| `DEFAULT_POSTER_BRAND` | No | `AkMovieVerse` | Default watermark text on generated posters |
 | `DOWNLOADER_ACCESS` | No | `admin` | Downloader permission (`admin` or `all`) |
 | `DOWNLOADER_MAX_SIZE` | No | `100` | Maximum file download size (in MB) |
 
