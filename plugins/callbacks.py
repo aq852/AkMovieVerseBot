@@ -1,5 +1,8 @@
+import asyncio
+import html
 import math
 import logging
+import urllib.parse
 try:
     from hydrogram import Client, filters
     from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery

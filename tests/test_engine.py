@@ -1625,5 +1625,21 @@ class TestAutoFilterEngine(unittest.TestCase):
             purged = asyncio.run(clean_expired_gifts(keep_days=14))
             self.assertGreaterEqual(purged, 1)
 
+    def test_codebase_integrity_and_imports(self):
+        """Regression test verifying no missing core imports in critical handlers."""
+        import plugins.callbacks as cb
+        self.assertTrue(hasattr(cb, "asyncio"))
+        self.assertTrue(hasattr(cb, "html"))
+        self.assertTrue(hasattr(cb, "urllib"))
+
+        import plugins.start as st
+        self.assertTrue(hasattr(st, "html"))
+
+        import utils.gift_flow as gf
+        self.assertTrue(hasattr(gf, "datetime"))
+
+        import utils.helpers as hp
+        self.assertTrue(hasattr(hp, "asyncio"))
+
 if __name__ == "__main__":
     unittest.main()
