@@ -69,28 +69,26 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
             continue
 
         tok_low = token.lower()
-        if tok_low in ("-unlimited", "-nolimit", "-forever", "-inf"):
+        if tok_low in ("-unlimited", "unlimited", "-nolimit", "nolimit", "-forever", "forever", "-inf", "inf"):
             flags["claims"] = 0
             flags["duration_seconds"] = 0
-        elif tok_low in ("unlimited", "nolimit", "inf"):
-            flags["claims"] = 0
         elif tok_low in ("forever", "lifetime", "never", "0h", "0d", "0s"):
             flags["duration_seconds"] = 0
-        elif tok_low == "-viponly":
+        elif tok_low in ("-viponly", "viponly", "-vip", "vip"):
             flags["is_vip_only"] = True
-        elif tok_low in ("-shortener", "-short", "-ad"):
+        elif tok_low in ("-shortener", "shortener", "-short", "short", "-ad", "ad"):
             flags["require_shortener"] = True
-        elif tok_low == "-noprotect":
+        elif tok_low in ("-noprotect", "noprotect", "unlock"):
             flags["protect_content"] = False
-        elif tok_low == "-protect":
+        elif tok_low in ("-protect", "protect", "lock"):
             flags["protect_content"] = True
-        elif tok_low == "-del":
+        elif tok_low in ("-del", "del", "autodel"):
             if i + 1 < len(arg_list):
                 dur = parse_short_duration(arg_list[i + 1])
                 if dur is not None:
                     flags["auto_delete_seconds"] = dur
                 skip_next = True
-        elif tok_low in ("-img", "-poster"):
+        elif tok_low in ("-img", "img", "-poster", "poster"):
             if i + 1 < len(arg_list):
                 flags["poster_url"] = arg_list[i + 1]
                 skip_next = True
@@ -108,6 +106,15 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
             dur = parse_short_duration(token)
             if dur is not None:
                 flags["duration_seconds"] = dur
+
+    # Default channels fallback if none specified in command
+    if not flags["channels"]:
+        if Config.FORCE_SUB_CHANNELS:
+            flags["channels"] = list(Config.FORCE_SUB_CHANNELS)
+        elif Config.CHANNEL_URL and not Config.CHANNEL_URL.startswith("http"):
+            flags["channels"] = [Config.CHANNEL_URL]
+        elif Config.UPDATES_CHANNEL:
+            flags["channels"] = [str(Config.UPDATES_CHANNEL)]
 
     return flags
 
@@ -127,18 +134,19 @@ async def create_single_gift_handler(client: Client, message: Message):
         return await message.reply_text(
             "🎁 <b>CREATE TASK-LOCKED REWARD / GIFT LINK</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<b>Usage:</b> Reply to any file, video, APK, or document with:\n"
-            "<code>/gift [claims] [duration] [@channel...] [flags]</code>\n\n"
-            "<b>Supported Flags:</b>\n"
-            "• <code>-viponly</code> : Reserved only for VIP subscribers\n"
-            "• <code>-shortener</code> : Require 1-time shortener/ad bypass\n"
-            "• <code>-protect</code> : Block forwarding and saving\n"
-            "• <code>-del 3m</code> : Auto-delete delivered file in 3 minutes\n"
-            "• <code>-img &lt;url&gt;</code> : Custom gift poster picture URL\n\n"
-            "<b>Examples:</b>\n"
-            "• <code>/gift 50 48h @AkMoviesOfficial</code>\n"
-            "• <code>/gift 100 7d @AkMoviesOfficial @BackupZone -shortener -del 3m</code>\n"
-            "• <code>/gift 50 24h -viponly</code> (Exclusive VIP Giveaway)"
+            "<b>Super Simple Usage:</b> Reply to any file, video, or APK with:\n"
+            "• <code>/gift</code> : Instant 50 claims, 48h validity (Fastest 1-word!)\n"
+            "• <code>/gift 100</code> : 100 claims, 48h\n"
+            "• <code>/gift 100 7d</code> : 100 claims, 7 days\n"
+            "• <code>/gift 50 24h @MyChannel</code> : Custom channel task\n"
+            "• <code>/gift 100 3d shortener protect</code> : With optional tasks\n"
+            "• <code>/gift unlimited lifetime</code> : Unlimited open giveaway\n\n"
+            "<b>Optional Modifiers (No hyphens needed):</b>\n"
+            "• <code>shortener</code> : Require 1-time shortener task\n"
+            "• <code>vip</code> : VIP members only\n"
+            "• <code>protect</code> : Content protected (No forward/save)\n"
+            "• <code>del 5m</code> : Auto-delete file in 5 minutes\n\n"
+            "💡 <i>No complex flags or brackets needed!</i>"
         )
 
     # Extract media from reply

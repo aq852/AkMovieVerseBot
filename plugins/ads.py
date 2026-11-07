@@ -37,42 +37,62 @@ async def set_ad_command(client: Client, message: Message):
         return await message.reply_text(
             "📢 <b>SET TIME-BASED SPONSOR AD</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<b>Usage (With or without brackets):</b>\n"
-            "• <code>/setad 1h Ad Title | Target URL</code>\n"
-            "• <code>/setad &lt;duration&gt; [Ad Title | Target URL]</code>\n\n"
-            "<b>Duration Formats:</b>\n"
-            "• <code>1h</code> : 1 Hour (Flash Ad)\n"
+            "<b>Super Simple Usage (No brackets, no pipes):</b>\n"
+            "• <code>/setad 24h Ad Title Here https://t.me/mychannel</code>\n"
+            "• <code>/setad 1h Flash Offer https://link.com</code>\n\n"
+            "<b>Pipe Format (Also Supported):</b>\n"
+            "• <code>/setad 1h Ad Title | https://t.me/mychannel</code>\n\n"
+            "<b>Duration Formats (Any Custom Time):</b>\n"
+            "• <code>45m</code> : 45 Minutes\n"
+            "• <code>1h</code> / <code>2h</code> : 1 or 2 Hours\n"
             "• <code>24h</code> : 24 Hours (1 Day)\n"
-            "• <code>3d</code> : 3 Days\n"
-            "• <code>7d</code> : 7 Days (1 Week)\n"
-            "• <code>30d</code> : 30 Days (1 Month)\n\n"
+            "• <code>3d</code> / <code>7d</code> / <code>30d</code> : Days or Months\n\n"
             "<b>Examples:</b>\n"
-            "• <code>/setad 1h Join AkMovieVerse | https://t.me/AkMovieVerse</code>\n"
-            "• <code>/setad 24h [🔥 1XBet 100% Bonus | https://1xbet.com]</code>\n\n"
+            "• <code>/setad 24h Join @AkMovieVerse for 4K Drops https://t.me/AkMovieVerse</code>\n"
+            "• <code>/setad 7d 🔥 1XBet - 100% Bonus https://1xbet.com</code>\n\n"
             "💡 <i>Active ads auto-expire on the exact second. VIP members never see ads!</i>"
         )
 
-    # 1. Extract duration (supports <1h>, 1h, 1hr, 24h, 3d, etc.)
+    # 1. Extract duration (supports 1h, <1h>, 45m, 24h, 3d, etc.)
     dur_match = re.match(r"^(?:<)?([0-9]+\s*[a-zA-Z]*)(?:>)?\s+", body)
     if not dur_match:
-        return await message.reply_text("❌ <b>Missing duration.</b> Example: <code>/setad 1h Title | https://url</code>")
+        return await message.reply_text(
+            "❌ <b>Missing duration.</b>\n"
+            "<b>Usage:</b> <code>/setad 24h Ad Title https://t.me/link</code>"
+        )
 
     dur_str = dur_match.group(1).strip()
     rest = body[dur_match.end():].strip()
 
-    # 2. Extract title and URL (with or without [ ... ])
+    # 2. Extract title and URL (supports natural syntax, [ ... ], or | pipe)
     if rest.startswith("[") and rest.endswith("]"):
         rest = rest[1:-1].strip()
 
-    if "|" not in rest:
-        return await message.reply_text(
-            "❌ <b>Invalid format.</b> Title and URL must be separated by a <code>|</code> pipe.\n"
-            "<b>Example:</b> <code>/setad 1h Ad Title | https://t.me/mychannel</code>"
-        )
+    if "|" in rest:
+        parts = rest.split("|", 1)
+        ad_title = parts[0].strip()
+        ad_url = parts[1].strip()
+    else:
+        # Natural syntax: Last token is the URL, everything in between is the Title
+        tokens = rest.split()
+        if len(tokens) >= 2 and (
+            tokens[-1].startswith("http://") or
+            tokens[-1].startswith("https://") or
+            tokens[-1].startswith("t.me/") or
+            re.match(r"^https?://", tokens[-1], re.I)
+        ):
+            ad_url = tokens[-1].strip()
+            ad_title = " ".join(tokens[:-1]).strip()
+        else:
+            return await message.reply_text(
+                "❌ <b>Invalid format.</b>\n\n"
+                "<b>Simple Usage:</b>\n"
+                "<code>/setad 24h Ad Title Here https://t.me/channel</code>\n\n"
+                "<i>Ensure the URL is at the end, starting with https:// or t.me/</i>"
+            )
 
-    parts = rest.split("|", 1)
-    ad_title = parts[0].strip()
-    ad_url = parts[1].strip()
+    if ad_url.startswith("t.me/"):
+        ad_url = "https://" + ad_url
 
     dur_seconds = parse_duration_string(dur_str)
     if not dur_seconds:

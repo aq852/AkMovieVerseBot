@@ -1485,6 +1485,16 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertEqual(flags_zeros["claims"], 0)
         self.assertEqual(flags_zeros["duration_seconds"], 0)
 
+        # Test simple natural keywords without hyphens
+        args_natural = ["75", "12h", "shortener", "vip", "lock", "del", "5m"]
+        flags_nat = parse_gift_flags(args_natural)
+        self.assertEqual(flags_nat["claims"], 75)
+        self.assertEqual(flags_nat["duration_seconds"], 12 * 3600)
+        self.assertTrue(flags_nat["require_shortener"])
+        self.assertTrue(flags_nat["is_vip_only"])
+        self.assertTrue(flags_nat["protect_content"])
+        self.assertEqual(flags_nat["auto_delete_seconds"], 300)
+
     def test_gift_reward_system_crud(self):
         import asyncio
         from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock
