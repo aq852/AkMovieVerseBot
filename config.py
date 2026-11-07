@@ -29,6 +29,7 @@ class Config:
     CHANNELS = [int(ch) for ch in os.environ.get("CHANNELS", "").split() if ch.lstrip('-').isdigit()]
     LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002247400551"))
     UPDATES_CHANNEL = int(os.environ.get("UPDATES_CHANNEL", "-1003537939374"))
+    GIFT_CHANNEL = int(os.environ.get("GIFT_CHANNEL", "0") or "0")
     AUTO_POST_ENABLED = os.environ.get("AUTO_POST_ENABLED", "True").lower() == "true"
     AUTO_POST_DELAY = int(os.environ.get("AUTO_POST_DELAY", "120"))  # 2 minutes buffering window
     FORCE_SUB_CHANNELS = [ch.strip() for ch in os.environ.get("FORCE_SUB_CHANNELS", "").split() if ch.strip()]

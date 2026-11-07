@@ -24,8 +24,45 @@ from database.gifts import (
     is_gift_banned
 )
 from database.batches import get_batch
+from database.mongo import mongo
 
 logger = logging.getLogger(__name__)
+
+_GIFT_CHANNEL_CACHE = {"channel": None, "loaded": False}
+
+
+async def get_gift_channel():
+    """Retrieve target channel for auto-publishing gift drops."""
+    if _GIFT_CHANNEL_CACHE["loaded"]:
+        return _GIFT_CHANNEL_CACHE["channel"]
+    try:
+        doc = await mongo.db["bot_settings"].find_one({"key": "gift_channel"})
+        if doc and "channel" in doc:
+            val = doc["channel"]
+            _GIFT_CHANNEL_CACHE["channel"] = val
+            _GIFT_CHANNEL_CACHE["loaded"] = True
+            return val
+    except Exception:
+        pass
+    default_ch = getattr(Config, "GIFT_CHANNEL", None)
+    _GIFT_CHANNEL_CACHE["channel"] = default_ch if default_ch and default_ch != 0 else None
+    _GIFT_CHANNEL_CACHE["loaded"] = True
+    return _GIFT_CHANNEL_CACHE["channel"]
+
+
+async def set_gift_channel(channel):
+    """Set target channel for auto-publishing gift drops."""
+    _GIFT_CHANNEL_CACHE["channel"] = channel
+    _GIFT_CHANNEL_CACHE["loaded"] = True
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "gift_channel"},
+            {"$set": {"channel": channel, "updated_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+    except Exception as e:
+        logger.error(f"Error persisting gift channel setting: {e}")
+
 
 
 def parse_short_duration(dur_str: str) -> Optional[int]:
@@ -60,7 +97,8 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         "external_links": [],
         "required_invites": 0,
         "claims": 50,
-        "duration_seconds": 172800  # 48 hours default
+        "duration_seconds": 172800,  # 48 hours default
+        "draft": False
     }
 
     seen_numbers = 0
@@ -71,7 +109,9 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
             continue
 
         tok_low = token.lower()
-        if tok_low in ("-unlimited", "unlimited", "-nolimit", "nolimit", "-forever", "forever", "-inf", "inf"):
+        if tok_low in ("-draft", "draft", "-nopost", "nopost"):
+            flags["draft"] = True
+        elif tok_low in ("-unlimited", "unlimited", "-nolimit", "nolimit", "-forever", "forever", "-inf", "inf"):
             flags["claims"] = 0
             flags["duration_seconds"] = 0
         elif tok_low in ("forever", "lifetime", "never", "0h", "0d", "0s"):
@@ -260,13 +300,60 @@ async def create_single_gift_handler(client: Client, message: Message):
         [InlineKeyboardButton("🎁 CLAIM EXCLUSIVE REWARD ↗️", url=gift_link)]
     ])
 
-    admin_summary = (
-        f"✅ <b>GIFT REWARD LINK CREATED SUCCESSFULLY!</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
-        f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n\n"
-        f"📢 <i>You can forward the ready-made card below directly to your channel!</i>"
-    )
+    # Auto-publish to configured gift drops channel
+    gift_channel = await get_gift_channel()
+    channel_post_url = None
+
+    if gift_channel and not flags.get("draft"):
+        try:
+            poster = doc.get("poster_url")
+            ch_msg = None
+            if poster:
+                try:
+                    ch_msg = await client.send_photo(
+                        chat_id=gift_channel,
+                        photo=poster,
+                        caption=card_text,
+                        reply_markup=markup
+                    )
+                except Exception as p_err:
+                    logger.debug(f"Could not send photo to gift channel: {p_err}")
+
+            if not ch_msg:
+                ch_msg = await client.send_message(
+                    chat_id=gift_channel,
+                    text=card_text,
+                    reply_markup=markup,
+                    disable_web_page_preview=True
+                )
+
+            if ch_msg:
+                if str(gift_channel).startswith("-100"):
+                    clean_cid = str(gift_channel)[4:]
+                    channel_post_url = f"https://t.me/c/{clean_cid}/{ch_msg.id}"
+                elif str(gift_channel).startswith("@"):
+                    channel_post_url = f"https://t.me/{str(gift_channel).lstrip('@')}/{ch_msg.id}"
+        except Exception as pub_err:
+            logger.warning(f"Failed to auto-post gift to channel {gift_channel}: {pub_err}")
+
+    if channel_post_url:
+        admin_summary = (
+            f"✅ <b>GIFT REWARD CREATED & PUBLISHED TO CHANNEL!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
+            f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+            f"📢 <b>Channel Post:</b> <a href=\"{channel_post_url}\"><b>View Live Post ↗️</b></a>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🚀 <i>The card below was automatically published to your gift channel!</i>"
+        )
+    else:
+        admin_summary = (
+            f"✅ <b>GIFT REWARD LINK CREATED SUCCESSFULLY!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
+            f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n\n"
+            f"📢 <i>You can forward the ready-made card below directly to your channel!</i>"
+        )
 
     await message.reply_text(admin_summary, disable_web_page_preview=True)
 
@@ -363,13 +450,60 @@ async def create_batch_gift_handler(client: Client, message: Message):
         [InlineKeyboardButton("🎁 CLAIM COMPLETE BATCH PACK ↗️", url=gift_link)]
     ])
 
-    admin_summary = (
-        f"✅ <b>BATCH GIFT REWARD CREATED SUCCESSFULLY!</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
-        f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n\n"
-        f"📢 <i>You can forward the ready-made card below directly to your channel!</i>"
-    )
+    # Auto-publish to configured gift drops channel
+    gift_channel = await get_gift_channel()
+    channel_post_url = None
+
+    if gift_channel and not flags.get("draft"):
+        try:
+            poster = doc.get("poster_url")
+            ch_msg = None
+            if poster:
+                try:
+                    ch_msg = await client.send_photo(
+                        chat_id=gift_channel,
+                        photo=poster,
+                        caption=card_text,
+                        reply_markup=markup
+                    )
+                except Exception as p_err:
+                    logger.debug(f"Could not send photo to gift channel: {p_err}")
+
+            if not ch_msg:
+                ch_msg = await client.send_message(
+                    chat_id=gift_channel,
+                    text=card_text,
+                    reply_markup=markup,
+                    disable_web_page_preview=True
+                )
+
+            if ch_msg:
+                if str(gift_channel).startswith("-100"):
+                    clean_cid = str(gift_channel)[4:]
+                    channel_post_url = f"https://t.me/c/{clean_cid}/{ch_msg.id}"
+                elif str(gift_channel).startswith("@"):
+                    channel_post_url = f"https://t.me/{str(gift_channel).lstrip('@')}/{ch_msg.id}"
+        except Exception as pub_err:
+            logger.warning(f"Failed to auto-post batch gift to channel {gift_channel}: {pub_err}")
+
+    if channel_post_url:
+        admin_summary = (
+            f"✅ <b>BATCH GIFT CREATED & PUBLISHED TO CHANNEL!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
+            f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+            f"📢 <b>Channel Post:</b> <a href=\"{channel_post_url}\"><b>View Live Post ↗️</b></a>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🚀 <i>The pack card below was automatically published to your gift channel!</i>"
+        )
+    else:
+        admin_summary = (
+            f"✅ <b>BATCH GIFT REWARD CREATED SUCCESSFULLY!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 <b>Gift Link:</b> <code>{gift_link}</code>\n"
+            f"🆔 <b>Gift ID:</b> <code>{gift_id}</code>\n\n"
+            f"📢 <i>You can forward the ready-made card below directly to your channel!</i>"
+        )
 
     await message.reply_text(admin_summary, disable_web_page_preview=True)
     poster = doc.get("poster_url")
@@ -531,3 +665,62 @@ async def gift_unban_handler(client: Client, message: Message):
         await message.reply_text(f"✅ <b>User <code>{target_id}</code> is now unbanned and can claim gifts.</b>")
     else:
         await message.reply_text("ℹ️ User was not in gift blacklist.")
+
+
+# ==============================================================================
+# Admin Command: /setgiftchannel <channel> (Configure Auto-Publishing Gift Channel)
+# ==============================================================================
+
+@Client.on_message(filters.command(["setgiftchannel", "giftchannel"]) & filters.private)
+async def set_gift_channel_command(client: Client, message: Message):
+    """Admin command to configure dedicated channel for auto-posting gifts."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied:</b> Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        current = await get_gift_channel()
+        status_str = f"<code>{current}</code>" if current else "<i>Disabled (Manual Forward Mode)</i>"
+        return await message.reply_text(
+            f"🎁 <b>GIFT AUTO-POST CHANNEL SETTINGS</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📢 <b>Current Channel:</b> {status_str}\n\n"
+            f"<b>Usage:</b>\n"
+            f"• <code>/setgiftchannel @MyChannel</code> (Public Channel)\n"
+            f"• <code>/setgiftchannel -1001234567890</code> (Private Channel ID)\n"
+            f"• <code>/setgiftchannel off</code> (Disable Auto-Post)\n\n"
+            f"💡 <i>When enabled, any gift created via /gift or /giftbatch will automatically post directly to this channel!</i>"
+        )
+
+    arg = parts[1].strip()
+    if arg.lower() in ("off", "clear", "disable", "none", "0"):
+        await set_gift_channel(None)
+        return await message.reply_text("✅ <b>Gift Auto-Post Channel Disabled!</b>\nGift cards will now only be sent to admin PM for manual forwarding.")
+
+    # Validate channel
+    target = None
+    if arg.startswith("-100") or (arg.lstrip("-").isdigit() and len(arg) > 8):
+        target = int(arg)
+    elif arg.startswith("@"):
+        target = arg
+    else:
+        if not arg.startswith("http"):
+            target = f"@{arg}"
+        else:
+            return await message.reply_text("⚠️ <b>Invalid format!</b> Use <code>@channel_username</code> or <code>-100...</code> channel ID.")
+
+    title = str(target)
+    try:
+        chat = await client.get_chat(target)
+        if chat and chat.title:
+            title = chat.title
+    except Exception as e:
+        logger.warning(f"Could not fetch chat info for {target}: {e}")
+
+    await set_gift_channel(target)
+    await message.reply_text(
+        f"✅ <b>GIFT AUTO-POST CHANNEL CONFIGURED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📢 <b>Target Channel:</b> <code>{title}</code> (<code>{target}</code>)\n\n"
+        f"🚀 <i>Every new gift created with /gift or /giftbatch will now be automatically published directly to this channel!</i>"
+    )
