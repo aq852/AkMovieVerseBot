@@ -584,17 +584,22 @@ async def start_command_handler(client: Client, message: Message):
             return
 
         gift_id = token_doc.get("gift_id", "")
+        target_url = token_doc.get("target_url", "")
         bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+
+        buttons = []
+        if target_url:
+            buttons.append([InlineKeyboardButton("🌐 Open Target Link ↗️", url=target_url)])
+        buttons.append([InlineKeyboardButton("🎁 Continue to Claim Reward ↗️", url=f"https://t.me/{bot_uname}?start=gift_{gift_id}")])
+
         success_text = (
             "✅ <b>TASK COMPLETED &amp; VERIFIED!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Your ad/shortener task has been confirmed in our database!\n\n"
-            "👉 Tap the button below to unlock and claim your gift reward:"
+            "Your task has been confirmed in our database!\n\n"
+            "👉 Tap the button below to return and claim your gift reward:"
         )
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎁 Continue to Claim Reward ↗️", url=f"https://t.me/{bot_uname}?start=gift_{gift_id}")]
-        ])
-        await message.reply_text(success_text, reply_markup=markup)
+        markup = InlineKeyboardMarkup(buttons)
+        await message.reply_text(success_text, reply_markup=markup, disable_web_page_preview=True)
         return
 
     # 7. Standard /start Greeting

@@ -57,6 +57,8 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         "auto_delete_seconds": 300,  # 5 minutes default
         "poster_url": None,
         "channels": [],
+        "external_links": [],
+        "required_invites": 0,
         "claims": 50,
         "duration_seconds": 172800  # 48 hours default
     }
@@ -92,7 +94,35 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
             if i + 1 < len(arg_list):
                 flags["poster_url"] = arg_list[i + 1]
                 skip_next = True
-        elif token.startswith("@") or token.startswith("-100"):
+        elif tok_low in ("yt", "youtube", "-yt", "-youtube"):
+            if i + 1 < len(arg_list):
+                flags["external_links"].append({
+                    "title": "Subscribe on YouTube",
+                    "url": arg_list[i + 1].strip(),
+                    "type": "youtube"
+                })
+                skip_next = True
+        elif tok_low in ("insta", "instagram", "-insta", "-instagram"):
+            if i + 1 < len(arg_list):
+                flags["external_links"].append({
+                    "title": "Follow on Instagram",
+                    "url": arg_list[i + 1].strip(),
+                    "type": "instagram"
+                })
+                skip_next = True
+        elif tok_low in ("link", "web", "site", "sponsor", "-link", "-web"):
+            if i + 1 < len(arg_list):
+                flags["external_links"].append({
+                    "title": "Visit Partner Website",
+                    "url": arg_list[i + 1].strip(),
+                    "type": "web"
+                })
+                skip_next = True
+        elif tok_low in ("invite", "refer", "-invite", "-refer"):
+            if i + 1 < len(arg_list) and arg_list[i + 1].isdigit():
+                flags["required_invites"] = int(arg_list[i + 1])
+                skip_next = True
+        elif token.startswith("@") or token.startswith("-100") or (token.lstrip("-").isdigit() and len(token) > 8) or token.startswith("https://t.me/+") or token.startswith("t.me/+"):
             flags["channels"].append(token)
         elif token.isdigit():
             val = int(token)
@@ -136,17 +166,23 @@ async def create_single_gift_handler(client: Client, message: Message):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "<b>Super Simple Usage:</b> Reply to any file, video, or APK with:\n"
             "• <code>/gift</code> : Instant 50 claims, 48h validity (Fastest 1-word!)\n"
-            "• <code>/gift 100</code> : 100 claims, 48h\n"
             "• <code>/gift 100 7d</code> : 100 claims, 7 days\n"
             "• <code>/gift 50 24h @MyChannel</code> : Custom channel task\n"
-            "• <code>/gift 100 3d shortener protect</code> : With optional tasks\n"
-            "• <code>/gift unlimited lifetime</code> : Unlimited open giveaway\n\n"
+            "• <code>/gift 50 24h -1002247400551</code> : Private channel support\n"
+            "• <code>/gift 50 24h yt https://youtube.com/@channel</code> : YouTube Subscribe task\n"
+            "• <code>/gift 50 24h insta https://instagram.com/myacc</code> : Instagram Follow task\n"
+            "• <code>/gift 50 24h invite 2</code> : Invite 2 friends task\n"
+            "• <code>/gift 100 3d shortener protect</code> : Shortener + Protected\n\n"
             "<b>Optional Modifiers (No hyphens needed):</b>\n"
+            "• <code>yt &lt;url&gt;</code> : YouTube subscribe task\n"
+            "• <code>insta &lt;url&gt;</code> : Instagram follow task\n"
+            "• <code>link &lt;url&gt;</code> : Sponsor / website visit task\n"
+            "• <code>invite &lt;n&gt;</code> : Require inviting N friends\n"
             "• <code>shortener</code> : Require 1-time shortener task\n"
             "• <code>vip</code> : VIP members only\n"
             "• <code>protect</code> : Content protected (No forward/save)\n"
             "• <code>del 5m</code> : Auto-delete file in 5 minutes\n\n"
-            "💡 <i>No complex flags or brackets needed!</i>"
+            "💡 <i>Works with public, private channels, links, and referral tasks!</i>"
         )
 
     # Extract media from reply
@@ -191,7 +227,9 @@ async def create_single_gift_handler(client: Client, message: Message):
         auto_delete_seconds=flags["auto_delete_seconds"],
         max_claims=flags["claims"],
         duration_seconds=flags["duration_seconds"],
-        created_by=message.from_user.id
+        created_by=message.from_user.id,
+        external_links=flags["external_links"],
+        required_invites=flags["required_invites"]
     )
 
     if not doc:
@@ -297,7 +335,9 @@ async def create_batch_gift_handler(client: Client, message: Message):
         auto_delete_seconds=flags["auto_delete_seconds"],
         max_claims=flags["claims"],
         duration_seconds=flags["duration_seconds"],
-        created_by=message.from_user.id
+        created_by=message.from_user.id,
+        external_links=flags["external_links"],
+        required_invites=flags["required_invites"]
     )
 
     if not doc:

@@ -1495,6 +1495,25 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertTrue(flags_nat["protect_content"])
         self.assertEqual(flags_nat["auto_delete_seconds"], 300)
 
+        # Test private channel, invite link, YouTube, Instagram, and invite tasks
+        args_extended = [
+            "50", "24h",
+            "-1002247400551",
+            "https://t.me/+AbCdEf123",
+            "yt", "https://youtube.com/@AkMovieVerse",
+            "insta", "https://instagram.com/akmovieverse",
+            "invite", "2"
+        ]
+        flags_ext = parse_gift_flags(args_extended)
+        self.assertEqual(flags_ext["claims"], 50)
+        self.assertEqual(flags_ext["duration_seconds"], 24 * 3600)
+        self.assertIn("-1002247400551", flags_ext["channels"])
+        self.assertIn("https://t.me/+AbCdEf123", flags_ext["channels"])
+        self.assertEqual(len(flags_ext["external_links"]), 2)
+        self.assertEqual(flags_ext["external_links"][0]["type"], "youtube")
+        self.assertEqual(flags_ext["external_links"][1]["type"], "instagram")
+        self.assertEqual(flags_ext["required_invites"], 2)
+
     def test_gift_reward_system_crud(self):
         import asyncio
         from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock

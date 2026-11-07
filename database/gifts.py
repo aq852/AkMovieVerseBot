@@ -25,7 +25,9 @@ async def create_gift(
     auto_delete_seconds: int = 300,
     max_claims: int = 50,
     duration_seconds: int = 172800,  # Default 48h
-    created_by: int = 0
+    created_by: int = 0,
+    external_links: Optional[List[Dict[str, str]]] = None,
+    required_invites: int = 0
 ) -> Dict[str, Any]:
     """Create a new gift reward campaign."""
     gift_id = secrets.token_hex(4).lower()  # 8 characters, e.g. "a9f2bc10"
@@ -54,6 +56,8 @@ async def create_gift(
         "protect_content": bool(protect_content),
         "auto_delete_seconds": auto_delete_seconds,
         "max_claims": max_claims,
+        "external_links": external_links or [],
+        "required_invites": int(required_invites or 0),
         "claimed_count": 0,
         "claimed_users": [],
         "views_count": 0,
@@ -244,8 +248,8 @@ async def is_gift_banned(user_id: int) -> bool:
 # Gift Task Verification Tokens (Shortener & External Ad Bypass)
 # ==============================================================================
 
-async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "shortener") -> str:
-    """Generate a unique 1-time verification token for shortener/ad task."""
+async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "shortener", target_url: str = "") -> str:
+    """Generate a unique 1-time verification token for shortener or external link visit task."""
     token = f"gtok_{secrets.token_hex(6)}"
     now = datetime.datetime.utcnow()
     expires_at = now + datetime.timedelta(hours=2)
@@ -255,6 +259,7 @@ async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "s
         "gift_id": gift_id,
         "user_id": user_id,
         "task_type": task_type,
+        "target_url": target_url.strip(),
         "is_verified": False,
         "created_at": now,
         "expires_at": expires_at
@@ -312,8 +317,27 @@ async def is_gift_task_verified(gift_id: str, user_id: int, task_type: str = "sh
         return False
 
 
+async def get_or_set_gift_initial_invites(gift_id: str, user_id: int, current_count: int) -> int:
+    """Get the user's base referral count when they first view the gift."""
+    try:
+        doc = await mongo.db["gift_user_invites"].find_one({"gift_id": gift_id, "user_id": user_id})
+        if doc:
+            return doc.get("initial_count", 0)
+        await mongo.db["gift_user_invites"].insert_one({
+            "gift_id": gift_id,
+            "user_id": user_id,
+            "initial_count": current_count,
+            "created_at": datetime.datetime.utcnow()
+        })
+        return current_count
+    except Exception as e:
+        logger.error(f"Error in get_or_set_gift_initial_invites: {e}")
+        return current_count
+
+
 # ==============================================================================
 # Housekeeping Auto-Clean
+# ==============================================================================
 # ==============================================================================
 
 async def clean_expired_gifts(keep_days: int = 14) -> int:

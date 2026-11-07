@@ -31,33 +31,53 @@ logger = logging.getLogger(__name__)
 
 
 async def check_channel_membership(client: Client, user_id: int, channel_identifier: str) -> tuple[bool, str, str]:
-    """Check if user has joined a required channel.
+    """Check if user has joined a required public or private channel.
+    Supports @username, numeric ID (-100...), and invite links (t.me/+...).
     Returns (is_member, channel_display_title, channel_invite_url).
     """
-    clean_ch = channel_identifier.strip()
-    invite_url = f"https://t.me/{clean_ch[1:]}" if clean_ch.startswith("@") else clean_ch
+    clean_ch = str(channel_identifier).strip()
+    custom_invite = ""
+    if "|" in clean_ch:
+        parts = clean_ch.split("|", 1)
+        clean_ch = parts[0].strip()
+        custom_invite = parts[1].strip()
 
-    display_title = clean_ch
+    # Determine chat target (int for numeric IDs, str for @username)
+    if clean_ch.lstrip("-").isdigit():
+        chat_target = int(clean_ch)
+    else:
+        chat_target = clean_ch
+
+    invite_url = custom_invite or (f"https://t.me/{clean_ch[1:]}" if str(clean_ch).startswith("@") else str(clean_ch))
+    display_title = str(clean_ch)
+
     try:
-        chat = await client.get_chat(clean_ch)
+        chat = await client.get_chat(chat_target)
         if chat.title:
             display_title = chat.title
-        if chat.username:
-            invite_url = f"https://t.me/{chat.username}"
-        elif getattr(chat, "invite_link", None):
-            invite_url = chat.invite_link
+        if not custom_invite:
+            if chat.username:
+                invite_url = f"https://t.me/{chat.username}"
+            elif getattr(chat, "invite_link", None):
+                invite_url = chat.invite_link
+            else:
+                try:
+                    invite_obj = await client.create_chat_invite_link(chat_target)
+                    invite_url = invite_obj.invite_link
+                except Exception:
+                    pass
     except Exception as e:
-        logger.debug(f"Could not fetch chat info for {clean_ch}: {e}")
+        logger.debug(f"Could not fetch chat info for {chat_target}: {e}")
 
     # Check member status
     try:
-        member = await client.get_chat_member(clean_ch, user_id)
+        member = await client.get_chat_member(chat_target, user_id)
         status_val = str(getattr(member, "status", "")).lower()
         if "left" in status_val or "banned" in status_val or "kicked" in status_val:
             return False, display_title, invite_url
         return True, display_title, invite_url
     except Exception as e:
-        logger.debug(f"User {user_id} not in channel {clean_ch}: {e}")
+        logger.debug(f"User {user_id} not in channel {chat_target}: {e}")
         return False, display_title, invite_url
 
 
@@ -254,6 +274,10 @@ async def render_gift_page(
     await increment_gift_views(gift_id)
 
     # 7. Evaluate Tasks
+    from database.mongo import mongo
+    from database.gifts import get_or_set_gift_initial_invites
+
+    # A. Channels Task (Public & Private)
     channels = gift.get("channels", [])
     channel_status = []  # list of (is_member, title, url)
     all_channels_done = True
@@ -264,21 +288,47 @@ async def render_gift_page(
         if not is_mem:
             all_channels_done = False
 
-    # Shortener Task
+    # B. Shortener Task
     require_shortener = gift.get("require_shortener", False)
     shortener_done = True
     if require_shortener:
         shortener_done = await is_gift_task_verified(gift_id, user_id, "shortener")
 
-    # If VIP user, tasks are automatically waived (VIP Perk)
+    # C. External Link Tasks (YouTube, Instagram, Website)
+    external_links = gift.get("external_links", [])
+    ext_status = []  # list of (is_done, title, url, type, token)
+    all_ext_done = True
+    for idx, ext in enumerate(external_links, start=1):
+        is_done = await is_gift_task_verified(gift_id, user_id, f"extlink_{idx}")
+        token = ""
+        if not is_done:
+            all_ext_done = False
+            token = await create_gift_task_token(gift_id, user_id, task_type=f"extlink_{idx}", target_url=ext.get("url", ""))
+        ext_status.append((is_done, ext.get("title", "Visit Link"), ext.get("url", ""), ext.get("type", "web"), token))
+
+    # D. Referral Invite Task
+    required_invites = gift.get("required_invites", 0)
+    invites_done = True
+    new_invites = 0
+    if required_invites > 0:
+        user_doc = await mongo.users.find_one({"user_id": user_id}) or {}
+        curr_refer_count = user_doc.get("refer_count", 0)
+        initial_invites = await get_or_set_gift_initial_invites(gift_id, user_id, curr_refer_count)
+        new_invites = max(0, curr_refer_count - initial_invites)
+        if new_invites < required_invites:
+            invites_done = False
+
+    # If VIP user, all tasks are automatically waived (VIP Perk)
     if user_is_vip:
         all_channels_done = True
         shortener_done = True
+        all_ext_done = True
+        invites_done = True
 
     # ==========================================================================
     # CASE A: ALL TASKS COMPLETED -> DELIVER REWARD!
     # ==========================================================================
-    if all_channels_done and shortener_done:
+    if all_channels_done and shortener_done and all_ext_done and invites_done:
         success, reason = await record_gift_claim(gift_id, user_id)
         if not success:
             if callback_query:
@@ -327,27 +377,59 @@ async def render_gift_page(
     ]
 
     button_rows = []
+    task_num = 1
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
 
-    # Channel rows
+    # 1. Channel rows (Public & Private)
     for idx, (is_mem, title, url) in enumerate(channel_status, start=1):
         tick = "✅" if is_mem else "❌"
         status_txt = "Joined" if is_mem else "Not Joined"
-        card_lines.append(f"{tick} <b>Task {idx}:</b> Join <code>{html.escape(title)}</code> ({status_txt})")
+        card_lines.append(f"{tick} <b>Task {task_num}:</b> Join <code>{html.escape(title)}</code> ({status_txt})")
+        task_num += 1
 
         if not is_mem:
             button_rows.append([
-                InlineKeyboardButton(f"📢 Join {title[:20]} ↗️", url=url)
+                InlineKeyboardButton(f"📢 Join {title[:22]} ↗️", url=url)
             ])
 
-    # Shortener row
+    # 2. External Link Tasks (YouTube, Instagram, Website)
+    for is_done, ext_title, ext_url, ext_type, token in ext_status:
+        tick = "✅" if is_done else "❌"
+        status_txt = "Verified" if is_done else "Pending"
+        card_lines.append(f"{tick} <b>Task {task_num}:</b> {ext_title} ({status_txt})")
+        task_num += 1
+
+        if not is_done:
+            icon = "🔴" if ext_type == "youtube" else ("📸" if ext_type == "instagram" else "🌐")
+            visit_url = f"https://t.me/{bot_uname}?start=vgtok_{token}" if token else ext_url
+            button_rows.append([
+                InlineKeyboardButton(f"{icon} {ext_title[:24]} ↗️", url=visit_url)
+            ])
+
+    # 3. Referral Invite Task
+    if required_invites > 0:
+        tick = "✅" if invites_done else "❌"
+        status_txt = f"{new_invites}/{required_invites} Invited"
+        card_lines.append(f"{tick} <b>Task {task_num}:</b> Invite {required_invites} Friend(s) to Bot ({status_txt})")
+        task_num += 1
+
+        if not invites_done:
+            import urllib.parse
+            refer_link = f"https://t.me/{bot_uname}?start=refer_{user_id}"
+            share_text = f"🔥 Claim exclusive movies and web series gifts on @{bot_uname}!"
+            share_url = f"https://t.me/share/url?url={urllib.parse.quote(refer_link)}&text={urllib.parse.quote(share_text)}"
+            button_rows.append([
+                InlineKeyboardButton(f"👥 Invite Friends ({new_invites}/{required_invites}) ↗️", url=share_url)
+            ])
+
+    # 4. Shortener row
     if require_shortener:
-        idx = len(channel_status) + 1
         tick = "✅" if shortener_done else "❌"
         status_txt = "Verified" if shortener_done else "Incomplete"
-        card_lines.append(f"{tick} <b>Task {idx}:</b> Complete 1-Time Ad Bypass ({status_txt})")
+        card_lines.append(f"{tick} <b>Task {task_num}:</b> Complete 1-Time Ad Bypass ({status_txt})")
+        task_num += 1
 
         if not shortener_done:
-            bot_uname = client.me.username if client.me else Config.BOT_USERNAME
             token = await create_gift_task_token(gift_id, user_id, "shortener")
             target_url = f"https://t.me/{bot_uname}?start=vgtok_{token}"
             short_link = await get_shortlink(target_url)
