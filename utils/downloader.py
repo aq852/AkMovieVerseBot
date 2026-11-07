@@ -202,7 +202,16 @@ def is_direct_download_link(url: str) -> bool:
 
 
 def get_cookie_file() -> str | None:
-    """Find valid cookie file path if provided by admin."""
+    """Find valid cookie file path if provided by admin, or hydrate from COOKIES_DATA env var."""
+    # Hydrate cookies.txt if provided via COOKIES_DATA environment variable (for Koyeb/Cloud)
+    env_cookies = os.environ.get("COOKIES_DATA", "").strip()
+    if env_cookies and (not os.path.isfile("cookies.txt") or os.path.getsize("cookies.txt") == 0):
+        try:
+            with open("cookies.txt", "w", encoding="utf-8") as f:
+                f.write(env_cookies)
+        except Exception as e:
+            logger.warning(f"Could not write COOKIES_DATA to cookies.txt: {e}")
+
     candidates = [
         getattr(Config, "COOKIES_FILE", "cookies.txt"),
         "cookies.txt",
