@@ -3741,16 +3741,31 @@ def verify_vip_stream_token(token: str) -> tuple[bool, int | None]:
         return False, None
 
 
-def get_stream_base_url(request: web.Request) -> str:
-    """Resolve public stream base URL from Config or request headers."""
-    if Config.STREAM_URL:
+def get_stream_base_url(request: web.Request | None = None) -> str:
+    """Resolve public stream base URL dynamically from incoming request or Config.
+    Automatically prioritizes incoming host headers so Web Browse and Streaming always
+    reflect the exact domain the user is visiting, and automatically syncs Config.STREAM_URL.
+    """
+    if request:
+        proto = request.headers.get("X-Forwarded-Proto", getattr(request, "scheme", "https"))
+        host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or getattr(request, "host", "")
+        if host and not any(h in host for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+            detected = f"{proto}://{host}".rstrip("/")
+            if not Config.STREAM_URL or any(h in Config.STREAM_URL for h in ("127.0.0.1", "localhost")):
+                Config.STREAM_URL = detected
+            return detected
+
+    if Config.STREAM_URL and not any(h in Config.STREAM_URL for h in ("127.0.0.1", "localhost")):
         return Config.STREAM_URL.rstrip("/")
-    if Config.WEB_URL:
+    if Config.WEB_URL and not any(h in Config.WEB_URL for h in ("127.0.0.1", "localhost")):
         return Config.WEB_URL.rstrip("/")
-    
-    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    host = request.headers.get("X-Forwarded-Host", request.host)
-    return f"{proto}://{host}".rstrip("/")
+
+    if request:
+        proto = request.headers.get("X-Forwarded-Proto", getattr(request, "scheme", "http"))
+        host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or getattr(request, "host", f"127.0.0.1:{Config.PORT}")
+        return f"{proto}://{host}".rstrip("/")
+
+    return f"http://127.0.0.1:{Config.PORT}"
 
 
 _file_doc_cache: dict[str, tuple[dict, float]] = {}

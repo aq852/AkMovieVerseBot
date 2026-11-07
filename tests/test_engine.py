@@ -1729,5 +1729,25 @@ class TestAutoFilterEngine(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_dynamic_stream_and_browse_catalog(self):
+        """Verify dynamic request host detection and /browse command registration."""
+        from utils.web_server import get_stream_base_url
+        from utils.bot_commands import USER_COMMANDS
+        from unittest.mock import MagicMock
+
+        # 1. Verify dynamic header detection
+        mock_req = MagicMock()
+        mock_req.headers = {
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "akmovieverse.duckdns.org"
+        }
+        detected = get_stream_base_url(mock_req)
+        self.assertEqual(detected, "https://akmovieverse.duckdns.org")
+
+        # 2. Verify browse command in user command scope
+        user_cmd_names = [cmd.command for cmd in USER_COMMANDS]
+        self.assertIn("browse", user_cmd_names)
+        self.assertLessEqual(len(USER_COMMANDS), 100)
+
 if __name__ == "__main__":
     unittest.main()

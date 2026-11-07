@@ -627,6 +627,13 @@ async def start_command_handler(client: Client, message: Message):
         ]
     ]
 
+    from plugins.stream import get_effective_stream_base_url
+    stream_base = get_effective_stream_base_url()
+    if Config.ENABLE_STREAMING and stream_base and not any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+        markup_rows.insert(1, [
+            InlineKeyboardButton("🌐 BROWSE WEB CINEMA ↗️", url=f"{stream_base}/browse")
+        ])
+
     # Time-based sponsor ad for non-VIP users (Bottom button + caption link)
     if not await is_premium(user_id):
         try:

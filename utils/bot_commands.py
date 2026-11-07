@@ -40,6 +40,7 @@ USER_COMMANDS = [
     BotCommand("poster", "Design HD poster: /poster <name/link>"),
     BotCommand("styles", "Preview all 8 poster styles"),
     BotCommand("stream", "Generate fast stream & web player links"),
+    BotCommand("browse", "Open Web Cinema movie catalog"),
     BotCommand("id", "Get your Telegram ID"),
     BotCommand("info", "Get user profile details"),
     BotCommand("settings", "Manage connected group settings"),
