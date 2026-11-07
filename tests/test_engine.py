@@ -1353,6 +1353,25 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertIn("https://t.me/akmovies", text_with_ad)
         self.assertIn("Join AkMovies Official", text_with_ad)
 
+    def test_get_web_sponsor_banner_html(self):
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from utils.web_server import get_web_sponsor_banner_html
+
+        # Test when no ad exists
+        with patch("database.ads.get_active_sponsor_ad", new=AsyncMock(return_value=None)):
+            html = asyncio.run(get_web_sponsor_banner_html())
+            self.assertEqual(html, "")
+
+        # Test when active ad exists
+        ad = {"text": "Join AkMoviesZone", "url": "https://t.me/akmovieszone"}
+        with patch("database.ads.get_active_sponsor_ad", new=AsyncMock(return_value=ad)):
+            html = asyncio.run(get_web_sponsor_banner_html())
+            self.assertIn("sponsor-banner-bar", html)
+            self.assertIn("🔥 SPONSOR", html)
+            self.assertIn("Join AkMoviesZone", html)
+            self.assertIn("https://t.me/akmovieszone", html)
+
     def test_sponsor_ad_engine_crud(self):
         import asyncio
         from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock

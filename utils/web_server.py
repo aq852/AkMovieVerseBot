@@ -644,34 +644,34 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.12));
-            border: 1px solid rgba(245, 158, 11, 0.35);
-            padding: 9px 14px;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.14));
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 11px 16px;
             border-radius: 12px;
             text-decoration: none;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             transition: all 0.2s ease;
         }}
         .sponsor-banner-bar:hover {{
-            border-color: rgba(245, 158, 11, 0.7);
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(239, 68, 68, 0.22));
+            border-color: rgba(245, 158, 11, 0.8);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
             transform: translateY(-1px);
         }}
         .sponsor-tag {{
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 900;
             background: #f59e0b;
             color: #000;
-            padding: 2px 7px;
-            border-radius: 4px;
+            padding: 3px 8px;
+            border-radius: 5px;
             letter-spacing: 0.5px;
-            margin-right: 8px;
+            margin-right: 10px;
             flex-shrink: 0;
         }}
         .sponsor-text {{
             color: #fef3c7;
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 14.5px;
+            font-weight: 700;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -679,9 +679,9 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
         }}
         .sponsor-arrow {{
             color: #f59e0b;
-            font-size: 14px;
-            font-weight: 700;
-            margin-left: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            margin-left: 10px;
         }}
         .btn-bot {{
             grid-column: span 2;
@@ -2724,6 +2724,49 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
         }}
+        .sponsor-banner-bar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.14));
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 11px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            margin-bottom: 14px;
+            transition: all 0.2s ease;
+        }}
+        .sponsor-banner-bar:hover {{
+            border-color: rgba(245, 158, 11, 0.8);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+            transform: translateY(-1px);
+        }}
+        .sponsor-tag {{
+            font-size: 11px;
+            font-weight: 900;
+            background: #f59e0b;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 5px;
+            letter-spacing: 0.5px;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }}
+        .sponsor-text {{
+            color: #fef3c7;
+            font-size: 14.5px;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }}
+        .sponsor-arrow {{
+            color: #f59e0b;
+            font-size: 16px;
+            font-weight: 800;
+            margin-left: 10px;
+        }}
     </style>
 </head>
 <body class="p-2 sm:p-5 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
@@ -2747,6 +2790,8 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
                 </a>
             </div>
         </header>
+
+        {sponsor_banner_html}
 
         <!-- Main Hero Banner Card (Screenshot exact layout) -->
         <div class="hero-banner rounded-3xl border border-white/10 shadow-2xl relative">
@@ -3402,6 +3447,49 @@ CATALOG_HTML = """<!DOCTYPE html>
             font-weight: 600;
             font-size: 13px;
         }}
+        .sponsor-banner-bar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.14));
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 11px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            margin-bottom: 14px;
+            transition: all 0.2s ease;
+        }}
+        .sponsor-banner-bar:hover {{
+            border-color: rgba(245, 158, 11, 0.8);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+            transform: translateY(-1px);
+        }}
+        .sponsor-tag {{
+            font-size: 11px;
+            font-weight: 900;
+            background: #f59e0b;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 5px;
+            letter-spacing: 0.5px;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }}
+        .sponsor-text {{
+            color: #fef3c7;
+            font-size: 14.5px;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }}
+        .sponsor-arrow {{
+            color: #f59e0b;
+            font-size: 16px;
+            font-weight: 800;
+            margin-left: 10px;
+        }}
     </style>
 </head>
 <body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
@@ -3415,6 +3503,8 @@ CATALOG_HTML = """<!DOCTYPE html>
                 <a href="https://t.me/{bot_username}" target="_blank" class="nav-btn">🤖 Bot</a>
             </div>
         </div>
+
+        {sponsor_banner_html}
 
         <div class="catalog-search-section">
             <form action="{browse_url}" method="GET" class="catalog-search-form">
@@ -3849,6 +3939,26 @@ async def stream_handler(request: web.Request):
     except Exception as e:
         logger.error(f"Error handling stream for {param}: {e}", exc_info=True)
         return web.Response(status=500, text="Internal streaming error")
+
+
+async def get_web_sponsor_banner_html() -> str:
+    """Build unified, high-CTR responsive sponsor banner for all web pages (Sweet Spot ~44px)."""
+    try:
+        from database.ads import get_active_sponsor_ad
+        ad = await get_active_sponsor_ad()
+        if ad and ad.get("text") and ad.get("url"):
+            return (
+                f'<a href="{html_escape(ad["url"])}" target="_blank" rel="noopener noreferrer" class="sponsor-banner-bar">'
+                f'<div style="display:flex;align-items:center;overflow:hidden;flex:1;">'
+                f'<span class="sponsor-tag">🔥 SPONSOR</span>'
+                f'<span class="sponsor-text">{html_escape(ad["text"])}</span>'
+                f'</div>'
+                f'<span class="sponsor-arrow">↗</span>'
+                f'</a>'
+            )
+    except Exception as e:
+        logger.debug(f"Could not load web sponsor banner: {e}")
+    return ""
 
 
 async def watch_handler(request: web.Request):
@@ -4442,22 +4552,7 @@ async def watch_handler(request: web.Request):
             </div>
             """
 
-    sponsor_banner_html = ""
-    try:
-        from database.ads import get_active_sponsor_ad
-        ad = await get_active_sponsor_ad()
-        if ad and ad.get("text") and ad.get("url"):
-            sponsor_banner_html = (
-                f'<a href="{html_escape(ad["url"])}" target="_blank" rel="noopener noreferrer" class="sponsor-banner-bar">'
-                f'<div style="display:flex;align-items:center;overflow:hidden;flex:1;">'
-                f'<span class="sponsor-tag">SPONSOR</span>'
-                f'<span class="sponsor-text">{html_escape(ad["text"])}</span>'
-                f'</div>'
-                f'<span class="sponsor-arrow">↗</span>'
-                f'</a>'
-            )
-    except Exception as e:
-        logger.debug(f"Could not load sponsor ad for web player: {e}")
+    sponsor_banner_html = await get_web_sponsor_banner_html()
 
     html = WEB_PLAYER_HTML.format(
         file_unique_id=file_unique_id,
@@ -4968,7 +5063,10 @@ async def post_handler(request: web.Request):
             </div>
             '''
 
+    sponsor_banner_html = await get_web_sponsor_banner_html()
+
     html = MEDIA_POST_HTML.format(
+        sponsor_banner_html=sponsor_banner_html,
         post_title=html_escape(target_item["title"]),
         backdrop_url=html_escape(backdrop_url),
         poster_url=html_escape(poster_url),
@@ -5191,7 +5289,10 @@ async def browse_handler(request: web.Request):
     page_info_text = f"Page {page} of {total_pages}"
     page_title = f'Search: {query}' if query else 'Full Movie & Web Series Catalog'
 
+    sponsor_banner_html = await get_web_sponsor_banner_html()
+
     html = CATALOG_HTML.format(
+        sponsor_banner_html=sponsor_banner_html,
         page_title=html_escape(page_title),
         browse_url=browse_url,
         channel_url=channel_url,
@@ -5974,6 +6075,49 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }}
+        .sponsor-banner-bar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.14));
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 11px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            margin-bottom: 14px;
+            transition: all 0.2s ease;
+        }}
+        .sponsor-banner-bar:hover {{
+            border-color: rgba(245, 158, 11, 0.8);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+            transform: translateY(-1px);
+        }}
+        .sponsor-tag {{
+            font-size: 11px;
+            font-weight: 900;
+            background: #f59e0b;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 5px;
+            letter-spacing: 0.5px;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }}
+        .sponsor-text {{
+            color: #fef3c7;
+            font-size: 14.5px;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }}
+        .sponsor-arrow {{
+            color: #f59e0b;
+            font-size: 16px;
+            font-weight: 800;
+            margin-left: 10px;
+        }}
     </style>
 </head>
 <body class="p-2.5 sm:p-6 flex flex-col items-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
@@ -6366,22 +6510,7 @@ async def watch_online_handler(request: web.Request):
     genres_info = html_escape(imdb_meta.get("genres") or "⚡ Instant Multi-Server Web Stream")
     overview_text = html_escape(imdb_meta.get("overview") or "Stream online directly with your browser. Switch servers if playback buffers or is slow.")
 
-    sponsor_banner_html = ""
-    try:
-        from database.ads import get_active_sponsor_ad
-        ad = await get_active_sponsor_ad()
-        if ad and ad.get("text") and ad.get("url"):
-            sponsor_banner_html = (
-                f'<a href="{html_escape(ad["url"])}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between glass-panel px-4 py-2.5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 hover:border-amber-400 transition group text-decoration-none my-1">'
-                f'<div class="flex items-center gap-2 min-w-0">'
-                f'<span class="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500 text-black tracking-wider">SPONSOR</span>'
-                f'<span class="text-xs sm:text-sm font-semibold text-amber-200 group-hover:text-white transition truncate">{html_escape(ad["text"])}</span>'
-                f'</div>'
-                f'<span class="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition ml-2">↗</span>'
-                f'</a>'
-            )
-    except Exception as e:
-        logger.debug(f"Could not load sponsor ad for watch_online: {e}")
+    sponsor_banner_html = await get_web_sponsor_banner_html()
 
     html = ONLINE_PLAYER_HTML.format(
         title=html_escape(clean_title),
