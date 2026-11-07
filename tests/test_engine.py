@@ -1706,5 +1706,28 @@ class TestAutoFilterEngine(unittest.TestCase):
         import utils.helpers as hp
         self.assertTrue(hasattr(hp, "asyncio"))
 
+    def test_video_screenshots_generator(self):
+        """Test screenshot watermark stamping and size safety limit."""
+        import tempfile
+        import os
+        from PIL import Image
+        from plugins.screenshots import apply_watermark, MAX_SCREENSHOT_FILE_SIZE_MB
+
+        self.assertEqual(MAX_SCREENSHOT_FILE_SIZE_MB, 250)
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+            temp_path = tf.name
+
+        try:
+            img = Image.new("RGB", (640, 360), color=(30, 30, 50))
+            img.save(temp_path, "JPEG")
+
+            out_path = apply_watermark(temp_path, watermark_text="@AkMovieVerse")
+            self.assertTrue(os.path.exists(out_path))
+            self.assertGreater(os.path.getsize(out_path), 500)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 if __name__ == "__main__":
     unittest.main()

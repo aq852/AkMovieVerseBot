@@ -430,7 +430,7 @@ CHEAT_SHEET_TEXT = (
     "• <code>/delbyname</code> | <code>/addjunk</code> | <code>/deljunk</code> | <code>/junkwords</code>\n"
     "• <code>/deleteall</code> | <code>/cleandb</code> | <code>/autodelete</code>\n\n"
     "<b>🎨 CANVAS POSTER &amp; TMDB API:</b>\n"
-    "• <code>/poster</code> | <code>/styles</code> | <code>/tmdb_status</code>\n"
+    "• <code>/poster</code> | <code>/styles</code> | <code>/ss</code> | <code>/tmdb_status</code>\n"
     "• <code>/set_poster_brand</code> | <code>/set_poster_channel</code>\n"
     "• <code>/set_tmdb_key</code> | <code>/set_tmdb_token</code>\n\n"
     "<b>⚡ WEB STREAMING &amp; PLAYERS:</b>\n"

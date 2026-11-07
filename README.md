@@ -306,6 +306,7 @@ Use `/ahelp` or `/admincommands` to access the interactive categorized command c
 ### 🎨 Canvas Poster & TMDb API
 - `/poster <movie_name>` — Generate HD 1080p canvas poster card
 - `/styles` — Preview all 6 designer poster templates
+- `/ss [count] [@watermark]` — Extract 2-10 timestamped video screenshots in a photo album grid (Admin only)
 - `/set_poster_brand <brand>` — Set custom watermark branding text
 - `/set_poster_channel <id>` — Set channel for publishing generated posters
 - `/set_tmdb_key <key>` | `/set_tmdb_token <token>` — Configure TMDb API credentials
