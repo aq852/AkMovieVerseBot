@@ -92,9 +92,9 @@ def get_readable_size(size_bytes: int) -> str:
 
 
 def format_clean_title(file_name: str) -> str:
-    """Format file title into a clean, readable name with dots removed."""
-    name = re.sub(r"[\._]", " ", file_name)
-    name = re.sub(r"\.(mkv|mp4|avi|webm|zip|rar)$", "", name, flags=re.IGNORECASE)
+    """Format file title into a clean, readable name with dots, hyphens, and extensions removed."""
+    name = re.sub(r"[\._\-]+", " ", file_name)
+    name = re.sub(r"\b(mkv|mp4|avi|webm|zip|rar)\b", "", name, flags=re.IGNORECASE)
     name = re.sub(r"\s+", " ", name).strip()
     return name or file_name
 

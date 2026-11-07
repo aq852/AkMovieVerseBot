@@ -238,29 +238,22 @@ async def create_single_gift_handler(client: Client, message: Message):
     gift_id = doc["gift_id"]
     gift_link = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
 
-    # Build Ready-to-Forward Channel Post
-    vip_badge = "👑 <b>VIP Members Only</b>" if flags["is_vip_only"] else "🌐 <b>Public Drop (Tasks Required)</b>"
-    protect_badge = "🔒 Content Protected (No Forward)" if flags["protect_content"] else "🔓 Standard"
+    # Build Ready-to-Forward Channel Post (Ultra-Clean & Compact)
     del_mins = flags["auto_delete_seconds"] // 60
-    del_str = f"{del_mins} Minute(s)" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
-    stock_str = f"First {flags['claims']} Users Only!" if flags["claims"] > 0 else "Unlimited (Open for Everyone!)"
-    validity_str = "Permanent / Lifetime Drop" if flags["duration_seconds"] == 0 else "Limited Time"
+    del_str = f"{del_mins} Mins" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
+    stock_str = f"First {flags['claims']} Users" if flags["claims"] > 0 else "Unlimited"
+    validity_str = "Lifetime" if flags["duration_seconds"] == 0 else "Limited Time"
+    vip_badge = " • 👑 <b>VIP Only</b>" if flags["is_vip_only"] else ""
 
     card_text = (
-        "🎁 <b>EXCLUSIVE REWARD DROP!</b> 🎁\n"
+        "🎁 <b>EXCLUSIVE REWARD DROP</b> 🎁\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>Reward:</b> <code>{html.escape(clean_title)}</code>\n"
-        f"💾 <b>Size:</b> <code>{get_readable_size(file_size)}</code>\n"
-        f"👥 <b>Available Stock:</b> <code>{stock_str}</code>\n"
-        f"⏳ <b>Campaign Validity:</b> <code>{validity_str}</code>\n"
-        f"🛡️ <b>Access:</b> {vip_badge}\n"
-        f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
-        f"🔐 <b>Protection:</b> <code>{protect_badge}</code>\n"
+        f"📦 <b>Item:</b> <code>{html.escape(clean_title)}</code>\n"
+        f"💾 <b>Size:</b> <code>{get_readable_size(file_size)}</code>  •  👥 <b>Stock:</b> <code>{stock_str}</code>\n"
+        f"⏳ <b>Validity:</b> <code>{validity_str}</code>  •  ⏱️ <b>Auto-Delete:</b> <code>{del_str}</code>{vip_badge}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🎁 <b>Claim Your Gift Here:</b>\n"
-        f"🔗 <a href=\"{gift_link}\"><b>{gift_link}</b></a>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <i>Tap link above or click the button below:</i>"
+        "🔗 <b>Claim Link:</b>\n"
+        f"<a href=\"{gift_link}\"><b>{gift_link}</b></a>"
     )
 
     markup = InlineKeyboardMarkup([
@@ -349,25 +342,21 @@ async def create_batch_gift_handler(client: Client, message: Message):
     gift_id = doc["gift_id"]
     gift_link = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
 
+    # Build Ready-to-Forward Batch Channel Post (Ultra-Clean & Compact)
     del_mins = flags["auto_delete_seconds"] // 60
-    del_str = f"{del_mins} Minute(s)" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
-    stock_str = f"First {flags['claims']} Users Only!" if flags["claims"] > 0 else "Unlimited (Open for Everyone!)"
-    validity_str = "Permanent / Lifetime Drop" if flags["duration_seconds"] == 0 else "Limited Time"
+    del_str = f"{del_mins} Mins" if del_mins > 0 else f"{flags['auto_delete_seconds']}s"
+    stock_str = f"First {flags['claims']} Users" if flags["claims"] > 0 else "Unlimited"
+    validity_str = "Lifetime" if flags["duration_seconds"] == 0 else "Limited Time"
 
     card_text = (
-        "🎁 <b>EXCLUSIVE BATCH REWARD PACK!</b> 🎁\n"
+        "🎁 <b>EXCLUSIVE BATCH REWARD PACK</b> 🎁\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 <b>Package:</b> <code>{html.escape(clean_title)}</code>\n"
-        f"📁 <b>Total Files:</b> <code>{total_files} Files</code>\n"
-        f"💾 <b>Total Size:</b> <code>{get_readable_size(total_size)}</code>\n"
-        f"👥 <b>Available Stock:</b> <code>{stock_str}</code>\n"
-        f"⏳ <b>Campaign Validity:</b> <code>{validity_str}</code>\n"
-        f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
+        f"📁 <b>Files:</b> <code>{total_files} Files</code>  •  💾 <b>Size:</b> <code>{get_readable_size(total_size)}</code>\n"
+        f"👥 <b>Stock:</b> <code>{stock_str}</code>  •  ⏱️ <b>Auto-Delete:</b> <code>{del_str}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🎁 <b>Claim Complete Pack Here:</b>\n"
-        f"🔗 <a href=\"{gift_link}\"><b>{gift_link}</b></a>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <i>Tap link above or click the button below:</i>"
+        "🔗 <b>Claim Link:</b>\n"
+        f"<a href=\"{gift_link}\"><b>{gift_link}</b></a>"
     )
 
     markup = InlineKeyboardMarkup([
