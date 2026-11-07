@@ -20,6 +20,10 @@
 
 Designed for zero-downtime 24/7 cloud hosting on **Koyeb, Heroku, Render, VPS, and Docker**.
 
+> 📚 **Official Bot Documentation & Command Manual:**  
+> Complete interactive guide with copy-paste examples for every feature:  
+> 👉 [**https://graph.org/AkMovieVerse-Bot-Guide-11-07**](https://graph.org/AkMovieVerse-Bot-Guide-11-07)
+
 ---
 
 ## 🌟 Key Features
@@ -114,6 +118,7 @@ Configure these environment variables in your `.env` file or cloud dashboard:
 | `CHANNELS` | No | — | Source storage channel IDs to index (space-separated) |
 | `LOG_CHANNEL` | No | `0` | Private channel ID for error logs and search demand alerts |
 | `UPDATES_CHANNEL` | No | `0` | Official updates channel for auto-post releases |
+| `GIFT_CHANNEL` | No | `0` | Dedicated channel for auto-publishing gift drops (`@channel` or `-100...`) |
 | `FORCE_SUB_CHANNELS` | No | — | Channels users must join to access search files |
 | `AUTO_APPROVE` | No | `True` | Automatically approve channel join requests |
 | `AUTO_APPROVE_CHANNELS`| No | — | Channels enabled for auto-approval |
@@ -207,10 +212,14 @@ Configure these environment variables in your `.env` file or cloud dashboard:
 
 Use `/ahelp` or `/admincommands` to access the interactive categorized command center in bot PM.
 
-### 🎁 Gifts & Task Rewards
-- `/gift [claims] [duration] [@channels] [flags]` — Create task-locked reward drop from replied file
+> 📖 **Full Command Manual & Examples:**  
+> Check the official [**Telegraph Command Guide**](https://graph.org/AkMovieVerse-Bot-Guide-11-07) for full syntax and copy-paste examples.
+
+### 🎁 Gifts & Task Rewards (Smart Hybrid Engine)
+- `/gift [claims] [duration] [@channels] [flags]` — Create task-locked reward drop from replied file (Supports `-unlimited`, `0 0`, `-del 5m`, `-viponly`, `-shortener`, `-draft`, `-strict`)
 - `/giftbatch <batch_id> [claims] [duration] ...` — Create gift drop for full season pack
-- `/gifts` | `/giftstats [id]` — Active gifts dashboard and claim statistics
+- `/setgiftchannel <@channel|-100id|off>` — Set dedicated channel for auto-publishing gift drops
+- `/gifts` | `/giftstats [id]` — Active gifts dashboard, unique claims & re-download analytics
 - `/delgift <gift_id>` — Revoke and cancel active gift campaign
 - `/giftban <user_id> [reason]` — Blacklist user from claiming gifts
 - `/giftunban <user_id>` — Remove user from gift blacklist
