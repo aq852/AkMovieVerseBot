@@ -102,6 +102,24 @@ async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool
     if cache_key in _TMDB_POST_CACHE:
         return _TMDB_POST_CACHE[cache_key]
 
+    # Check custom manual poster override first!
+    try:
+        norm_key = re.sub(r"[^\w]", "", clean_q.lower())
+        custom_doc = await mongo.db["custom_posters"].find_one({
+            "$or": [{"key": norm_key}, {"title": clean_q}]
+        })
+        if custom_doc and custom_doc.get("poster_url"):
+            custom_url = custom_doc["poster_url"]
+            if cache_key in _TMDB_POST_CACHE:
+                cached_data = _TMDB_POST_CACHE[cache_key]
+                cached_data["poster_url"] = custom_url
+                cached_data["backdrop_url"] = custom_url
+                if custom_url not in cached_data.get("gallery", []):
+                    cached_data["gallery"] = [custom_url] + cached_data.get("gallery", [])
+                return cached_data
+    except Exception:
+        pass
+
     # Check MongoDB cache (require gallery to be present)
     try:
         cached_doc = await mongo.db["tmdb_post_cache"].find_one({"key": cache_key})
@@ -208,6 +226,20 @@ async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool
         if result_data.get("poster_url") and result_data["poster_url"] not in gal:
             gal.append(result_data["poster_url"])
         result_data["gallery"] = gal
+
+    # Inject custom manual poster override into result_data
+    try:
+        norm_key = re.sub(r"[^\w]", "", clean_q.lower())
+        custom_doc = await mongo.db["custom_posters"].find_one({
+            "$or": [{"key": norm_key}, {"title": clean_q}]
+        })
+        if custom_doc and custom_doc.get("poster_url"):
+            custom_url = custom_doc["poster_url"]
+            result_data["poster_url"] = custom_url
+            result_data["backdrop_url"] = custom_url
+            result_data["gallery"] = [custom_url] + [g for g in result_data.get("gallery", []) if g != custom_url]
+    except Exception:
+        pass
 
     # Fallback poster from poster cache if TMDB gave no image
     if not result_data["poster_url"] and not result_data["backdrop_url"]:
@@ -401,14 +433,16 @@ def format_post_caption(group: dict, tmdb_data: dict, style: int = 1) -> str:
         else:
             episodes_section = "📺 <b>Episodes :</b> All Episodes Available"
 
-    # 7. Storyline for movies
+    # 7. Storyline for movies & series (Guaranteed fallback so Telegram blockquote ALWAYS collapses!)
     overview = (tmdb_data.get("overview") or "").strip()
     if not overview:
-        if not is_series:
-            overview = f"Stream and download {title} in multiple resolutions with crystal clear audio and subtitles."
+        if is_series:
+            overview = f"Follow the complete gripping story and full season episodes of {title} in ultra high-definition with multi-audio and verified fast streaming links."
+        else:
+            overview = f"Stream and download {title} in multiple resolutions with crystal clear audio, verified prints, and fast direct links."
     else:
-        if len(overview) > 240:
-            overview = overview[:237].rsplit(" ", 1)[0] + "..."
+        if len(overview) > 260:
+            overview = overview[:257].rsplit(" ", 1)[0] + "..."
 
     bot_username = Config.BOT_USERNAME or "bot"
 
@@ -439,9 +473,11 @@ def format_post_caption(group: dict, tmdb_data: dict, style: int = 1) -> str:
             caption += f"\n{episodes_section}"
 
     else:
-        # Style 1: Cinematic Expandable Dropdown (Bot's Original Signature Layout)
+        # Style 1: Cinematic Expandable Dropdown (Collapsible Blockquote)
+        header_tag = "📬 <b>New #SERIES Added</b>" if is_series else "📬 <b>New #MOVIE Added</b>"
         caption = (
-            f"🎬 <b>Title :</b> {html.escape(full_title)}\n"
+            f"{header_tag}\n\n"
+            f"✨ <b>Title :</b> {html.escape(full_title)}\n"
             f"⭐ <b>Rating :</b> {rating_str}\n\n"
             f"<blockquote expandable>"
             f"🎭 <b>Genres :</b> {html.escape(genres_str)}\n"
@@ -451,10 +487,7 @@ def format_post_caption(group: dict, tmdb_data: dict, style: int = 1) -> str:
         )
         if is_series:
             caption += f"\n\n{episodes_section}"
-            if overview:
-                caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>"
-        elif overview:
-            caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>"
+        caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>"
         caption += "\n</blockquote>"
 
     return caption
@@ -1295,4 +1328,166 @@ async def post_custom_button_command(client: Client, message: Message):
             InlineKeyboardButton(btn_text, url=btn_url)
         ]]),
         disable_web_page_preview=True
+    )
+
+
+
+# ==========================================
+# ADMIN COMMANDS: /setposter, /delposter, /getposter
+# ==========================================
+
+@Client.on_message(filters.command(["setposter", "set_poster"]) & filters.private)
+async def set_custom_poster_command(client: Client, message: Message):
+    """Admin command to set or replace poster for any movie/series in Web Catalog & Posts.
+    Usage:
+      1. With image link:
+         /setposter Dexter https://example.com/poster.jpg
+      2. By replying to a photo:
+         Reply /setposter Dexter to any photo
+    """
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    from utils.title_cleaner import clean_movie_title
+    from utils.poster_engine.uploader import upload_to_imgbb
+
+    args = message.text.split(maxsplit=2)
+    reply = message.reply_to_message
+    poster_url = None
+    title = None
+
+    if reply and (reply.photo or (reply.document and getattr(reply.document, "mime_type", "").startswith("image/"))):
+        if len(args) < 2:
+            return await message.reply_text("⚠️ <b>Usage:</b> Reply to a photo with <code>/setposter <movie/series name></code>")
+        title = message.text.split(maxsplit=1)[1].strip()
+        status_msg = await message.reply_text("⏳ <i>Uploading photo to cloud CDN...</i>")
+        try:
+            import io
+            buf = io.BytesIO()
+            await client.download_media(reply, file_name=buf)
+            buf.seek(0)
+            uploaded_url = await upload_to_imgbb(buf)
+            if not uploaded_url:
+                return await status_msg.edit_text("❌ <b>Failed to upload photo to CDN.</b> Please provide a direct image link instead.")
+            poster_url = uploaded_url
+            await status_msg.delete()
+        except Exception as e:
+            return await status_msg.edit_text(f"❌ <b>Upload error:</b> {e}")
+    else:
+        if len(args) < 3:
+            return await message.reply_text(
+                "🎨 <b>Custom Poster Manager:</b>\n\n"
+                "Set a custom poster for any movie or series across the Web Catalog and /post release cards!\n\n"
+                "<b>Usage Options:</b>\n"
+                "1️⃣ <b>Via Direct Image Link:</b>\n"
+                "👉 <code>/setposter Dexter https://example.com/poster.jpg</code>\n\n"
+                "2️⃣ <b>Via Photo Reply:</b>\n"
+                "👉 Send any photo in chat and reply with: <code>/setposter Dexter</code>\n\n"
+                "3️⃣ <b>Revert to Default Poster:</b>\n"
+                "👉 <code>/delposter Dexter</code>"
+            )
+        title = args[1].strip()
+        poster_url = args[2].strip()
+
+    if not poster_url or not (poster_url.startswith("http://") or poster_url.startswith("https://")):
+        return await message.reply_text("❌ <b>Invalid Image URL!</b> Must start with <code>https://</code> or <code>http://</code>")
+
+    clean_q = clean_movie_title(title, keep_year=False)
+    clean_q = re.sub(r"\s*\(?(?:19|20)\d{2}\)?.*", "", clean_q).strip()
+    norm_key = re.sub(r"[^\w]", "", clean_q.lower())
+
+    # 1. Save to custom_posters collection in MongoDB
+    import time
+    await mongo.db["custom_posters"].update_one(
+        {"key": norm_key},
+        {"$set": {
+            "key": norm_key,
+            "title": title,
+            "clean_name": clean_q,
+            "poster_url": poster_url,
+            "updated_at": time.time()
+        }},
+        upsert=True
+    )
+
+    # 2. Update poster_cache for Web Catalog
+    await mongo.db["poster_cache"].update_one(
+        {"title": clean_q},
+        {"$set": {"title": clean_q, "poster_url": poster_url}},
+        upsert=True
+    )
+
+    # 3. Update in-memory caches
+    from utils.helpers import _POSTER_CACHE
+    _POSTER_CACHE[clean_q] = poster_url
+    _TMDB_POST_CACHE.clear()
+
+    # 4. Invalidate MongoDB tmdb_post_cache
+    try:
+        await mongo.db["tmdb_post_cache"].delete_many({"key": {"$regex": f"^{norm_key}:"}})
+    except Exception:
+        pass
+
+    await message.reply_photo(
+        photo=poster_url,
+        caption=(
+            f"✅ <b>Custom Poster Successfully Set!</b>\n\n"
+            f"🎬 <b>Title:</b> <code>{html.escape(title)}</code>\n"
+            f"🖼️ <b>Poster URL:</b> <code>{html.escape(poster_url)}</code>\n\n"
+            "✨ <b>Applied to:</b>\n"
+            "• 🌐 Web Cinema Catalog (`/browse` and `/post/...` pages)\n"
+            "• 📢 Channel Auto-Post & `/post` release cards\n\n"
+            f"<i>Use <code>/delposter {html.escape(title)}</code> anytime to revert back to default TMDB poster.</i>"
+        )
+    )
+
+
+@Client.on_message(filters.command(["delposter", "del_poster"]) & filters.private)
+async def delete_custom_poster_command(client: Client, message: Message):
+    """Admin command to remove custom poster override and revert to official TMDB."""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        return await message.reply_text("⚠️ <b>Usage:</b> <code>/delposter &lt;movie or series name&gt;</code>")
+
+    title = parts[1].strip()
+    from utils.title_cleaner import clean_movie_title
+    clean_q = clean_movie_title(title, keep_year=False)
+    clean_q = re.sub(r"\s*\(?(?:19|20)\d{2}\)?.*", "", clean_q).strip()
+    norm_key = re.sub(r"[^\w]", "", clean_q.lower())
+
+    await mongo.db["custom_posters"].delete_many({"$or": [{"key": norm_key}, {"title": clean_q}]})
+    await mongo.db["poster_cache"].delete_many({"title": clean_q})
+
+    from utils.helpers import _POSTER_CACHE
+    _POSTER_CACHE.pop(clean_q, None)
+    _TMDB_POST_CACHE.clear()
+
+    await message.reply_text(
+        f"🗑️ <b>Custom Poster Removed for:</b> <code>{html.escape(title)}</code>\n\n"
+        "Web Catalog and /post will now automatically use the official TMDB poster!"
+    )
+
+
+@Client.on_message(filters.command(["getposter", "viewposter"]) & filters.private)
+async def get_poster_command(client: Client, message: Message):
+    """View active poster for any movie or series."""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        return await message.reply_text("⚠️ <b>Usage:</b> <code>/getposter &lt;movie or series name&gt;</code>")
+
+    title = parts[1].strip()
+    from utils.helpers import get_cached_poster_url
+    url = await get_cached_poster_url(title)
+    if not url:
+        return await message.reply_text(f"❌ No poster found for <code>{html.escape(title)}</code>.")
+
+    await message.reply_photo(
+        photo=url,
+        caption=f"🖼️ <b>Active Poster for:</b> <code>{html.escape(title)}</code>\n\n<code>{html.escape(url)}</code>"
     )

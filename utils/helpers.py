@@ -121,9 +121,18 @@ async def get_cached_poster_url(title: str) -> str:
     if clean_q in _POSTER_CACHE and _POSTER_CACHE[clean_q]:
         return _POSTER_CACHE[clean_q]
 
-    # 2. Persistent MongoDB cache check
+    # 2. Custom manual poster check & Persistent MongoDB cache check
     try:
         from database.mongo import mongo
+        norm_key = re.sub(r"[^\w]", "", clean_q.lower())
+        custom_doc = await mongo.db["custom_posters"].find_one({
+            "$or": [{"key": norm_key}, {"title": clean_q}]
+        })
+        if custom_doc and custom_doc.get("poster_url"):
+            url = custom_doc["poster_url"]
+            _POSTER_CACHE[clean_q] = url
+            return url
+
         cached_doc = await mongo.db["poster_cache"].find_one({"title": clean_q})
         if cached_doc and cached_doc.get("poster_url"):
             url = cached_doc["poster_url"]

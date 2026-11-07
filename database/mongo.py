@@ -154,6 +154,7 @@ async def load_dynamic_settings():
             "shortener_rotation": ("SHORTENER_ROTATION", lambda v: str(v)),
             "tutorial_url": ("TUTORIAL_URL", lambda v: str(v)),
             "stream_new_tag_days": ("STREAM_NEW_TAG_DAYS", lambda v: int(v)),
+            "enable_browse_button": ("ENABLE_BROWSE_BUTTON", lambda v: bool(v)),
         }
 
         async for doc in mongo.settings.find({}):

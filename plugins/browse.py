@@ -122,3 +122,35 @@ async def set_stream_command(client: Client, message: Message):
         "⚡ <i>Saved permanently to MongoDB! All Telegram stream buttons and web player links will now use this domain automatically.</i>",
         disable_web_page_preview=True
     )
+
+
+@Client.on_message(filters.command(["browse_btn", "browsebtn", "start_browse"]) & filters.private)
+async def toggle_browse_button_command(client: Client, message: Message):
+    """Admin command to toggle the '🌐 BROWSE WEB CINEMA' button on /start menu."""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    parts = message.text.split(maxsplit=1)
+    current = getattr(Config, "ENABLE_BROWSE_BUTTON", False)
+
+    if len(parts) < 2 or not parts[1].strip():
+        state_str = "🟢 <b>ENABLED (Visible on /start)</b>" if current else "🔴 <b>DISABLED (Hidden from /start)</b>"
+        await message.reply_text(
+            f"🌐 <b>Start Menu Browse Button Status:</b> {state_str}\n\n"
+            "<b>Commands:</b>\n"
+            "• <code>/browse_btn on</code> — Show Browse Web Cinema button on /start\n"
+            "• <code>/browse_btn off</code> — Hide Browse Web Cinema button from /start"
+        )
+        return
+
+    action = parts[1].strip().lower()
+    if action in ("on", "enable", "true", "yes", "1"):
+        Config.ENABLE_BROWSE_BUTTON = True
+        await set_bot_setting("enable_browse_button", True)
+        await message.reply_text("✅ <b>Browse Web Cinema Button is now ENABLED on /start!</b>")
+    elif action in ("off", "disable", "false", "no", "0"):
+        Config.ENABLE_BROWSE_BUTTON = False
+        await set_bot_setting("enable_browse_button", False)
+        await message.reply_text("🔴 <b>Browse Web Cinema Button is now DISABLED and hidden from /start!</b>")
+    else:
+        await message.reply_text("⚠️ <b>Usage:</b> <code>/browse_btn on</code> or <code>/browse_btn off</code>")

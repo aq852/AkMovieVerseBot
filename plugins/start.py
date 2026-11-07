@@ -629,7 +629,7 @@ async def start_command_handler(client: Client, message: Message):
 
     from plugins.stream import get_effective_stream_base_url
     stream_base = get_effective_stream_base_url()
-    if Config.ENABLE_STREAMING and stream_base and not any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+    if getattr(Config, "ENABLE_BROWSE_BUTTON", False) and Config.ENABLE_STREAMING and stream_base and not any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
         markup_rows.insert(1, [
             InlineKeyboardButton("🌐 BROWSE WEB CINEMA ↗️", url=f"{stream_base}/browse")
         ])

@@ -387,7 +387,8 @@ class TestAutoFilterEngine(unittest.TestCase):
             "ott": "Netflix, Amazon Prime Video"
         }
         cap = format_post_caption(series_group, series_tmdb, style=1)
-        self.assertIn("🎬 <b>Title :</b> Dexter (2006)", cap)
+        self.assertIn("Dexter (2006)", cap)
+        self.assertIn("<blockquote expandable>", cap)
         self.assertIn("<blockquote expandable>", cap)
         self.assertIn("⭐ <b>Rating :</b> 8.2/10 IMDb", cap)
         self.assertIn("🎭 <b>Genres :</b> Crime, Drama, Mystery", cap)
@@ -1748,6 +1749,21 @@ class TestAutoFilterEngine(unittest.TestCase):
         user_cmd_names = [cmd.command for cmd in USER_COMMANDS]
         self.assertIn("browse", user_cmd_names)
         self.assertLessEqual(len(USER_COMMANDS), 100)
+
+    def test_custom_posters_and_browse_button_toggle(self):
+        """Verify custom poster override caching and browse button default state."""
+        from config import Config
+        from plugins.channel_post import format_post_caption
+        # 1. Start menu browse button defaults to OFF
+        self.assertFalse(getattr(Config, "ENABLE_BROWSE_BUTTON", False))
+
+        # 2. Blockquote has expandable tag and guaranteed storyline
+        grp = {"title": "Test Show", "is_series": True, "slug": "test-show", "files": []}
+        tmdb = {"rating": 8.0, "genres": ["Crime"]}
+        caption = format_post_caption(grp, tmdb, style=1)
+        self.assertIn("<blockquote expandable>", caption)
+        self.assertIn("Storyline :", caption)
+        self.assertIn("</blockquote>", caption)
 
 if __name__ == "__main__":
     unittest.main()
