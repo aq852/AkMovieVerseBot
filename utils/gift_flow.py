@@ -81,7 +81,7 @@ async def check_channel_membership(client: Client, user_id: int, channel_identif
         return False, display_title, invite_url
 
 
-async def deliver_gift_content(client: Client, user_id: int, gift: dict) -> None:
+async def deliver_gift_content(client: Client, user_id: int, gift: dict, is_redownload: bool = False) -> None:
     """Deliver single file or batch files with custom protection and self-destruct timer."""
     from plugins.start import deliver_file_with_copyright_warning, auto_delete_messages
 
@@ -97,9 +97,18 @@ async def deliver_gift_content(client: Client, user_id: int, gift: dict) -> None
     bot_uname = client.me.username if client.me else Config.BOT_USERNAME
 
     # 1. Delivery header banner
-    celebration_msg = await client.send_message(
-        chat_id=user_id,
-        text=(
+    if is_redownload:
+        header_text = (
+            "♻️ <b>WELCOME BACK! REWARD RE-DELIVERED</b> 🎁\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📦 <b>Package:</b> <code>{html.escape(title)}</code>\n"
+            f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_label}</code>\n"
+            f"🔒 <b>Content Protection:</b> <code>{'Active (No Forward)' if protect_flag else 'Disabled'}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>Active channel membership verified! Delivering your files again below:</i>"
+        )
+    else:
+        header_text = (
             "🎉 <b>CONGRATULATIONS! REWARD UNLOCKED!</b> 🎁\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📦 <b>Package:</b> <code>{html.escape(title)}</code>\n"
@@ -108,6 +117,10 @@ async def deliver_gift_content(client: Client, user_id: int, gift: dict) -> None
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "🚀 <i>Delivering your files below. Enjoy your exclusive reward!</i>"
         )
+
+    celebration_msg = await client.send_message(
+        chat_id=user_id,
+        text=header_text
     )
 
     delivered_msgs = [celebration_msg]
@@ -242,17 +255,67 @@ async def render_gift_page(
             return await target_message.reply_text(vip_locked_text, reply_markup=markup)
         return
 
-    # 5. One-Claim Per User Check
+    # 5. One-Claim vs Smart Hybrid Re-Download Check
     if await has_user_claimed_gift(gift_id, user_id):
-        already_claimed = (
-            "⚠️ <b>REWARD ALREADY CLAIMED!</b>\n\n"
-            "You have already claimed this gift reward once.\n"
-            "In accordance with our anti-abuse policy, only 1 claim per account is permitted."
-        )
+        allow_reclaim = gift.get("allow_reclaim", True)
+        if not allow_reclaim:
+            already_claimed = (
+                "⚠️ <b>REWARD ALREADY CLAIMED!</b>\n\n"
+                "You have already claimed this gift reward once.\n"
+                "In accordance with strict campaign rules, only 1 claim per account is permitted."
+            )
+            if callback_query:
+                return await callback_query.answer("⚠️ You have already claimed this gift reward!", show_alert=True)
+            if target_message:
+                return await target_message.reply_text(already_claimed)
+            return
+
+        # Smart Hybrid Re-Download: Live Anti-Leave Shield Check
+        channels = gift.get("channels", [])
+        missing_channels = []
+        user_is_vip = await is_premium(user_id) or Config.is_admin(user_id)
+
+        if not user_is_vip:
+            for ch in channels:
+                is_mem, title, url = await check_channel_membership(client, user_id, ch)
+                if not is_mem:
+                    missing_channels.append((title, url))
+
+        if missing_channels:
+            # User left sponsor channels! Block re-download until they re-join!
+            bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+            buttons = []
+            for ch_title, ch_url in missing_channels:
+                buttons.append([InlineKeyboardButton(f"📢 Re-Join: {ch_title} ↗️", url=ch_url)])
+            buttons.append([
+                InlineKeyboardButton("🔄 Verify Membership & Re-Download ↗️", url=f"https://t.me/{bot_uname}?start=gift_{gift_id}")
+            ])
+            rejoin_text = (
+                "⚠️ <b>RE-DOWNLOAD LOCKED • CHANNEL MEMBERSHIP REQUIRED</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "<i>You previously unlocked this reward, but you have left one or more required sponsor channels!</i>\n\n"
+                "🔒 <b>Active channel membership is required</b> to re-access and stream/download this drop.\n\n"
+                "👉 <i>Please re-join the channel(s) below and click Verify to receive your file again:</i>"
+            )
+            markup = InlineKeyboardMarkup(buttons)
+            if callback_query:
+                return await callback_query.message.edit_text(rejoin_text, reply_markup=markup, disable_web_page_preview=True)
+            if target_message:
+                return await target_message.reply_text(rejoin_text, reply_markup=markup, disable_web_page_preview=True)
+            return
+
+        # Verified! Deliver re-download with counter increment
+        from database.gifts import record_gift_redownload
+        await record_gift_redownload(gift_id, user_id)
+
         if callback_query:
-            return await callback_query.answer("⚠️ You have already claimed this gift reward!", show_alert=True)
-        if target_message:
-            return await target_message.reply_text(already_claimed)
+            await callback_query.answer("♻️ Active membership verified! Re-delivering file...", show_alert=False)
+            try:
+                await callback_query.message.delete()
+            except Exception:
+                pass
+
+        await deliver_gift_content(client, user_id, gift, is_redownload=True)
         return
 
     # 6. Max Stock Exhaustion Check

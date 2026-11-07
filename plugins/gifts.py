@@ -98,7 +98,8 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         "required_invites": 0,
         "claims": 50,
         "duration_seconds": 172800,  # 48 hours default
-        "draft": False
+        "draft": False,
+        "allow_reclaim": True
     }
 
     seen_numbers = 0
@@ -111,6 +112,10 @@ def parse_gift_flags(arg_list: list[str]) -> dict:
         tok_low = token.lower()
         if tok_low in ("-draft", "draft", "-nopost", "nopost"):
             flags["draft"] = True
+        elif tok_low in ("-strict", "strict", "-nostore", "nostore"):
+            flags["allow_reclaim"] = False
+        elif tok_low in ("-reclaim", "reclaim", "-hybrid", "hybrid"):
+            flags["allow_reclaim"] = True
         elif tok_low in ("-unlimited", "unlimited", "-nolimit", "nolimit", "-forever", "forever", "-inf", "inf"):
             flags["claims"] = 0
             flags["duration_seconds"] = 0
@@ -269,7 +274,8 @@ async def create_single_gift_handler(client: Client, message: Message):
         duration_seconds=flags["duration_seconds"],
         created_by=message.from_user.id,
         external_links=flags["external_links"],
-        required_invites=flags["required_invites"]
+        required_invites=flags["required_invites"],
+        allow_reclaim=flags["allow_reclaim"]
     )
 
     if not doc:
@@ -420,7 +426,8 @@ async def create_batch_gift_handler(client: Client, message: Message):
         duration_seconds=flags["duration_seconds"],
         created_by=message.from_user.id,
         external_links=flags["external_links"],
-        required_invites=flags["required_invites"]
+        required_invites=flags["required_invites"],
+        allow_reclaim=flags["allow_reclaim"]
     )
 
     if not doc:
@@ -552,7 +559,9 @@ async def list_gifts_dashboard(client: Client, message: Message):
             f"• <b>Title:</b> <code>{html.escape(gift.get('title', 'Gift'))}</code>\n"
             f"• <b>Status:</b> {status_str}\n"
             f"• <b>Claimed:</b> <code>{claimed} / {max_c if max_c else '∞'} Users</code>\n"
+            f"• <b>Re-Downloads:</b> <code>{gift.get('redownloads_count', 0):,} Times</code>\n"
             f"• <b>Views / Clicks:</b> <code>{views:,} Views</code>\n"
+            f"• <b>Mode:</b> <code>{'Hybrid (Re-download Allowed)' if gift.get('allow_reclaim', True) else 'Strict (1-Claim Only)'}</code>\n"
             f"• <b>VIP Only:</b> <code>{'Yes' if gift.get('is_vip_only') else 'No'}</code>\n"
             f"• <b>Shortener Task:</b> <code>{'Yes' if gift.get('require_shortener') else 'No'}</code>\n"
             f"• <b>Required Channels:</b> <code>{', '.join(gift.get('channels', [])) or 'None'}</code>\n"

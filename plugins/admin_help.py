@@ -65,6 +65,7 @@ CATEGORY_CONTENT = {
         "  • <code>-protect</code> : Content protected (Forward & Save blocked)\n"
         "  • <code>-del 3m</code> : Auto-deletes delivered file in 3 minutes\n"
         "  • <code>-unlimited</code> : No user limit & No time limit (Permanent)\n"
+        "  • <code>-strict</code> : 1-claim hard lock (disables smart re-download)\n"
         "  • <code>-draft</code> : Create draft gift without posting to channel (alias: <code>-nopost</code>)\n"
         "  • <code>-img &lt;url&gt;</code> : Custom gift card banner picture\n"
         "<b>Examples:</b>\n"

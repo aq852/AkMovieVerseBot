@@ -1514,6 +1514,14 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertEqual(flags_ext["external_links"][1]["type"], "instagram")
         self.assertEqual(flags_ext["required_invites"], 2)
 
+        # Test -strict, -reclaim, -draft flags
+        flags_strict = parse_gift_flags(["0", "0", "-strict", "-draft"])
+        self.assertFalse(flags_strict["allow_reclaim"])
+        self.assertTrue(flags_strict["draft"])
+
+        flags_reclaim = parse_gift_flags(["0", "0", "-reclaim"])
+        self.assertTrue(flags_reclaim["allow_reclaim"])
+
     def test_gift_reward_system_crud(self):
         import asyncio
         from unittest.mock import patch, PropertyMock, MagicMock, AsyncMock
@@ -1530,6 +1538,7 @@ class TestAutoFilterEngine(unittest.TestCase):
             create_gift_task_token,
             verify_gift_task_token,
             is_gift_task_verified,
+            record_gift_redownload,
             clean_expired_gifts
         )
 
@@ -1645,9 +1654,12 @@ class TestAutoFilterEngine(unittest.TestCase):
             self.assertTrue(ok1)
             self.assertTrue(asyncio.run(has_user_claimed_gift(gid, 100)))
 
-            # 4. User 100 Duplicate Claim Blocked
+            # 4. User 100 Duplicate Claim Blocked & Smart Re-download Tested
             ok_dup, _ = asyncio.run(record_gift_claim(gid, 100))
             self.assertFalse(ok_dup)
+            asyncio.run(record_gift_redownload(gid, 100))
+            fetched_re = asyncio.run(get_gift(gid))
+            self.assertEqual(fetched_re.get("redownloads_count", 0), 1)
 
             # 5. User 200 Claims (Stock Reached: 2/2)
             ok2, _ = asyncio.run(record_gift_claim(gid, 200))

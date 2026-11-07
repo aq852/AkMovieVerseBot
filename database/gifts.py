@@ -27,7 +27,8 @@ async def create_gift(
     duration_seconds: int = 172800,  # Default 48h
     created_by: int = 0,
     external_links: Optional[List[Dict[str, str]]] = None,
-    required_invites: int = 0
+    required_invites: int = 0,
+    allow_reclaim: bool = True
 ) -> Dict[str, Any]:
     """Create a new gift reward campaign."""
     gift_id = secrets.token_hex(4).lower()  # 8 characters, e.g. "a9f2bc10"
@@ -56,10 +57,12 @@ async def create_gift(
         "protect_content": bool(protect_content),
         "auto_delete_seconds": auto_delete_seconds,
         "max_claims": max_claims,
+        "allow_reclaim": bool(allow_reclaim),
         "external_links": external_links or [],
         "required_invites": int(required_invites or 0),
         "claimed_count": 0,
         "claimed_users": [],
+        "redownloads_count": 0,
         "views_count": 0,
         "is_active": True,
         "created_at": now,
@@ -108,6 +111,17 @@ async def increment_gift_views(gift_id: str) -> None:
         )
     except Exception as e:
         logger.debug(f"Error incrementing views for gift {gift_id}: {e}")
+
+
+async def record_gift_redownload(gift_id: str, user_id: int) -> None:
+    """Record a re-download by an already claimed user."""
+    try:
+        await mongo.db["gift_rewards"].update_one(
+            {"gift_id": gift_id},
+            {"$inc": {"redownloads_count": 1}}
+        )
+    except Exception as e:
+        logger.debug(f"Error recording gift redownload for {gift_id}: {e}")
 
 
 async def record_gift_claim(gift_id: str, user_id: int) -> Tuple[bool, str]:
