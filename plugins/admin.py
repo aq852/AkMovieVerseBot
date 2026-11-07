@@ -372,6 +372,44 @@ async def target_db_command(client: Client, message: Message):
     await set_bot_setting("target_write_db", val)
     await message.reply_text(f"✅ <b>MongoDB Write Target updated to:</b> <code>{val.upper()}</code>\nNew file uploads will now be routed according to this mode.")
 
+@Client.on_message(filters.command(["setfreelimit", "freelimit", "set_free_limit"]) & filters.private)
+async def set_free_limit_command(client: Client, message: Message):
+    """View or update the daily free downloads quota per user."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
+
+    from database.mongo import set_bot_setting
+
+    args = message.text.split()
+    if len(args) < 2:
+        current_limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
+        return await message.reply_text(
+            "🎁 <b>Daily Free Download Limit Settings</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Current Limit:</b> <code>{current_limit} files/day</code>\n\n"
+            "<b>Usage to Update:</b>\n"
+            "• <code>/setfreelimit 3</code> — Set 3 free files daily per user\n"
+            "• <code>/setfreelimit 1</code> — Set 1 free file daily per user\n"
+            "• <code>/setfreelimit 0</code> — Disable free files (require verification for all)\n\n"
+            "💡 <i>Users get this quota free every day. Once exhausted, they must verify for 24h pass or get VIP.</i>"
+        )
+
+    val_str = args[1].strip()
+    if not val_str.isdigit():
+        return await message.reply_text("❌ Please enter a valid number (e.g. <code>/setfreelimit 3</code>).")
+
+    new_limit = int(val_str)
+    Config.DAILY_FREE_LIMIT = new_limit
+    await set_bot_setting("daily_free_limit", new_limit)
+
+    status_str = f"<code>{new_limit} files/day</code>" if new_limit > 0 else "<b>Disabled (0)</b>"
+    await message.reply_text(
+        f"✅ <b>Daily Free Limit Updated!</b>\n\n"
+        f"• <b>New Limit:</b> {status_str}\n"
+        f"• Every normal user will now get <b>{new_limit}</b> free downloads each day before shortener verification.\n"
+        f"• Saved dynamically in MongoDB (no bot restart required)."
+    )
+
 
 # 2. /broadcast Command (PM Broadcast to Users)
 @Client.on_message(filters.command("broadcast") & filters.private)

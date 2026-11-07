@@ -1799,5 +1799,81 @@ class TestAutoFilterEngine(unittest.TestCase):
         panel_text_off = format_maintenance_panel_text()
         self.assertIn("INACTIVE", panel_text_off)
 
+    def test_daily_free_download_system(self):
+        """Verify Daily Free Quota check, consumption, auto-reset, and admin limit config."""
+        from config import Config
+        from database.mongo import MongoDB
+        from database.users import (
+            check_daily_free_download,
+            consume_daily_free_download,
+            get_daily_free_status
+        )
+        import asyncio
+        from unittest.mock import patch, PropertyMock, AsyncMock
+
+        # 1. Default limit is 3
+        self.assertEqual(getattr(Config, "DAILY_FREE_LIMIT", 3), 3)
+
+        fake_col = AsyncMock()
+        fake_store = {}
+
+        def fake_find_one(query, *args, **kwargs):
+            uid = query.get("user_id")
+            return fake_store.get(uid)
+
+        def fake_update_one(filter_dict, update_dict, *args, **kwargs):
+            uid = filter_dict.get("user_id")
+            doc = fake_store.setdefault(uid, {"user_id": uid})
+            for k, v in update_dict.items():
+                if k == "$set":
+                    doc.update(v)
+                elif k == "$inc":
+                    for sub_k, sub_v in v.items():
+                        doc[sub_k] = doc.get(sub_k, 0) + sub_v
+            return AsyncMock(modified_count=1)
+
+        fake_col.find_one = AsyncMock(side_effect=fake_find_one)
+        fake_col.update_one = AsyncMock(side_effect=fake_update_one)
+
+        test_user = 9988776655
+
+        async def _test():
+            with patch.object(MongoDB, "users", new_callable=PropertyMock, return_value=fake_col):
+                # Check initial quota
+                has_free, used, limit = await check_daily_free_download(test_user)
+                self.assertTrue(has_free)
+                self.assertEqual(used, 0)
+                self.assertEqual(limit, 3)
+
+                # Consume 1st file
+                c1 = await consume_daily_free_download(test_user)
+                self.assertEqual(c1, 1)
+
+                # Consume 2nd file
+                c2 = await consume_daily_free_download(test_user)
+                self.assertEqual(c2, 2)
+
+                # Consume 3rd file
+                c3 = await consume_daily_free_download(test_user)
+                self.assertEqual(c3, 3)
+
+                # 4th file -> Quota exhausted
+                has_free_4, used_4, limit_4 = await check_daily_free_download(test_user)
+                self.assertFalse(has_free_4)
+                self.assertEqual(used_4, 3)
+                self.assertEqual(limit_4, 3)
+
+                # Status helper
+                st_used, st_limit = await get_daily_free_status(test_user)
+                self.assertEqual(st_used, 3)
+                self.assertEqual(st_limit, 3)
+
+                # Admin bypass
+                admin_id = Config.ADMINS[0]
+                adm_has_free, _, _ = await check_daily_free_download(admin_id)
+                self.assertTrue(adm_has_free)
+
+        asyncio.run(_test())
+
 if __name__ == "__main__":
     unittest.main()

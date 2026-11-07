@@ -119,7 +119,9 @@ CATEGORY_CONTENT = {
         "• <code>/del_shortener &lt;domain&gt;</code>\n"
         "<b>Usage:</b> Removes shortener from rotation.\n\n"
         "• <code>/set_web_url &lt;url&gt;</code>\n"
-        "<b>Usage:</b> Sets the 3-second intermediate web gateway URL."
+        "<b>Usage:</b> Sets the 3-second intermediate web gateway URL.\n\n"
+        "• <code>/setfreelimit &lt;num&gt;</code> (alias: <code>/freelimit</code>)\n"
+        "<b>Usage:</b> Set daily free files quota per user (e.g. 3 files/day) before shortener verification."
     ),
 
     "promos": (
@@ -402,7 +404,7 @@ CHEAT_SHEET_TEXT = (
     "• <code>/gift</code> | <code>/giftbatch</code> | <code>/setgiftchannel</code> | <code>/gifts</code> | <code>/giftstats</code> | <code>/delgift</code> | <code>/giftban</code> | <code>/giftunban</code>\n"
     "\n"
     "<b>📢 SPONSOR ADS &amp; SHORTENERS:</b>\n"
-    "• <code>/setad</code> | <code>/ads</code> | <code>/delad</code> | <code>/shorteners</code> | <code>/shortenerstats</code> | <code>/set_web_url</code> | <code>/add_shortener</code> | <code>/del_shortener</code>\n"
+    "• <code>/setad</code> | <code>/ads</code> | <code>/delad</code> | <code>/shorteners</code> | <code>/shortenerstats</code> | <code>/set_web_url</code> | <code>/add_shortener</code> | <code>/del_shortener</code> | <code>/setfreelimit</code>\n"
     "\n"
     "<b>🎟️ VIP &amp; PROMO CODES:</b>\n"
     "• <code>/genpromo</code> | <code>/promos</code> | <code>/delpromo</code> | <code>/redeem</code> | <code>/add_premium</code> | <code>/remove_premium</code> | <code>/premium_users</code>\n"

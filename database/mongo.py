@@ -157,6 +157,7 @@ async def load_dynamic_settings():
             "enable_browse_button": ("ENABLE_BROWSE_BUTTON", lambda v: bool(v)),
             "maintenance_mode": ("MAINTENANCE_MODE", lambda v: bool(v)),
             "maintenance_reason": ("MAINTENANCE_REASON", lambda v: str(v)),
+            "daily_free_limit": ("DAILY_FREE_LIMIT", lambda v: int(v)),
         }
 
         async for doc in mongo.settings.find({}):

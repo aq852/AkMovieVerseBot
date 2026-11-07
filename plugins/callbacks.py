@@ -436,17 +436,34 @@ async def get_file_pm_callback(client: Client, query: CallbackQuery):
 
     user_id = query.from_user.id
 
-    # Check 24-hour verification (VIP and Admin are exempt)
-    from database.users import is_premium
+    # Check 24-hour verification or Daily Free Quota (VIP and Admin are exempt)
+    from database.users import is_premium, check_daily_free_download, consume_daily_free_download
     is_vip = await is_premium(user_id) or Config.is_admin(user_id)
+    delivered_under_free = False
+    used_count = 0
+    quota_limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
+
     if not is_vip and Config.SHORTENER_ENABLED and not await is_user_verified(user_id):
-        await query.answer("⚠️ You must verify via shortener before getting this file!", show_alert=True)
-        return
+        has_free, used_today, limit = await check_daily_free_download(user_id)
+        if has_free:
+            used_count = await consume_daily_free_download(user_id)
+            quota_limit = limit
+            delivered_under_free = True
+        else:
+            await query.answer(
+                f"⏳ Daily Free Quota Exhausted ({used_today}/{limit})!\n\nPlease search or use /start to verify for 24h unlimited access, or buy VIP.",
+                show_alert=True
+            )
+            return
 
     # Dispatch cached media with backup channel and 5-min auto-delete warning
     try:
         await deliver_file_with_copyright_warning(client, user_id, file_doc)
-        await query.answer("✅ File sent to your PM!", show_alert=False)
+        if delivered_under_free:
+            rem = max(0, quota_limit - used_count)
+            await query.answer(f"🎁 Daily Free File ({used_count}/{quota_limit})! {rem} remaining today.", show_alert=False)
+        else:
+            await query.answer("✅ File sent to your PM!", show_alert=False)
     except Exception as e:
         logger.error(f"Failed to send cached file: {e}")
         await query.answer(f"❌ Error sending file: {e}", show_alert=True)

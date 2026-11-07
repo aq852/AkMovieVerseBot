@@ -278,3 +278,79 @@ async def record_filestore_link_created(user_id: int):
             )
     except Exception as e:
         logger.error(f"Error recording filestore link for {user_id}: {e}")
+
+
+async def check_daily_free_download(user_id: int) -> tuple[bool, int, int]:
+    """
+    Check if a user can download a file under their Daily Free Quota without shorteners.
+    Returns (has_free_quota: bool, used_today: int, limit: int).
+    Admins and VIP users are exempt and have unlimited downloads.
+    """
+    from config import Config
+    if Config.is_admin(user_id):
+        return True, 0, 999999
+
+    if await is_premium(user_id):
+        return True, 0, 999999
+
+    limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
+    if limit <= 0:
+        return False, 0, 0
+
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        user = await mongo.users.find_one({"user_id": user_id}) or {}
+        last_date = user.get("daily_free_date")
+        used_today = user.get("daily_free_count", 0) if last_date == today else 0
+
+        if used_today < limit:
+            return True, used_today, limit
+        return False, used_today, limit
+    except Exception as e:
+        logger.error(f"Error checking daily free limit for {user_id}: {e}")
+        return False, 0, limit
+
+
+async def consume_daily_free_download(user_id: int) -> int:
+    """
+    Increment user's daily free download count.
+    Returns the new used_today count.
+    """
+    from config import Config
+    if Config.is_admin(user_id) or await is_premium(user_id):
+        return 0
+
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        user = await mongo.users.find_one({"user_id": user_id}) or {}
+        if user.get("daily_free_date") == today:
+            new_count = user.get("daily_free_count", 0) + 1
+            await mongo.users.update_one(
+                {"user_id": user_id},
+                {"$inc": {"daily_free_count": 1}}
+            )
+        else:
+            new_count = 1
+            await mongo.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"daily_free_date": today, "daily_free_count": 1}}
+            )
+        return new_count
+    except Exception as e:
+        logger.error(f"Error consuming daily free download for {user_id}: {e}")
+        return 1
+
+
+async def get_daily_free_status(user_id: int) -> tuple[int, int]:
+    """Get (used_today, limit) for user interface displays."""
+    from config import Config
+    limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        user = await mongo.users.find_one({"user_id": user_id}) or {}
+        last_date = user.get("daily_free_date")
+        used_today = user.get("daily_free_count", 0) if last_date == today else 0
+        return used_today, limit
+    except Exception:
+        return 0, limit
+

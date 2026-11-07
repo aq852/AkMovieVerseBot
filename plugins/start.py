@@ -342,64 +342,85 @@ async def start_command_handler(client: Client, message: Message):
             )
             return
 
-        # 24-Hour Session Verification (Shortener Ads OR Clean 5s Anti-Bot Gateway)
-        if not await is_user_verified(user_id):
-            token = await create_verify_token(user_id, file_unique_id)
-            redirect_url = f"https://t.me/{bot_username}?start=verify_{token}"
+        # 24-Hour Session Verification OR Daily Free Quota
+        user_is_verified = await is_user_verified(user_id)
+        delivered_under_free = False
+        used_free_count = 0
+        free_quota_limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
 
-            final_verify_url = None
-            verify_markup = None
-            verify_text = None
+        if not user_is_verified:
+            from database.users import check_daily_free_download, consume_daily_free_download
+            has_free, used_today, limit = await check_daily_free_download(user_id)
+            if has_free:
+                used_free_count = await consume_daily_free_download(user_id)
+                free_quota_limit = limit
+                delivered_under_free = True
+            else:
+                token = await create_verify_token(user_id, file_unique_id)
+                redirect_url = f"https://t.me/{bot_username}?start=verify_{token}"
 
-            if Config.SHORTENER_ENABLED:
-                # Monetized shortener rotation
-                from utils.shortener import get_rotated_shortlink
-                from database.verify import update_token_shortlink
+                final_verify_url = None
+                verify_markup = None
+                verify_text = None
 
-                short_link, shortener_used = await get_rotated_shortlink(redirect_url)
-                await update_token_shortlink(token, short_link, shortener_used)
+                if Config.SHORTENER_ENABLED:
+                    from utils.shortener import get_rotated_shortlink
+                    from database.verify import update_token_shortlink
 
-                if Config.WEB_URL:
+                    short_link, shortener_used = await get_rotated_shortlink(redirect_url)
+                    await update_token_shortlink(token, short_link, shortener_used)
+
+                    if Config.WEB_URL:
+                        final_verify_url = f"{Config.WEB_URL}/verify/{token}"
+                    else:
+                        final_verify_url = short_link
+
+                    verify_markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔓 Verify Access (24h Pass)", url=final_verify_url)],
+                        [InlineKeyboardButton("📖 How to Bypass / Tutorial", url=Config.TUTORIAL_URL)],
+                        [InlineKeyboardButton("👑 Buy VIP (Skip Verification)", callback_data="view_plans")]
+                    ])
+                    verify_text = (
+                        f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
+                        f"You have used your <b>{limit} Daily Free Downloads</b> for today.\n\n"
+                        "To unlock <b>24 Hours of UNLIMITED, Instant Downloads</b>:\n"
+                        "👉 Complete a quick 1-minute verification below, or buy VIP!\n\n"
+                        "<i>💡 Tip: Your daily free quota resets every midnight automatically!</i>"
+                    )
+                elif getattr(Config, "WEB_URL", ""):
+                    from database.verify import update_token_shortlink
+                    await update_token_shortlink(token, redirect_url, "clean_gateway")
                     final_verify_url = f"{Config.WEB_URL}/verify/{token}"
-                else:
-                    final_verify_url = short_link
 
-                verify_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔓 Verify Access (24h Pass)", url=final_verify_url)],
-                    [InlineKeyboardButton("📖 How to Bypass / Tutorial", url=Config.TUTORIAL_URL)],
-                    [InlineKeyboardButton("👑 Buy VIP (Skip Verification)", callback_data="view_plans")]
-                ])
-                verify_text = (
-                    "🔒 <b>24-Hour Verification Required!</b>\n\n"
-                    "Click the button below to verify your session.\n"
-                    "⏱️ <b>Once verified, you will get 24 Hours of Instant, Unlimited File Downloads!</b>\n\n"
-                    "<i>Need help? Click the tutorial button below or buy VIP to skip forever.</i>"
-                )
-            elif getattr(Config, "WEB_URL", ""):
-                # Clean 5s anti-bot / anti-scraper gateway (Zero 3rd-party ads)
-                from database.verify import update_token_shortlink
-                await update_token_shortlink(token, redirect_url, "clean_gateway")
-                final_verify_url = f"{Config.WEB_URL}/verify/{token}"
+                    verify_markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🛡️ 1-Click Verification (24h Pass)", url=final_verify_url)],
+                        [InlineKeyboardButton("👑 VIP Members Skip All Checks", callback_data="view_plans")]
+                    ])
+                    verify_text = (
+                        f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
+                        "Please complete a quick 5-second check to unlock <b>24 Hours of Unlimited Downloads</b>!\n\n"
+                        "• <i>No external spam ads • Just a quick safety check.</i>\n"
+                        "• <i>Your daily free quota resets every midnight!</i>"
+                    )
 
-                verify_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛡️ 1-Click Verification (24h Pass)", url=final_verify_url)],
-                    [InlineKeyboardButton("👑 VIP Members Skip All Checks", callback_data="view_plans")]
-                ])
-                verify_text = (
-                    "🛡️ <b>Quick Verification Required (Anti-Bot Check)</b>\n\n"
-                    "Please complete a quick 5-second check to confirm you are human.\n"
-                    "⏱️ <b>Once done, you unlock 24 Hours of 100% Direct, Unlimited Downloads!</b>\n\n"
-                    "• <i>No external spam ads • Just a quick 5-second safety check.</i>\n"
-                    "• <i>You only need to do this ONCE every 24 hours!</i>"
-                )
-
-            if final_verify_url and verify_markup:
-                await message.reply_text(verify_text, reply_markup=verify_markup)
-                return
+                if final_verify_url and verify_markup:
+                    await message.reply_text(verify_text, reply_markup=verify_markup)
+                    return
 
         # Deliver File Directly
         try:
             await deliver_file_with_copyright_warning(client, user_id, file_doc)
+            if delivered_under_free:
+                rem = max(0, free_quota_limit - used_free_count)
+                try:
+                    await message.reply_text(
+                        f"🎁 <b>Daily Free Download:</b> <code>{used_free_count}/{free_quota_limit} used</code> "
+                        f"<i>({rem} remaining for today)</i>\n"
+                        "💡 <i>Tip: Want unlimited downloads without daily caps? Tap /plans to get VIP!</i>",
+                        disable_web_page_preview=True
+                    )
+                except Exception:
+                    pass
             return
         except Exception as e:
             logger.error(f"Error dispatching file to {user_id}: {e}")

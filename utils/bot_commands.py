@@ -164,7 +164,8 @@ ADMIN_COMMANDS = [
     BotCommand("giftban", "Blacklist user from gifts: /giftban <user_id>"),
     BotCommand("giftunban", "Unban user from gifts: /giftunban <user_id>"),
     BotCommand("ss", "Capture video screenshots: reply /ss [count]"),
-    BotCommand("maintenance", "Toggle maintenance mode: /maintenance [on|off]")
+    BotCommand("maintenance", "Toggle maintenance mode: /maintenance [on|off]"),
+    BotCommand("setfreelimit", "Set daily free file limit: /setfreelimit <num>")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:

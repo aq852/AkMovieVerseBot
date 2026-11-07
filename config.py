@@ -49,6 +49,7 @@ class Config:
     SHORTENER_ROTATION = os.environ.get("SHORTENER_ROTATION", "round_robin").lower()  # 'round_robin' or 'random'
 
     VERIFY_EXPIRE = int(os.environ.get("VERIFY_EXPIRE", "86400"))  # Default 24 hours in seconds
+    DAILY_FREE_LIMIT = int(os.environ.get("DAILY_FREE_LIMIT", "3"))  # Default 3 free downloads per user/day
     TUTORIAL_URL = os.environ.get("TUTORIAL_URL", "https://t.me/how_to_open_link_ak/17")
     _raw_channel_url = os.environ.get("CHANNEL_URL", "https://t.me/AkMovieVerse").strip().rstrip("/")
     if _raw_channel_url.startswith("http://") or _raw_channel_url.startswith("https://"):
