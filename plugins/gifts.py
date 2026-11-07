@@ -257,7 +257,10 @@ async def create_single_gift_handler(client: Client, message: Message):
         f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
         f"🔐 <b>Protection:</b> <code>{protect_badge}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <b>Claim your gift below:</b>"
+        "🎁 <b>Claim Your Gift Here:</b>\n"
+        f"🔗 <a href=\"{gift_link}\"><b>{gift_link}</b></a>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 <i>Tap link above or click the button below:</i>"
     )
 
     markup = InlineKeyboardMarkup([
@@ -361,7 +364,10 @@ async def create_batch_gift_handler(client: Client, message: Message):
         f"⏳ <b>Campaign Validity:</b> <code>{validity_str}</code>\n"
         f"⏱️ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_str}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <b>Claim complete pack below:</b>"
+        "🎁 <b>Claim Complete Pack Here:</b>\n"
+        f"🔗 <a href=\"{gift_link}\"><b>{gift_link}</b></a>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 <i>Tap link above or click the button below:</i>"
     )
 
     markup = InlineKeyboardMarkup([
