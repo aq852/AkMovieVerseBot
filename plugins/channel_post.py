@@ -450,10 +450,12 @@ def format_post_caption(group: dict, tmdb_data: dict, style: int = 1) -> str:
             f"🌐 <b>Audio :</b> {html.escape(audio_str)}"
         )
         if is_series:
-            caption += f"\n\n{episodes_section}\n"
+            caption += f"\n\n{episodes_section}"
+            if overview:
+                caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>"
         elif overview:
-            caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>\n"
-        caption += f"</blockquote>"
+            caption += f"\n\n📝 <b>Storyline :</b>\n<i>{html.escape(overview)}</i>"
+        caption += "\n</blockquote>"
 
     return caption
 

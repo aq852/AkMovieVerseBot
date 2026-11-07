@@ -32,10 +32,8 @@ scratch/
 *.bak
 *.swp
 
-# Cookies & Credentials
-cookies.txt
-*cookies.txt
-*.cookies
+# Cookies & Credentials (Allowed by Admin for Cloud deployment)
+# cookies.txt
 
 # Log files
 *.log
