@@ -103,6 +103,10 @@ class Config:
     DOWNLOADER_COOLDOWN = int(os.environ.get("DOWNLOADER_COOLDOWN", "30"))  # in seconds
     COOKIES_FILE = os.environ.get("COOKIES_FILE", "cookies.txt")
 
+    # Maintenance Mode Settings (Admin toggled)
+    MAINTENANCE_MODE = os.environ.get("MAINTENANCE_MODE", "False").lower() == "true"
+    MAINTENANCE_REASON = os.environ.get("MAINTENANCE_REASON", "Database indexing & system upgrade in progress.")
+
     @classmethod
     def is_admin(cls, user_id: int) -> bool:
         return user_id in cls.ADMINS

@@ -1765,5 +1765,39 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertIn("Storyline :", caption)
         self.assertIn("</blockquote>", caption)
 
+    def test_maintenance_mode_functionality(self):
+        """Verify maintenance mode toggle, persistence, panel text, and command registration."""
+        from config import Config
+        from plugins.maintenance import (
+            set_maintenance_mode,
+            format_maintenance_panel_text,
+            get_maintenance_panel_markup
+        )
+        import asyncio
+
+        # 1. Default state
+        self.assertFalse(getattr(Config, "MAINTENANCE_MODE", False))
+
+        # 2. Toggle ON with custom reason
+        asyncio.run(set_maintenance_mode(True, reason="5 Lakh Files Indexing"))
+        self.assertTrue(Config.MAINTENANCE_MODE)
+        self.assertEqual(Config.MAINTENANCE_REASON, "5 Lakh Files Indexing")
+
+        # 3. Panel formatting reflects active status
+        panel_text = format_maintenance_panel_text()
+        self.assertIn("ACTIVE", panel_text)
+        self.assertIn("5 Lakh Files Indexing", panel_text)
+
+        # 4. Markup contains Disable button when active
+        markup = get_maintenance_panel_markup()
+        btn_data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        self.assertIn("maint_disable", btn_data)
+
+        # 5. Toggle OFF
+        asyncio.run(set_maintenance_mode(False))
+        self.assertFalse(Config.MAINTENANCE_MODE)
+        panel_text_off = format_maintenance_panel_text()
+        self.assertIn("INACTIVE", panel_text_off)
+
 if __name__ == "__main__":
     unittest.main()

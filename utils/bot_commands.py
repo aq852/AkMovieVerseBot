@@ -163,7 +163,8 @@ ADMIN_COMMANDS = [
     BotCommand("delgift", "Revoke gift campaign: /delgift <gift_id>"),
     BotCommand("giftban", "Blacklist user from gifts: /giftban <user_id>"),
     BotCommand("giftunban", "Unban user from gifts: /giftunban <user_id>"),
-    BotCommand("ss", "Capture video screenshots: reply /ss [count]")
+    BotCommand("ss", "Capture video screenshots: reply /ss [count]"),
+    BotCommand("maintenance", "Toggle maintenance mode: /maintenance [on|off]")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:

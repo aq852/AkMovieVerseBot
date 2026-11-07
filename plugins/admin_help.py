@@ -388,7 +388,9 @@ CATEGORY_CONTENT = {
         "• <code>/myalerts</code>\n"
         "<b>Usage:</b> View your active movie upload notifications.\n\n"
         "• <code>/commands</code>\n"
-        "<b>Usage:</b> Syncs and registers all bot commands with Telegram autocomplete menu."
+        "<b>Usage:</b> Syncs and registers all bot commands with Telegram autocomplete menu.\n\n"
+        "• <code>/maintenance [on|off] [reason]</code> (alias: <code>/maint</code>)\n"
+        "<b>Usage:</b> Block normal users with scheduled maintenance notice while allowing admins full access."
     ),
 }
 
@@ -439,7 +441,7 @@ CHEAT_SHEET_TEXT = (
     "• <code>/streaming</code> | <code>/stream_download</code> | <code>/setstream</code> | <code>/browse_btn</code> | <code>/browse</code> | <code>/watch</code> | <code>/stream</code>\n"
     "\n"
     "<b>⚙️ GROUP TOOLS &amp; UTILITIES:</b>\n"
-    "• <code>/settings</code> | <code>/connect</code> | <code>/disconnect</code> | <code>/shortlink</code> | <code>/filter</code> | <code>/filters</code> | <code>/stop</code> | <code>/stopall</code>\n"
+    "• <code>/settings</code> | <code>/connect</code> | <code>/disconnect</code> | <code>/shortlink</code> | <code>/filter</code> | <code>/filters</code> | <code>/stop</code> | <code>/stopall</code> | <code>/maintenance</code>\n"
     "• <code>/id</code> | <code>/info</code> | <code>/imdb</code> | <code>/request</code> | <code>/myrequests</code> | <code>/myalerts</code> | <code>/start</code> | <code>/help</code> | <code>/commands</code> | <code>/adminhelp</code>\n"
     "</blockquote>\n"
     "\n"
