@@ -1745,9 +1745,13 @@ class TestAutoFilterEngine(unittest.TestCase):
         detected = get_stream_base_url(mock_req)
         self.assertEqual(detected, "https://akmovieverse.duckdns.org")
 
-        # 2. Verify browse command in user command scope
+        # 2. Verify user commands scope exclusions (browse, styles, group settings excluded)
         user_cmd_names = [cmd.command for cmd in USER_COMMANDS]
-        self.assertIn("browse", user_cmd_names)
+        self.assertNotIn("browse", user_cmd_names)
+        self.assertNotIn("styles", user_cmd_names)
+        self.assertNotIn("settings", user_cmd_names)
+        self.assertIn("start", user_cmd_names)
+        self.assertIn("dl", user_cmd_names)
         self.assertLessEqual(len(USER_COMMANDS), 100)
 
     def test_custom_posters_and_browse_button_toggle(self):

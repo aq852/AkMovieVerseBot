@@ -24,28 +24,27 @@ logger = logging.getLogger(__name__)
 
 USER_COMMANDS = [
     BotCommand("start", "Start the bot & get main menu"),
-    BotCommand("watch", "Stream movie/series online: /watch <name>"),
     BotCommand("help", "How to search & use the bot"),
+    BotCommand("dl", "Download Instagram & Telegram: /dl <url>"),
+    BotCommand("watch", "Stream movie/series online: /watch <name>"),
+    BotCommand("stream", "Generate fast stream & web player links"),
+    BotCommand("imdb", "Search movie rating & details: /imdb <name>"),
+    BotCommand("request", "Request movie/series: /request <name>"),
+    BotCommand("myrequests", "View your requested movies status"),
+    BotCommand("myalerts", "View active movie upload alerts: /myalerts"),
     BotCommand("batch", "Create 1-click batch link: /batch"),
     BotCommand("genlink", "Single file shareable link: reply /genlink"),
     BotCommand("batches", "View your saved batch links"),
     BotCommand("delbatch", "Delete your batch: /delbatch <id>"),
-    BotCommand("tgm", "Upload media to CDN: reply /tgm"),
-    BotCommand("paste", "Publish text to Telegraph: /paste"),
-    BotCommand("redeem", "Redeem VIP promo coupon: /redeem <code>"),
     BotCommand("plans", "View VIP ad-free plans"),
     BotCommand("myplan", "Check your VIP status"),
     BotCommand("refer", "Invite friends & earn free VIP"),
-    BotCommand("imdb", "Search movie rating & details"),
-    BotCommand("poster", "Design HD poster: /poster <name/link>"),
-    BotCommand("styles", "Preview all 8 poster styles"),
-    BotCommand("stream", "Generate fast stream & web player links"),
-    BotCommand("browse", "Open Web Cinema movie catalog"),
+    BotCommand("redeem", "Redeem VIP promo coupon: /redeem <code>"),
+    BotCommand("poster", "Design HD poster: /poster <name>"),
+    BotCommand("tgm", "Upload media to CDN: reply /tgm"),
+    BotCommand("paste", "Publish text to Telegraph: /paste"),
     BotCommand("id", "Get your Telegram ID"),
     BotCommand("info", "Get user profile details"),
-    BotCommand("settings", "Manage connected group settings"),
-    BotCommand("request", "Request movie/series: /request <name>"),
-    BotCommand("myalerts", "View active movie upload alerts: /myalerts"),
     BotCommand("cancel", "Cancel current action")
 ]
 
@@ -180,8 +179,12 @@ async def register_all_bot_commands(client: Client) -> dict:
     # 1. Global / Private Chats Scope (Regular Users)
     try:
         await client.set_bot_commands(USER_COMMANDS, scope=BotCommandScopeAllPrivateChats())
+        try:
+            await client.set_bot_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+        except Exception:
+            pass
         results["user_commands"] = len(USER_COMMANDS)
-        logger.info(f"Registered {len(USER_COMMANDS)} user commands for AllPrivateChats")
+        logger.info(f"Registered {len(USER_COMMANDS)} user commands for AllPrivateChats & Default")
     except Exception as e:
         logger.warning(f"Failed to set user commands: {e}")
         results["errors"].append(f"PrivateChats: {e}")
