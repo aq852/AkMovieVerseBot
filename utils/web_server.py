@@ -3864,6 +3864,15 @@ async def stream_handler(request: web.Request):
     if not file_doc:
         return web.Response(text="File not found in database", status=404)
 
+    # Stremio VIP Token validation & 1-IP Concurrency check
+    stremio_token = request.query.get("token")
+    if stremio_token and stremio_token.startswith("ak_"):
+        from database.stremio import verify_stremio_access
+        client_ip = get_client_ip(request)
+        is_ok, reason, _ = await verify_stremio_access(stremio_token, client_ip=client_ip)
+        if not is_ok:
+            return web.Response(text=f"Streaming Access Denied: {reason}", status=403)
+
     file_size = int(file_doc.get("file_size", 0))
     file_name = file_doc.get("file_name", "video.mp4")
     mime_type = file_doc.get("mime_type") or mimetypes.guess_type(file_name)[0] or "video/mp4"
@@ -6545,6 +6554,176 @@ async def watch_online_handler(request: web.Request):
     return web.Response(text=html, content_type="text/html")
 
 
+def get_client_ip(request: web.Request) -> str:
+    """Accurately extract client's real public IP behind Cloudflare, Nginx, or direct VPS."""
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+    x_forwarded = request.headers.get("X-Forwarded-For")
+    if x_forwarded:
+        return x_forwarded.split(",")[0].strip()
+    return getattr(request, "remote", None) or "127.0.0.1"
+
+
+STREMIO_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Content-Type": "application/json; charset=utf-8"
+}
+
+
+async def stremio_options_handler(request: web.Request):
+    """Handle CORS preflight requests for Stremio players."""
+    return web.Response(status=200, headers=STREMIO_CORS_HEADERS)
+
+
+async def stremio_manifest_handler(request: web.Request):
+    """Serve Stremio Addon manifest JSON with VIP authentication check."""
+    token = request.match_info.get("token")
+    from database.stremio import verify_stremio_access
+
+    is_ok, reason, _ = await verify_stremio_access(token, client_ip=None)
+    if not is_ok:
+        manifest = {
+            "id": "org.akmovieverse.stream",
+            "version": "1.0.0",
+            "name": "AkMovieVerse (VIP Required)",
+            "description": f"Access Denied: {reason}. Renew or get VIP access on Telegram bot.",
+            "resources": [],
+            "types": ["movie", "series"],
+            "catalogs": []
+        }
+    else:
+        manifest = {
+            "id": "org.akmovieverse.stream",
+            "version": "1.0.0",
+            "name": "AkMovieVerse VIP",
+            "description": "High-Speed Direct Cloud Streaming for Movies & Series from AkMovieVerse Telegram Library.",
+            "resources": ["stream"],
+            "types": ["movie", "series"],
+            "idPrefixes": ["tt"],
+            "catalogs": []
+        }
+
+    return web.Response(
+        text=json.dumps(manifest),
+        headers=STREMIO_CORS_HEADERS
+    )
+
+
+async def stremio_stream_handler(request: web.Request):
+    """Resolve and return direct stream URLs for Stremio by IMDb ID with 1-IP concurrency protection."""
+    token = request.match_info.get("token")
+    media_type = request.match_info.get("media_type", "movie")
+    raw_id = request.match_info.get("item_id", "")
+
+    # Strip optional .json extension from item_id
+    item_id = raw_id[:-5] if raw_id.endswith(".json") else raw_id
+
+    client_ip = get_client_ip(request)
+    from database.stremio import verify_stremio_access
+    is_ok, reason, _ = await verify_stremio_access(token, client_ip=client_ip)
+
+    if not is_ok:
+        err_stream = {
+            "name": f"AkMovieVerse\n⚠️ {reason[:20]}",
+            "title": f"⚠️ {reason}\nRenew or check your VIP status on @AkMovieVerseBot",
+            "externalUrl": getattr(Config, "CHANNEL_URL", None) or "https://t.me/AkMovieVerse"
+        }
+        return web.Response(
+            text=json.dumps({"streams": [err_stream]}),
+            headers=STREMIO_CORS_HEADERS
+        )
+
+    season, episode = None, None
+    if ":" in item_id:
+        parts = item_id.split(":")
+        imdb_id = parts[0]
+        try:
+            season = int(parts[1])
+            episode = int(parts[2])
+        except (IndexError, ValueError):
+            pass
+    else:
+        imdb_id = item_id
+
+    from utils.online_stream import get_meta_by_imdb
+    meta = await get_meta_by_imdb(imdb_id, media_type=media_type)
+    title = meta.get("title") if meta else None
+    year = meta.get("year") if meta else None
+
+    streams = []
+    base_url = get_stream_base_url(request)
+
+    if title:
+        queries = []
+        if season is not None and episode is not None:
+            queries.append(f"{title} S{season:02d}E{episode:02d}")
+            queries.append(f"{title} S{season} E{episode}")
+            queries.append(f"{title} E{episode}")
+        else:
+            if year:
+                queries.append(f"{title} {year}")
+            queries.append(title)
+
+        matched_docs = []
+        seen_file_ids = set()
+
+        for q in queries:
+            try:
+                found = await get_search_results(q, limit=15)
+                for doc in found:
+                    fid = doc.get("file_unique_id") or str(doc.get("_id"))
+                    if fid not in seen_file_ids:
+                        seen_file_ids.add(fid)
+                        matched_docs.append(doc)
+            except Exception as e_search:
+                logger.debug(f"Stremio DB search error for query {q}: {e_search}")
+
+            if len(matched_docs) >= 15:
+                break
+
+        for doc in matched_docs:
+            f_name = doc.get("file_name", "Video.mp4")
+            f_size = doc.get("file_size", 0)
+            f_uid = doc.get("file_unique_id") or str(doc.get("_id"))
+            readable_size = get_readable_size(f_size)
+
+            q_tag = "1080p FHD"
+            f_lower = f_name.lower()
+            if "2160p" in f_lower or "4k" in f_lower:
+                q_tag = "4K UHD"
+            elif "1080p" in f_lower:
+                q_tag = "1080p FHD"
+            elif "720p" in f_lower:
+                q_tag = "720p HD"
+            elif "480p" in f_lower or "360p" in f_lower:
+                q_tag = "480p SD"
+
+            audio_tag = ""
+            if any(k in f_lower for k in ("dual", "multi", "hindi")):
+                if "multi" in f_lower:
+                    audio_tag = " • Multi Audio"
+                elif "dual" in f_lower:
+                    audio_tag = " • Dual Audio"
+                elif "hindi" in f_lower:
+                    audio_tag = " • Hindi"
+
+            stream_url = f"{base_url}/stream/{f_uid}/{urllib.parse.quote(f_name)}?token={token}"
+
+            streams.append({
+                "name": f"AkMovieVerse VIP\n{q_tag} | {readable_size}",
+                "title": f"🎬 {f_name}\n⚡ Fast VIP Cloud Stream{audio_tag}",
+                "url": stream_url
+            })
+
+    return web.Response(
+        text=json.dumps({"streams": streams}),
+        headers=STREMIO_CORS_HEADERS
+    )
+
+
 async def run_web_server():
     """Start background aiohttp server with health check, verification, and streaming routes."""
     app = web.Application()
@@ -6575,6 +6754,12 @@ async def run_web_server():
     app.router.add_get("/player/mx/{file_unique_id}", mx_redirect_handler)
     app.router.add_get("/player/vlc/{file_unique_id}", vlc_redirect_handler)
     app.router.add_get("/player/open/{file_unique_id}", chooser_redirect_handler)
+
+    # Official Stremio v3 VIP Addon Routes
+    app.router.add_get("/stremio/{token}/manifest.json", stremio_manifest_handler)
+    app.router.add_route("OPTIONS", "/stremio/{token}/manifest.json", stremio_options_handler)
+    app.router.add_get("/stremio/{token}/stream/{media_type}/{item_id}", stremio_stream_handler)
+    app.router.add_route("OPTIONS", "/stremio/{token}/stream/{media_type}/{item_id}", stremio_options_handler)
 
     runner = web.AppRunner(app)
     await runner.setup()

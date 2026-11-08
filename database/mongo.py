@@ -107,6 +107,10 @@ class MongoDB:
         return self.db["downloader_stats"]
 
     @property
+    def stremio_tokens(self):
+        return self.db["stremio_tokens"]
+
+    @property
     def settings(self):
         return self.db["bot_settings"]
 

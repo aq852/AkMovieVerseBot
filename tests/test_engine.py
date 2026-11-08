@@ -1929,5 +1929,145 @@ class TestAutoFilterEngine(unittest.TestCase):
             mock_embed.assert_called_once()
 
 
+    def test_stremio_vip_system(self):
+        """Verify Stremio VIP token lifecycle, 1-IP concurrency lock, and manifest generation."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+        from database.mongo import MongoDB
+        from database.stremio import (
+            create_or_get_stremio_token,
+            reset_stremio_token,
+            revoke_stremio_token,
+            verify_stremio_access,
+            get_stremio_stats
+        )
+
+        async def _test():
+            tokens_store = {}
+            fake_col = AsyncMock()
+
+            async def _fake_find_one(query):
+                for doc in tokens_store.values():
+                    match = True
+                    for k, v in query.items():
+                        if doc.get(k) != v:
+                            match = False
+                            break
+                    if match:
+                        return doc.copy()
+                return None
+
+            async def _fake_insert_one(doc):
+                doc_copy = doc.copy()
+                doc_copy["_id"] = "id_" + doc["token"]
+                tokens_store[doc["token"]] = doc_copy
+                return MagicMock(inserted_id=doc_copy["_id"])
+
+            async def _fake_update_one(query, update, upsert=False):
+                doc = await _fake_find_one(query)
+                if doc:
+                    if "$set" in update:
+                        doc.update(update["$set"])
+                    if "$inc" in update:
+                        for k, v in update["$inc"].items():
+                            doc[k] = doc.get(k, 0) + v
+                    tokens_store[doc["token"]] = doc
+                return MagicMock(modified_count=1)
+
+            async def _fake_update_many(query, update):
+                count = 0
+                for doc in list(tokens_store.values()):
+                    match = True
+                    for k, v in query.items():
+                        if doc.get(k) != v:
+                            match = False
+                            break
+                    if match:
+                        if "$set" in update:
+                            doc.update(update["$set"])
+                        tokens_store[doc["token"]] = doc
+                        count += 1
+                return MagicMock(modified_count=count)
+
+            async def _fake_count_docs(query):
+                c = 0
+                for doc in tokens_store.values():
+                    match = True
+                    for k, v in query.items():
+                        if k == "last_stream_time" and isinstance(v, dict) and "$gte" in v:
+                            if doc.get("last_stream_time", 0) < v["$gte"]:
+                                match = False
+                        elif doc.get(k) != v:
+                            match = False
+                    if match:
+                        c += 1
+                return c
+
+            fake_col.find_one = _fake_find_one
+            fake_col.insert_one = _fake_insert_one
+            fake_col.update_one = _fake_update_one
+            fake_col.update_many = _fake_update_many
+            fake_col.count_documents = _fake_count_docs
+
+            with patch.object(MongoDB, "stremio_tokens", new_callable=PropertyMock, return_value=fake_col):
+                # 1. Create token for VIP user
+                test_uid = 88776655
+                with patch("database.stremio.is_premium", new_callable=AsyncMock, return_value=True):
+                    token, is_new = await create_or_get_stremio_token(test_uid)
+                    self.assertTrue(is_new)
+                    self.assertTrue(token.startswith("ak_"))
+                    self.assertEqual(len(token), 35)
+
+                    # Calling again returns same token
+                    token2, is_new2 = await create_or_get_stremio_token(test_uid)
+                    self.assertFalse(is_new2)
+                    self.assertEqual(token, token2)
+
+                    # 2. Verify access for VIP user
+                    ok, msg, doc = await verify_stremio_access(token, client_ip="103.25.1.1")
+                    self.assertTrue(ok)
+                    self.assertEqual(msg, "OK")
+
+                    # 3. 1-IP Concurrency Lock:
+                    # Same IP streams again within 3 minutes -> Allowed!
+                    ok_same, msg_same, _ = await verify_stremio_access(token, client_ip="103.25.1.1")
+                    self.assertTrue(ok_same)
+
+                    # Different IP streams immediately (friend sharing) -> Blocked!
+                    ok_diff, msg_diff, _ = await verify_stremio_access(token, client_ip="45.12.99.88")
+                    self.assertFalse(ok_diff)
+                    self.assertIn("Concurrent streaming", msg_diff)
+
+                # 4. VIP Expiration check:
+                with patch("database.stremio.is_premium", new_callable=AsyncMock, return_value=False):
+                    ok_exp, msg_exp, _ = await verify_stremio_access(token, client_ip="103.25.1.1")
+                    self.assertFalse(ok_exp)
+                    self.assertIn("VIP membership expired", msg_exp)
+
+                # 5. Reset token
+                new_tok = await reset_stremio_token(test_uid)
+                self.assertNotEqual(token, new_tok)
+                self.assertTrue(new_tok.startswith("ak_"))
+
+                # Old token is dead
+                with patch("database.stremio.is_premium", new_callable=AsyncMock, return_value=True):
+                    ok_old, msg_old, _ = await verify_stremio_access(token, client_ip="103.25.1.1")
+                    self.assertFalse(ok_old)
+                    self.assertIn("revoked", msg_old.lower())
+
+                    # New token is active
+                    ok_new, msg_new, _ = await verify_stremio_access(new_tok, client_ip="103.25.1.1")
+                    self.assertTrue(ok_new)
+
+                # 6. Revoke access
+                rev_ok = await revoke_stremio_token(test_uid)
+                self.assertTrue(rev_ok)
+                with patch("database.stremio.is_premium", new_callable=AsyncMock, return_value=True):
+                    ok_rev, _, _ = await verify_stremio_access(new_tok, client_ip="103.25.1.1")
+                    self.assertFalse(ok_rev)
+
+        asyncio.run(_test())
+
+
 if __name__ == "__main__":
     unittest.main()

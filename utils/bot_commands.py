@@ -164,7 +164,11 @@ ADMIN_COMMANDS = [
     BotCommand("giftunban", "Unban user from gifts: /giftunban <user_id>"),
     BotCommand("ss", "Capture video screenshots: reply /ss [count]"),
     BotCommand("maintenance", "Toggle maintenance mode: /maintenance [on|off]"),
-    BotCommand("setfreelimit", "Set daily free file limit: /setfreelimit <num>")
+    BotCommand("setfreelimit", "Set daily free file limit: /setfreelimit <num>"),
+    BotCommand("gen_stremio", "Issue Stremio TV addon link: /gen_stremio <id>"),
+    BotCommand("reset_stremio", "Reset Stremio TV token: /reset_stremio <id>"),
+    BotCommand("del_stremio", "Revoke Stremio access: /del_stremio <id>"),
+    BotCommand("stremiostats", "Stremio live dashboard: /stremiostats")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:
