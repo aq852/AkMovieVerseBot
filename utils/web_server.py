@@ -6754,6 +6754,89 @@ async def stremio_options_handler(request: web.Request):
     return web.Response(status=200, headers=STREMIO_CORS_HEADERS)
 
 
+
+async def stremio_install_handler(request: web.Request):
+    """Handle 1-click Stremio installation bridge from Telegram button without BUTTON_URL_INVALID."""
+    token = request.match_info.get("token")
+    base_url = get_stream_base_url(request)
+    host_no_scheme = base_url.replace("https://", "").replace("http://", "")
+    stremio_deep_url = f"stremio://{host_no_scheme}/stremio/{token}/manifest.json"
+    manifest_https_url = f"{base_url}/stremio/{token}/manifest.json"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installing AkMovieVerse VIP Addon...</title>
+    <meta http-equiv="refresh" content="0;url={stremio_deep_url}">
+    <script>
+        window.location.href = "{stremio_deep_url}";
+    </script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            background: #07090e;
+            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }}
+        .card {{
+            background: rgba(18, 24, 38, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 20px;
+            padding: 30px 24px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.8);
+        }}
+        .icon {{ font-size: 42px; margin-bottom: 12px; }}
+        h2 {{ color: #38bdf8; font-size: 20px; margin-bottom: 8px; }}
+        p {{ color: #94a3b8; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }}
+        .btn {{
+            display: inline-block;
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #ffffff;
+            font-weight: 700;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 15px;
+            transition: transform 0.15s;
+        }}
+        .btn:active {{ transform: scale(0.97); }}
+        .manifest-box {{
+            margin-top: 24px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #38bdf8;
+            word-break: break-all;
+            user-select: all;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">📺</div>
+        <h2>Opening Stremio App...</h2>
+        <p>If the Stremio app didn't open automatically on your device, tap the button below:</p>
+        <a href="{stremio_deep_url}" class="btn">📲 Open in Stremio App</a>
+        <div class="manifest-box">{manifest_https_url}</div>
+    </div>
+</body>
+</html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
 async def stremio_manifest_handler(request: web.Request):
     """Serve Stremio Addon manifest JSON with VIP authentication check."""
     token = request.match_info.get("token")
@@ -6932,6 +7015,7 @@ async def run_web_server():
     app.router.add_get("/player/open/{file_unique_id}", chooser_redirect_handler)
 
     # Official Stremio v3 VIP Addon Routes
+    app.router.add_get("/stremio/{token}/install", stremio_install_handler)
     app.router.add_get("/stremio/{token}/manifest.json", stremio_manifest_handler)
     app.router.add_route("OPTIONS", "/stremio/{token}/manifest.json", stremio_options_handler)
     app.router.add_get("/stremio/{token}/stream/{media_type}/{item_id}", stremio_stream_handler)

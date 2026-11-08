@@ -24,7 +24,7 @@ logger = logging.getLogger("autofilter.stremio_admin")
 
 def _get_stremio_base_url() -> str:
     """Resolve base domain for Stremio manifest links."""
-    web_url = getattr(Config, "WEB_URL", None) or getattr(Config, "STREAM_BASE_URL", None)
+    web_url = getattr(Config, "WEB_URL", None) or getattr(Config, "STREAM_BASE_URL", None) or getattr(Config, "STREAM_URL", None)
     if web_url:
         return web_url.rstrip("/")
     fqdn = getattr(Config, "FQDN", None)
@@ -62,6 +62,7 @@ async def generate_stremio_command(client: Client, message: Message):
     manifest_url = f"{base_url}/stremio/{token}/manifest.json"
     host_no_scheme = base_url.replace("https://", "").replace("http://", "")
     deep_link = f"stremio://{host_no_scheme}/stremio/{token}/manifest.json"
+    install_url = f"{base_url}/stremio/{token}/install"
 
     vip_badge = "✅ <b>Active VIP Member</b>" if user_is_vip else "⚠️ <b>Not VIP / Inactive</b> (User must be VIP to stream)"
     status_badge = "🆕 <b>Fresh Token Generated</b>" if is_new else "🔑 <b>Existing Active Token</b>"
@@ -83,15 +84,19 @@ async def generate_stremio_command(client: Client, message: Message):
     )
 
     buttons = [
-        [InlineKeyboardButton("📲 1-Click Install in Stremio", url=deep_link)],
+        [InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)],
         [InlineKeyboardButton("🔄 Reset Token", callback_data=f"stremio_reset:{target_user_id}")]
     ]
 
-    await message.reply_text(
-        reply_text,
-        reply_markup=InlineKeyboardMarkup(buttons),
-        disable_web_page_preview=True
-    )
+    try:
+        await message.reply_text(
+            reply_text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error sending Stremio info: {e}", exc_info=True)
+        await message.reply_text(reply_text, disable_web_page_preview=True)
 
 
 @Client.on_message(filters.command(["reset_stremio", "resetstremio"]) & filters.private)
@@ -117,6 +122,7 @@ async def reset_stremio_command(client: Client, message: Message):
     manifest_url = f"{base_url}/stremio/{new_token}/manifest.json"
     host_no_scheme = base_url.replace("https://", "").replace("http://", "")
     deep_link = f"stremio://{host_no_scheme}/stremio/{new_token}/manifest.json"
+    install_url = f"{base_url}/stremio/{new_token}/install"
 
     reply_text = (
         f"🔄 <b>Stremio Token Reset Successfully!</b>\n\n"
@@ -128,11 +134,15 @@ async def reset_stremio_command(client: Client, message: Message):
         f"<code>{deep_link}</code>"
     )
 
-    await message.reply_text(
-        reply_text,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install", url=deep_link)]]),
-        disable_web_page_preview=True
-    )
+    try:
+        await message.reply_text(
+            reply_text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install", url=install_url)]]),
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error sending reset Stremio message: {e}", exc_info=True)
+        await message.reply_text(reply_text, disable_web_page_preview=True)
 
 
 @Client.on_message(filters.command(["del_stremio", "delstremio", "revokestremio"]) & filters.private)
@@ -190,16 +200,20 @@ async def stremio_reset_callback(client: Client, query):
     manifest_url = f"{base_url}/stremio/{new_token}/manifest.json"
     host_no_scheme = base_url.replace("https://", "").replace("http://", "")
     deep_link = f"stremio://{host_no_scheme}/stremio/{new_token}/manifest.json"
+    install_url = f"{base_url}/stremio/{new_token}/install"
 
-    await query.message.edit_text(
-        f"🔄 <b>Stremio Token Reset Successfully!</b>\n\n"
-        f"👤 <b>User ID:</b> <code>{target_user_id}</code>\n"
-        f"🚫 <i>Previous link destroyed permanently.</i>\n\n"
-        f"🆕 <b>New Manifest Addon URL:</b>\n"
-        f"<code>{manifest_url}</code>\n\n"
-        f"📲 <b>New 1-Click Install:</b>\n"
-        f"<code>{deep_link}</code>",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install", url=deep_link)]]),
-        disable_web_page_preview=True
-    )
+    try:
+        await query.message.edit_text(
+            f"🔄 <b>Stremio Token Reset Successfully!</b>\n\n"
+            f"👤 <b>User ID:</b> <code>{target_user_id}</code>\n"
+            f"🚫 <i>Previous link destroyed permanently.</i>\n\n"
+            f"🆕 <b>New Manifest Addon URL:</b>\n"
+            f"<code>{manifest_url}</code>\n\n"
+            f"📲 <b>New 1-Click Install:</b>\n"
+            f"<code>{deep_link}</code>",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install", url=install_url)]]),
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error editing stremio reset message: {e}", exc_info=True)
     await query.answer("✅ Token reset successfully!")
