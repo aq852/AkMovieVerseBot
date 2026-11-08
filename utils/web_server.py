@@ -1557,6 +1557,92 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             color: #38bdf8;
             box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
         }}
+        .print-filter-btn.audio-btn {{
+            border-color: rgba(16, 185, 129, 0.35);
+            color: #6ee7b7;
+        }}
+        .print-filter-btn.audio-btn:hover, .print-filter-btn.audio-btn.active {{
+            background: rgba(16, 185, 129, 0.25);
+            border-color: #10b981;
+            color: #a7f3d0;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+        }}
+        .dual-audio-banner {{
+            width: 100%;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 78, 59, 0.22));
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 14px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }}
+        .dab-left {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }}
+        .dab-icon {{
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }}
+        .dab-text {{
+            display: flex;
+            flex-direction: column;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+            min-width: 0;
+        }}
+        .dab-text strong {{
+            color: #34d399;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }}
+        .dab-text span {{
+            color: #94a3b8;
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }}
+        .dab-actions {{
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }}
+        .dab-btn {{
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-decoration: none;
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }}
+        .dab-btn:hover {{
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }}
+        .dab-btn.vlc {{
+            background: linear-gradient(135deg, #ea580c, #c2410c);
+        }}
+        .dab-btn.mx {{
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+        }}
+        @media (max-width: 640px) {{
+            .dual-audio-banner {{
+                flex-direction: column;
+                align-items: flex-start;
+            }}
+            .dab-actions {{
+                width: 100%;
+                justify-content: flex-end;
+            }}
+        }}
         .prints-grid {{
             display: grid;
             grid-template-columns: 1fr;
@@ -1837,6 +1923,7 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             </div>
         </div>
 
+        {dual_audio_banner_html}
         {movie_parts_html}
         {quality_selector_html}
         {episodes_carousel_html}
@@ -2150,8 +2237,11 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
             buttons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const cards = document.querySelectorAll('.print-card');
+            const target = (qual || '').toLowerCase();
             cards.forEach(c => {{
-                if (qual === 'all' || c.getAttribute('data-quality') === qual) {{
+                const q = (c.getAttribute('data-quality') || '').toLowerCase();
+                const a = (c.getAttribute('data-audio') || '').toLowerCase();
+                if (target === 'all' || q === target || a === target || a.includes(target)) {{
                     c.style.display = 'flex';
                 }} else {{
                     c.style.display = 'none';
@@ -2284,13 +2374,32 @@ WEB_PLAYER_HTML = """<!DOCTYPE html>
                             }});
                         }}
                         art.setting.add({{
-                            width: 200,
+                            width: 220,
                             html: '🎧 Audio Track',
-                            tooltip: 'Default',
+                            tooltip: 'Native Tracks',
                             selector: audioList,
                             onSelect: function (item) {{
                                 for (let i = 0; i < video.audioTracks.length; i++) {{
                                     video.audioTracks[i].enabled = (i === item.trackIndex);
+                                }}
+                                return item.html;
+                            }}
+                        }});
+                    }} else if ({is_dual_audio_js}) {{
+                        art.setting.add({{
+                            width: 260,
+                            html: '🎧 Audio Switch',
+                            tooltip: 'Dual / Multi',
+                            selector: [
+                                {{ default: true, html: '🎧 Browser Default Track' }},
+                                {{ html: '🧡 Switch to Hindi in VLC', action: 'vlc' }},
+                                {{ html: '🍿 Switch to Hindi in MX Player', action: 'mx' }}
+                            ],
+                            onSelect: function (item) {{
+                                if (item.action === 'vlc') {{
+                                    window.location.href = '{vlc_intent}';
+                                }} else if (item.action === 'mx') {{
+                                    window.location.href = '{mx_intent}';
                                 }}
                                 return item.html;
                             }}
@@ -4004,6 +4113,8 @@ async def watch_handler(request: web.Request):
     quality = meta.get("quality")
     badges = meta.get("badges", [])
     is_dual = meta.get("is_dual_audio", False)
+    is_multi = meta.get("is_multi_audio", False)
+    is_dual_audio_js = "true" if (is_dual or is_multi) else "false"
 
     badges_list = [f'<span class="badge badge-cyan">📦 {size_str}</span>']
     if quality:
@@ -4463,12 +4574,34 @@ async def watch_handler(request: web.Request):
             sorted_prints = sorted(relevant_prints, key=sort_key, reverse=True)
 
             qual_counts = {}
+            aud_counts = {}
             for f in sorted_prints:
-                f_m = parse_media_metadata(f.get("file_name", ""))
+                pf_name_val = f.get("file_name", "")
+                f_m = parse_media_metadata(pf_name_val)
                 q_cat = (f_m.get("quality") or "Other").upper()
                 qual_counts[q_cat] = qual_counts.get(q_cat, 0) + 1
 
+                pfn_l = pf_name_val.lower()
+                if "multi" in pfn_l or f_m.get("is_multi_audio"):
+                    aud_counts["Multi Audio"] = aud_counts.get("Multi Audio", 0) + 1
+                elif "dual" in pfn_l or f_m.get("is_dual_audio"):
+                    aud_counts["Dual Audio"] = aud_counts.get("Dual Audio", 0) + 1
+                elif any(k in pfn_l for k in ("hindi", "hin")):
+                    aud_counts["Hindi"] = aud_counts.get("Hindi", 0) + 1
+                elif any(k in pfn_l for k in ("english", "eng")):
+                    aud_counts["English"] = aud_counts.get("English", 0) + 1
+                elif any(k in pfn_l for k in ("tamil", "tam")):
+                    aud_counts["Tamil"] = aud_counts.get("Tamil", 0) + 1
+                elif any(k in pfn_l for k in ("telugu", "tel")):
+                    aud_counts["Telugu"] = aud_counts.get("Telugu", 0) + 1
+
             filter_tabs = [f'<button type="button" onclick="filterPrints(\'all\', this)" class="print-filter-btn active">All ({len(sorted_prints)})</button>']
+            # Audio Language Filter Tabs
+            for aud_name in ["Hindi", "Dual Audio", "Multi Audio", "English", "Tamil", "Telugu"]:
+                if aud_name in aud_counts:
+                    aud_slug = aud_name.lower().replace(" ", "")
+                    filter_tabs.append(f'<button type="button" onclick="filterPrints(\'{aud_slug}\', this)" class="print-filter-btn audio-btn">🎧 {aud_name} ({aud_counts[aud_name]})</button>')
+            # Resolution Filter Tabs
             for q_order in ["4K", "2160P", "1080P", "720P", "540P", "480P"]:
                 if q_order in qual_counts:
                     filter_tabs.append(f'<button type="button" onclick="filterPrints(\'{q_order.lower()}\', this)" class="print-filter-btn">{q_order} ({qual_counts[q_order]})</button>')
@@ -4523,9 +4656,32 @@ async def watch_handler(request: web.Request):
                 pf_clean = re.sub(r'[^\w\-_\. ]', '_', pf_name).strip() or "video.mp4"
                 pf_stream_url = f"{base_url}/stream/{pf_uid}/{urllib.parse.quote(pf_clean)}"
 
+                pf_lower = pf_name.lower()
+                aud_lbl = ""
+                aud_slug = ""
+                if "multi" in pf_lower or pf_m.get("is_multi_audio"):
+                    aud_lbl = "Multi"
+                    aud_slug = "multiaudio multi"
+                elif "dual" in pf_lower or pf_m.get("is_dual_audio"):
+                    aud_lbl = "Dual"
+                    aud_slug = "dualaudio dual"
+                elif any(k in pf_lower for k in ("hindi", "hin")):
+                    aud_lbl = "Hindi"
+                    aud_slug = "hindi"
+                elif any(k in pf_lower for k in ("english", "eng")):
+                    aud_lbl = "Eng"
+                    aud_slug = "english"
+                elif any(k in pf_lower for k in ("tamil", "tam")):
+                    aud_lbl = "Tam"
+                    aud_slug = "tamil"
+                elif any(k in pf_lower for k in ("telugu", "tel")):
+                    aud_lbl = "Tel"
+                    aud_slug = "telugu"
+
+                aud_suffix = f" • {aud_lbl}" if aud_lbl else ""
                 artplayer_quality_json.append({
                     "default": is_active,
-                    "html": f"{pf_q} ({pf_sz})".strip(),
+                    "html": f"{pf_q}{aud_suffix} ({pf_sz})".strip(),
                     "url": pf_stream_url
                 })
 
@@ -4538,7 +4694,7 @@ async def watch_handler(request: web.Request):
                     display_details = pf_name
 
                 print_cards.append(f"""
-                    <div class="print-card {active_class}" data-quality="{html_escape(pf_q_cat)}">
+                    <div class="print-card {active_class}" data-quality="{html_escape(pf_q_cat)}" data-audio="{aud_slug}">
                         <div class="print-card-top">
                             <div class="min-w-0 flex-1">
                                 <div class="print-card-title" title="{html_escape(pf_name)}">{html_escape(display_details)}</div>
@@ -4578,7 +4734,27 @@ async def watch_handler(request: web.Request):
 
     sponsor_banner_html = await get_web_sponsor_banner_html()
 
+    dual_audio_banner_html = ""
+    if is_dual or is_multi:
+        dual_audio_banner_html = f"""
+        <div class="dual-audio-banner">
+            <div class="dab-left">
+                <span class="dab-icon">🎧</span>
+                <div class="dab-text">
+                    <strong>Dual / Multi Audio Available</strong>
+                    <span>Embedded Hindi + English audio tracks detected. If browser plays English, tap below or choose a Hindi print:</span>
+                </div>
+            </div>
+            <div class="dab-actions">
+                <a href="{vlc_intent}" class="dab-btn vlc">🧡 VLC Player</a>
+                <a href="{mx_intent}" class="dab-btn mx">🍿 MX Player</a>
+            </div>
+        </div>
+        """
+
     html = WEB_PLAYER_HTML.format(
+        dual_audio_banner_html=dual_audio_banner_html,
+        is_dual_audio_js=is_dual_audio_js,
         file_unique_id=file_unique_id,
         clean_title=html_escape(clean_title),
         raw_filename=html_escape(file_name),

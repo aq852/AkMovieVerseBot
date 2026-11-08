@@ -2069,5 +2069,74 @@ class TestAutoFilterEngine(unittest.TestCase):
         asyncio.run(_test())
 
 
+
+    def test_web_player_audio_switcher(self):
+        """Verify Web Cinema Player multi-audio switching, language tabs, and dual audio detection."""
+        from utils.web_server import WEB_PLAYER_HTML, watch_handler, resolve_file_from_param
+        from unittest.mock import MagicMock, AsyncMock, patch
+        import asyncio
+
+        # Check WEB_PLAYER_HTML template has audio switcher assets
+        self.assertIn("dual-audio-banner", WEB_PLAYER_HTML)
+        self.assertIn("data-audio", WEB_PLAYER_HTML)
+        self.assertIn("audio-btn", WEB_PLAYER_HTML)
+        self.assertIn("is_dual_audio_js", WEB_PLAYER_HTML)
+
+        # Mock request to watch_handler
+        mock_file = {
+            "_id": "6600a1b2c3d4e5f678901234",
+            "file_unique_id": "test_dual_audio_123",
+            "file_name": "Deadpool.2024.1080p.Dual.Audio.Hindi-English.mkv",
+            "file_size": 2147483648,
+            "mime_type": "video/x-matroska"
+        }
+
+        mock_req = MagicMock()
+        mock_req.match_info = {"file_unique_id": "test_dual_audio_123"}
+        mock_req.query = {}
+        mock_req.headers = {}
+        mock_req.scheme = "https"
+        mock_req.host = "akmovieverse.duckdns.org"
+
+        mock_prints = [
+            mock_file,
+            {
+                "_id": "6600a1b2c3d4e5f678901235",
+                "file_unique_id": "test_hindi_print_456",
+                "file_name": "Deadpool.2024.720p.Hindi.Dubbed.mkv",
+                "file_size": 1073741824,
+                "mime_type": "video/x-matroska"
+            }
+        ]
+        mock_catalog = [
+            {
+                "is_series": False,
+                "title": "Deadpool",
+                "clean_name": "Deadpool",
+                "files": mock_prints
+            }
+        ]
+
+        async def _test():
+            with patch("utils.web_server.resolve_file_from_param", new_callable=AsyncMock, return_value=mock_file),                  patch("utils.web_server.get_grouped_catalog", new_callable=AsyncMock, return_value=mock_catalog),                  patch("utils.web_server.get_web_sponsor_banner_html", new_callable=AsyncMock, return_value=""):
+                
+                resp = await watch_handler(mock_req)
+                self.assertEqual(resp.status, 200)
+                body = resp.text
+
+                # Verify Dual Audio banner is active
+                self.assertIn("dual-audio-banner", body)
+                self.assertIn("Dual / Multi Audio Available", body)
+
+                # Verify Audio Language Filter tab is present
+                self.assertIn("🎧", body)
+                self.assertIn("data-audio", body)
+
+                # Verify ArtPlayer quality menu contains language label
+                self.assertIn("Dual", body)
+                self.assertIn("Hindi", body)
+
+        asyncio.run(_test())
+
 if __name__ == "__main__":
     unittest.main()
