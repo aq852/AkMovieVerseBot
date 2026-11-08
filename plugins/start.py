@@ -720,10 +720,12 @@ async def user_plan_command(client: Client, message: Message):
             f"• <b>Remaining Time:</b> <code>{days} Days, {hours} Hours</code>\n"
             f"• <b>Expires On:</b> <code>{expiry_dt.strftime('%d %b %Y, %H:%M UTC')}</code>\n\n"
             "🌟 <b>Your Active Perks:</b>\n"
+            "• 📺 Smart TV Stremio Addon access\n"
             "• 🚫 No shorteners or token verification\n"
             "• ⚡ Instant 1-second direct PM delivery\n"
-            "• 🔓 Unlimited files & searches\n"
-            "• 📦 SEND ALL batch deliveries\n\n"
+            "• 🔓 Unlimited daily files & searches\n"
+            "• 📦 SEND ALL batch season deliveries\n"
+            "• ⏳ 30-Minute extended auto-delete buffer\n\n"
             "💡 <i>Want to extend your validity? Choose an upgrade below:</i>"
         )
         markup = InlineKeyboardMarkup([
