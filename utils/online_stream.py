@@ -358,7 +358,20 @@ async def get_meta_by_imdb(imdb_id: str, media_type: str = "movie") -> Dict[str,
     url = f"https://v3-cinemeta.strem.io/meta/{m_catalog}/{imdb_id}.json"
 
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
+        # 1. Fetch official localized title & aliases from IMDb global CDN (handles AKA titles like My Royal Nemesis)
+        alt_titles = []
+        try:
+            async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as client:
+                imdb_res = await client.get(f"https://v3.sg.media-imdb.com/suggestion/x/{imdb_id}.json")
+                if imdb_res.status_code == 200:
+                    for item in imdb_res.json().get("d", []):
+                        if item.get("id") == imdb_id and item.get("l"):
+                            alt_titles.append(item["l"].strip())
+        except Exception as e_imdb:
+            logger.debug(f"IMDb suggestion fetch skipped for {imdb_id}: {e_imdb}")
+
+        # 2. Fetch full metadata from Cinemeta with redirect following
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
             res = await client.get(url)
             # If not found under specified type, try alternate catalog
             if res.status_code != 200:
@@ -382,8 +395,16 @@ async def get_meta_by_imdb(imdb_id: str, media_type: str = "movie") -> Dict[str,
                     except (ValueError, TypeError):
                         pass
 
+                c_name = meta.get("name")
+                if c_name and c_name not in alt_titles:
+                    alt_titles.append(c_name.strip())
+
+                # Primary title prefers IMDb display title, fallback to Cinemeta name
+                chosen_title = alt_titles[0] if alt_titles else (c_name or "Online Cinema")
+
                 data = {
-                    "title": meta.get("name") or "Online Cinema",
+                    "title": chosen_title,
+                    "alt_titles": alt_titles,
                     "year": year,
                     "poster": meta.get("poster"),
                     "backdrop": meta.get("background") or meta.get("poster"),
@@ -393,6 +414,23 @@ async def get_meta_by_imdb(imdb_id: str, media_type: str = "movie") -> Dict[str,
                     "media_type": meta.get("type", media_type),
                     "moviedb_id": meta.get("moviedb_id"),
                     "tvdb_id": meta.get("tvdb_id")
+                }
+                _IMDB_META_CACHE[imdb_id] = (now, data)
+                return data
+            elif alt_titles:
+                # Cinemeta failed but IMDb suggestion gave title
+                data = {
+                    "title": alt_titles[0],
+                    "alt_titles": alt_titles,
+                    "year": None,
+                    "poster": None,
+                    "backdrop": None,
+                    "rating": None,
+                    "genres": "",
+                    "overview": "",
+                    "media_type": media_type,
+                    "moviedb_id": None,
+                    "tvdb_id": None
                 }
                 _IMDB_META_CACHE[imdb_id] = (now, data)
                 return data

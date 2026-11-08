@@ -6915,32 +6915,105 @@ async def stremio_stream_handler(request: web.Request):
     streams = []
     base_url = get_stream_base_url(request)
 
-    if title:
+    candidate_titles = []
+    if meta:
+        main_title = meta.get("title")
+        if main_title:
+            candidate_titles.append(main_title)
+        for at in meta.get("alt_titles", []):
+            if at and at not in candidate_titles:
+                candidate_titles.append(at)
+
+    def matches_series_doc(file_name: str, req_season: int, req_episode: int) -> tuple[bool, str]:
+        fn = file_name.lower()
+
+        # 1. Season validation: if another season is explicitly named, skip
+        seasons_found = [int(s) for s in re.findall(r'(?<![a-z])(?:s|season)\s*0?(\d+)(?=[e\s\.\-_]|)', fn)]
+        if seasons_found and req_season not in seasons_found:
+            return False, ""
+
+        # 2. Episode range validation e.g. E01-07, E08-E13, [01-08], E01~E12
+        range_match = re.search(r'(?<![a-z])(?:e|ep)?\s*0?(\d{1,3})\s*[-~_to]\s*(?:e|ep)?\s*0?(\d{1,3})', fn)
+        if range_match:
+            start_ep = int(range_match.group(1))
+            end_ep = int(range_match.group(2))
+            if start_ep < end_ep and end_ep <= 1000:
+                if start_ep <= req_episode <= end_ep:
+                    return True, f" • Pack [E{start_ep:02d}-E{end_ep:02d}]"
+                else:
+                    return False, ""
+
+        # 3. Single episode validation e.g. S01E01, E01, EP01, Episode 1
+        eps_found = [int(e) for e in re.findall(r'(?<![a-z])(?:e|ep|episode)\s*0?(\d+)(?=[\s\.\-_]|)', fn)]
+        if eps_found:
+            if req_episode in eps_found:
+                return True, ""
+            else:
+                return False, ""
+
+        # 4. Complete / Combined Season Packs
+        if any(k in fn for k in ["combined", "complete", "batch", "pack", "full season", "all episodes"]):
+            return True, " • Full Season Combined"
+
+        # 5. Full season files with season tag
+        if seasons_found and req_season in seasons_found:
+            return True, " • Season Pack"
+
+        return True, ""
+
+    if candidate_titles:
         queries = []
-        if season is not None and episode is not None:
-            queries.append(f"{title} S{season:02d}E{episode:02d}")
-            queries.append(f"{title} S{season} E{episode}")
-            queries.append(f"{title} E{episode}")
-        else:
-            if year:
-                queries.append(f"{title} {year}")
-            queries.append(title)
+        is_series_request = (season is not None and episode is not None)
+
+        for t in candidate_titles:
+            clean_t = re.sub(r"[:\-_/\'\"]", " ", t).strip()
+            clean_t = re.sub(r"[:\-_/\'\"]", " ", t).strip()
+
+            if is_series_request:
+                # Exact episode queries
+                queries.append(f"{t} S{season:02d}E{episode:02d}")
+                queries.append(f"{t} S{season} E{episode}")
+                queries.append(f"{t} E{episode:02d}")
+                queries.append(f"{clean_t} S{season:02d}E{episode:02d}")
+
+                # Season batch, combined files, and complete packs
+                queries.append(f"{t} S{season:02d} COMBINED")
+                queries.append(f"{t} S{season:02d}")
+                queries.append(f"{clean_t} S{season:02d}")
+                queries.append(f"{t} COMPLETE")
+                queries.append(f"{t} Season {season}")
+                queries.append(f"{t}")
+            else:
+                if year:
+                    queries.append(f"{t} {year}")
+                queries.append(t)
+                if clean_t != t:
+                    queries.append(clean_t)
 
         matched_docs = []
         seen_file_ids = set()
 
         for q in queries:
             try:
-                found = await get_search_results(q, limit=15)
+                found = await get_search_results(q, limit=20)
                 for doc in found:
                     fid = doc.get("file_unique_id") or str(doc.get("_id"))
                     if fid not in seen_file_ids:
+                        f_name = doc.get("file_name", "")
+                        if is_series_request:
+                            is_match, pack_note = matches_series_doc(f_name, season, episode)
+                            if not is_match:
+                                continue
+                            doc["_pack_note"] = pack_note
+                        else:
+                            doc["_pack_note"] = ""
+
                         seen_file_ids.add(fid)
                         matched_docs.append(doc)
             except Exception as e_search:
                 logger.debug(f"Stremio DB search error for query {q}: {e_search}")
 
-            if len(matched_docs) >= 15:
+            if len(matched_docs) >= 20:
                 break
 
         for doc in matched_docs:
@@ -6948,6 +7021,7 @@ async def stremio_stream_handler(request: web.Request):
             f_size = doc.get("file_size", 0)
             f_uid = doc.get("file_unique_id") or str(doc.get("_id"))
             readable_size = get_readable_size(f_size)
+            pack_note = doc.get("_pack_note", "")
 
             q_tag = "1080p FHD"
             f_lower = f_name.lower()
@@ -6957,23 +7031,29 @@ async def stremio_stream_handler(request: web.Request):
                 q_tag = "1080p FHD"
             elif "720p" in f_lower:
                 q_tag = "720p HD"
+            elif "540p" in f_lower:
+                q_tag = "540p SD"
             elif "480p" in f_lower or "360p" in f_lower:
                 q_tag = "480p SD"
 
             audio_tag = ""
-            if any(k in f_lower for k in ("dual", "multi", "hindi")):
+            if any(k in f_lower for k in ("dual", "multi", "hindi", "korean", "japanese", "tamil", "telugu")):
                 if "multi" in f_lower:
                     audio_tag = " • Multi Audio"
                 elif "dual" in f_lower:
                     audio_tag = " • Dual Audio"
                 elif "hindi" in f_lower:
                     audio_tag = " • Hindi"
+                elif "korean" in f_lower:
+                    audio_tag = " • Korean"
+                elif "japanese" in f_lower:
+                    audio_tag = " • Japanese"
 
             stream_url = f"{base_url}/stream/{f_uid}/{urllib.parse.quote(f_name)}?token={token}"
 
             streams.append({
                 "name": f"AkMovieVerse VIP\n{q_tag} | {readable_size}",
-                "title": f"🎬 {f_name}\n⚡ Fast VIP Cloud Stream{audio_tag}",
+                "title": f"🎬 {f_name}\n⚡ Fast VIP Cloud Stream{pack_note}{audio_tag}",
                 "url": stream_url
             })
 
