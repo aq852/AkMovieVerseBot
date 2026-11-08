@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 import asyncio
 try:
@@ -158,6 +159,23 @@ if __name__ == "__main__":
     if not Config.API_ID or not Config.API_HASH or not Config.BOT_TOKEN:
         logger.error("Missing mandatory credentials in environment! Please configure API_ID, API_HASH, and BOT_TOKEN.")
         sys.exit(1)
+
+    # Single-Instance Lock to prevent duplicate broadcasts and port 8080 conflicts
+    _lock_handle = None
+    if sys.platform != "win32":
+        try:
+            import fcntl
+            lock_path = "/tmp/autofilterbot_master.lock"
+            _lock_handle = open(lock_path, "w")
+            fcntl.flock(_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock_handle.write(str(os.getpid()))
+            _lock_handle.flush()
+        except (IOError, BlockingIOError):
+            logger.error(
+                "❌ CRITICAL CONFLICT DETECTED: Another instance of AutoFilterBot is already running in the background! "
+                "Exiting immediately to prevent duplicate broadcasts and port 8080 conflicts."
+            )
+            sys.exit(0)
 
     bot = Bot()
     bot.run()
