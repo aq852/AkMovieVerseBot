@@ -12,7 +12,8 @@ try:
         Message,
         CallbackQuery,
         InlineKeyboardMarkup,
-        InlineKeyboardButton
+        InlineKeyboardButton,
+        InputMediaPhoto
     )
 except ImportError:
     from pyrogram import Client, filters
@@ -20,7 +21,8 @@ except ImportError:
         Message,
         CallbackQuery,
         InlineKeyboardMarkup,
-        InlineKeyboardButton
+        InlineKeyboardButton,
+        InputMediaPhoto
     )
 
 from PIL import Image
@@ -32,6 +34,7 @@ from utils.helpers import get_readable_size
 from utils.downloader import (
     detect_platform,
     is_telegram_url,
+    is_instagram_url,
     download_media,
     clean_temp_dir,
     DownloadProgress,
@@ -90,8 +93,8 @@ async def auto_delete_messages(client: Client, chat_id: int, message_ids: list[i
 
 async def verify_downloader_access(client: Client, message: Message, url: str | None = None) -> bool:
     """Check whether user is authorized to use the downloader based on DOWNLOADER_ACCESS.
-    Telegram cloud forwards are open to everyone (with 15s cooldown & force-sub).
-    External links (YouTube, Instagram, TeraBox, Direct URLs) respect DOWNLOADER_ACCESS.
+    Telegram cloud forwards and Instagram downloads are open to everyone (with 15s cooldown & force-sub).
+    External links (YouTube, TeraBox, Direct URLs) respect DOWNLOADER_ACCESS.
     """
     user = message.from_user
     if not user:
@@ -100,14 +103,16 @@ async def verify_downloader_access(client: Client, message: Message, url: str | 
     user_id = user.id
     is_admin = Config.is_admin(user_id)
     is_tg = bool(url and is_telegram_url(url))
+    is_insta = bool(url and is_instagram_url(url))
+    is_exempt = is_tg or is_insta
 
-    # 1. External downloader access policy (Applies ONLY to external URLs, NOT Telegram URLs)
-    if not is_tg and not is_admin:
+    # 1. External downloader access policy (Telegram & Instagram are open to everyone)
+    if not is_exempt and not is_admin:
         if Config.DOWNLOADER_ACCESS == "admin":
             await message.reply_text(
                 "⚠️ <b>Access Restricted:</b>\n"
-                "External video downloading (YouTube, Instagram, TeraBox, Direct URLs) is currently reserved strictly for Bot Administrators.\n\n"
-                "💡 <i>Tip: Telegram post forwarding (/dl https://t.me/...) is completely free and open to everyone!</i>"
+                "External video downloading (YouTube, TeraBox, Direct URLs) is currently reserved strictly for Bot Administrators.\n\n"
+                "💡 <i>Tip: Telegram post forwarding and Instagram downloads are completely free and open to everyone!</i>"
             )
             return False
         elif Config.DOWNLOADER_ACCESS == "premium":
@@ -120,7 +125,7 @@ async def verify_downloader_access(client: Client, message: Message, url: str | 
                     "• ⚡ Unlimited video & social media downloads\n"
                     "• 🚀 Ultra-fast cloud speed without wait time\n"
                     "• 🚫 Zero ads & zero shortener verification\n\n"
-                    "💡 <i>Telegram post forwarding (/dl https://t.me/...) is completely free for everyone!</i>",
+                    "💡 <i>Telegram post forwarding and Instagram downloads are completely free for everyone!</i>",
                     reply_markup=InlineKeyboardMarkup([[
                         InlineKeyboardButton("💎 View VIP Plans", callback_data="buy_premium")
                     ]])
@@ -131,7 +136,7 @@ async def verify_downloader_access(client: Client, message: Message, url: str | 
     now = time.time()
     if not is_admin:
         last_dl = _USER_LAST_DL.get(user_id, 0)
-        cooldown_time = 15 if is_tg else Config.DOWNLOADER_COOLDOWN
+        cooldown_time = 15 if is_exempt else Config.DOWNLOADER_COOLDOWN
         cooldown_rem = int(cooldown_time - (now - last_dl))
         if cooldown_rem > 0:
             await message.reply_text(
@@ -805,6 +810,7 @@ async def download_queue_worker(client: Client):
             duration = media.get("duration")
             width = media.get("width")
             height = media.get("height")
+            extra_photos = media.get("extra_photos", [])
 
             # Handle custom renaming if requested
             if custom_name:
@@ -833,8 +839,9 @@ async def download_queue_worker(client: Client):
                 pass
 
             bot_uname = Config.BOT_USERNAME or "bot"
+            icon = "📸" if is_photo else ("🎵" if is_audio else "🎬")
             user_caption = (
-                f"🎬 <b>{html_escape(title[:60])}</b>\n\n"
+                f"{icon} <b>{html_escape(title[:60])}</b>\n\n"
                 f"🌐 <b>Platform:</b> {platform}\n"
                 f"📦 <b>Size:</b> {readable_size}\n"
                 f"⚡ <b>Fast Delivery via:</b> @{bot_uname}"
@@ -936,10 +943,23 @@ async def download_queue_worker(client: Client):
 
             sent_msg = None
             if is_photo:
-                sent_msg = await message.reply_photo(
-                    photo=file_path,
-                    caption=user_caption
-                )
+                if extra_photos:
+                    try:
+                        all_photos = [file_path] + [p for p in extra_photos if os.path.exists(p)]
+                        media_group = [
+                            InputMediaPhoto(p, caption=user_caption if idx == 0 else "")
+                            for idx, p in enumerate(all_photos[:10])
+                        ]
+                        sent_msgs = await message.reply_media_group(media=media_group)
+                        sent_msg = sent_msgs[0] if sent_msgs else None
+                    except Exception as alb_err:
+                        logger.warning(f"Failed to send media group, falling back to single photo: {alb_err}")
+                        sent_msg = await message.reply_photo(photo=file_path, caption=user_caption)
+                else:
+                    sent_msg = await message.reply_photo(
+                        photo=file_path,
+                        caption=user_caption
+                    )
             elif is_video:
                 video_kwargs = {
                     "video": file_path,

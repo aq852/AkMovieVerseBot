@@ -1875,5 +1875,55 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_instagram_downloader_and_public_access(self):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from config import Config
+        """Test Instagram URL detection, shortcode extraction, public exemption, and photo fallback."""
+        from utils.downloader import is_instagram_url, extract_instagram_shortcode, download_instagram
+        from plugins.downloader import verify_downloader_access
+
+        # 1. URL detection
+        self.assertTrue(is_instagram_url("https://www.instagram.com/p/DfVAUv2yW3V/"))
+        self.assertTrue(is_instagram_url("https://instagram.com/reel/C8qLd9nvykM/?igsh=123"))
+        self.assertTrue(is_instagram_url("https://instagr.am/p/DfVAUv2yW3V"))
+        self.assertFalse(is_instagram_url("https://youtube.com/watch?v=123"))
+        self.assertFalse(is_instagram_url("https://t.me/AkMovieVerse/123"))
+
+        # 2. Shortcode extraction
+        self.assertEqual(extract_instagram_shortcode("https://www.instagram.com/p/DfVAUv2yW3V/"), "DfVAUv2yW3V")
+        self.assertEqual(extract_instagram_shortcode("https://instagram.com/reel/C8qLd9nvykM/?igsh=123"), "C8qLd9nvykM")
+
+        # 3. Public access policy verification
+        async def _test_access():
+            mock_client = AsyncMock()
+            mock_user = MagicMock()
+            mock_user.id = 99999999  # Normal non-admin user
+            mock_msg = AsyncMock()
+            mock_msg.from_user = mock_user
+
+            with patch.object(Config, "DOWNLOADER_ACCESS", "admin"), \
+                 patch("plugins.downloader.check_force_sub", new_callable=AsyncMock, return_value=True), \
+                 patch("plugins.downloader._USER_LAST_DL", {}):
+                
+                # External YouTube link -> Blocked for non-admin
+                yt_allowed = await verify_downloader_access(mock_client, mock_msg, url="https://youtube.com/watch?v=abc")
+                self.assertFalse(yt_allowed)
+
+                # Instagram link -> Allowed for everyone (Exempt)
+                insta_allowed = await verify_downloader_access(mock_client, mock_msg, url="https://www.instagram.com/p/DfVAUv2yW3V/")
+                self.assertTrue(insta_allowed)
+
+        asyncio.run(_test_access())
+
+        # 4. Fallback mechanism test
+        with patch("utils.downloader._sync_ytdlp_download", side_effect=Exception("ERROR: [Instagram] DfVAUv2yW3V: No video formats found!")), \
+             patch("utils.downloader.download_instagram_embed", return_value={"file_path": "test.jpg", "is_photo": True, "title": "Instagram Photo"}) as mock_embed:
+            res = download_instagram("https://www.instagram.com/p/DfVAUv2yW3V/", "tmp_dir", 50000000)
+            self.assertTrue(res.get("is_photo"))
+            self.assertEqual(res.get("title"), "Instagram Photo")
+            mock_embed.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

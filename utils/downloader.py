@@ -12,6 +12,7 @@ import aiofiles
 from curl_cffi import requests as cffi_requests
 import yt_dlp
 from PIL import Image
+from bs4 import BeautifulSoup
 
 from config import Config
 from utils.helpers import get_readable_size
@@ -150,6 +151,20 @@ def is_telegram_url(url: str) -> bool:
     """Check if URL points to a Telegram post or channel message."""
     u = url.lower()
     return "t.me/" in u or "telegram.me/" in u
+
+
+def is_instagram_url(url: str) -> bool:
+    """Check if URL points to an Instagram post, reel, or media."""
+    u = url.lower()
+    return "instagram.com" in u or "instagr.am" in u
+
+
+def extract_instagram_shortcode(url: str) -> str | None:
+    """Extract unique shortcode from an Instagram URL."""
+    m = re.search(r'instagram\.com/(?:p|reel|reels|tv)/([a-zA-Z0-9_-]+)', url, re.I)
+    if not m:
+        m = re.search(r'instagr\.am/(?:p|reel|reels|tv)/([a-zA-Z0-9_-]+)', url, re.I)
+    return m.group(1) if m else None
 
 
 def detect_platform(url: str) -> str:
@@ -704,6 +719,154 @@ def _sync_ytdlp_download(
         raise ValueError(f"Extraction error: {err_str[:120]}")
 
 
+def download_instagram_embed(url: str, output_dir: str, max_size_bytes: int, progress: DownloadProgress | None = None) -> dict:
+    """Specialized scraper to extract media (Photos & Videos) directly from Instagram's official embed surface."""
+    shortcode = extract_instagram_shortcode(url)
+    if not shortcode:
+        raise ValueError("Invalid Instagram URL format.")
+
+    embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+
+    s = cffi_requests.Session()
+    r = s.get(embed_url, headers=headers, impersonate="chrome120", timeout=20)
+    if r.status_code != 200:
+        raise ValueError(f"Instagram returned HTTP {r.status_code}. The post might be private, age-restricted, or removed.")
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    # 1. Check for video in embed
+    video_tag = soup.find("video")
+    video_url = video_tag.get("src") if video_tag else None
+    if not video_url:
+        m_vid = re.search(r'"video_url"\s*:\s*"([^"]+)"', r.text)
+        if m_vid:
+            cand = m_vid.group(1).replace(r"\/", "/")
+            try:
+                video_url = cand.encode().decode("unicode_escape")
+            except Exception:
+                video_url = cand
+
+    # 2. Check for photos in embed
+    image_tags = soup.find_all("img", class_="EmbeddedMediaImage")
+    image_urls = [img.get("src") for img in image_tags if img.get("src")]
+
+    if not video_url and not image_urls:
+        m_img = re.search(r'"display_url"\s*:\s*"([^"]+)"', r.text)
+        if m_img:
+            cand = m_img.group(1).replace(r"\/", "/")
+            try:
+                image_urls.append(cand.encode().decode("unicode_escape"))
+            except Exception:
+                image_urls.append(cand)
+
+    if not video_url and not image_urls:
+        raise ValueError("Could not extract any media (video or photo) from this Instagram post.")
+
+    # Caption & metadata extraction
+    caption_div = soup.find("div", class_="Caption")
+    raw_caption = caption_div.get_text().strip() if caption_div else ""
+    user_elem = soup.find("a", class_="CaptionUsername")
+    author = user_elem.get_text().strip() if user_elem else ""
+
+    clean_caption = re.sub(r'\s+', ' ', raw_caption).strip()
+    title = clean_caption[:60] if clean_caption else (f"Instagram by @{author}" if author else f"Instagram_{shortcode}")
+    safe_title = re.sub(r'[^\w\-_\. ]', '_', title).strip() or f"Instagram_{shortcode}"
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    if video_url:
+        file_path = os.path.join(output_dir, f"{safe_title}.mp4")
+        r_vid = s.get(video_url, impersonate="chrome120", timeout=90)
+        with open(file_path, "wb") as f_v:
+            f_v.write(r_vid.content)
+        file_size = os.path.getsize(file_path)
+        if file_size > max_size_bytes:
+            max_mb = max_size_bytes // (1024 * 1024)
+            file_mb = file_size // (1024 * 1024)
+            raise ValueError(f"Instagram video ({file_mb} MB) exceeds maximum allowed limit ({max_mb} MB).")
+
+        v_meta = extract_video_metadata(file_path, os.path.join(output_dir, "ig_thumb.jpg"))
+        return {
+            "file_path": file_path,
+            "file_name": os.path.basename(file_path),
+            "file_size": file_size,
+            "title": title,
+            "is_photo": False,
+            "is_video": True,
+            "is_audio": False,
+            "duration": v_meta.get("duration"),
+            "width": v_meta.get("width"),
+            "height": v_meta.get("height"),
+            "thumbnail": v_meta.get("thumb_path")
+        }
+
+    # Handle Photo (including multiple if carousel)
+    primary_img_url = image_urls[0]
+    file_path = os.path.join(output_dir, f"{safe_title}.jpg")
+    r_img = s.get(primary_img_url, impersonate="chrome120", timeout=30)
+    with open(file_path, "wb") as f_i:
+        f_i.write(r_img.content)
+    file_size = os.path.getsize(file_path)
+
+    extra_files = []
+    if len(image_urls) > 1:
+        for idx, extra_url in enumerate(image_urls[1:], start=2):
+            try:
+                ex_path = os.path.join(output_dir, f"{safe_title}_{idx}.jpg")
+                r_ex = s.get(extra_url, impersonate="chrome120", timeout=30)
+                with open(ex_path, "wb") as f_ex:
+                    f_ex.write(r_ex.content)
+                extra_files.append(ex_path)
+            except Exception as e_extra:
+                logger.debug(f"Could not download extra carousel photo: {e_extra}")
+
+    width, height = None, None
+    try:
+        with Image.open(file_path) as im:
+            width, height = im.size
+    except Exception:
+        pass
+
+    return {
+        "file_path": file_path,
+        "file_name": os.path.basename(file_path),
+        "file_size": file_size,
+        "title": title,
+        "is_photo": True,
+        "is_video": False,
+        "is_audio": False,
+        "duration": None,
+        "width": width,
+        "height": height,
+        "thumbnail": file_path,
+        "extra_photos": extra_files
+    }
+
+
+def download_instagram(url: str, output_dir: str, max_size_bytes: int, progress: DownloadProgress | None = None, quality: str = "best") -> dict:
+    """Specialized engine to download Instagram Reels, Videos, and Photos with auto-fallback."""
+    # 1. Try yt-dlp first for videos/reels
+    try:
+        return _sync_ytdlp_download(url, output_dir, max_size_bytes, progress=progress, quality=quality)
+    except Exception as ytdl_err:
+        err_msg = str(ytdl_err).lower()
+        logger.info(f"yt-dlp could not fetch Instagram URL ({err_msg[:80]}). Attempting official embed extraction...")
+        # Fallback to embed scraper for photos, carousels, or unauthenticated feeds
+        try:
+            return download_instagram_embed(url, output_dir, max_size_bytes, progress=progress)
+        except Exception as embed_err:
+            logger.warning(f"Instagram embed extraction also failed for {url}: {embed_err}")
+            # If both fail, raise informative error message
+            if "no video" in err_msg or "no formats" in err_msg:
+                raise ValueError("❌ <b>Could not download Instagram post:</b>\nThis post does not contain a downloadable video or photo, or has been removed.")
+            raise
+
+
 async def download_media(url: str, output_dir: str, max_size_bytes: int, progress: DownloadProgress | None = None, quality: str = "best") -> dict:
     """High-level async orchestrator for downloading any social media, LuLuStream, Vidara, or direct file URL."""
     os.makedirs(output_dir, exist_ok=True)
@@ -716,7 +879,11 @@ async def download_media(url: str, output_dir: str, max_size_bytes: int, progres
     if is_vidara_url(url):
         return await asyncio.to_thread(download_vidara, url, output_dir, max_size_bytes, progress, quality)
 
-    # 3. If direct download link, use fast direct streamer
+    # 3. Specialized Instagram handler (supporting both Videos/Reels and Photos/Carousels)
+    if is_instagram_url(url):
+        return await asyncio.to_thread(download_instagram, url, output_dir, max_size_bytes, progress, quality)
+
+    # 4. If direct download link, use fast direct streamer
     if is_direct_download_link(url):
         try:
             return await download_direct_file(url, output_dir, max_size_bytes, progress=progress)
@@ -730,7 +897,7 @@ async def download_media(url: str, output_dir: str, max_size_bytes: int, progres
                 )
             logger.warning(f"Direct stream download failed for {url}: {e}. Retrying via yt-dlp...")
 
-    # 3. Use yt-dlp in background thread with progress callback, quality selector, and auto-thumbnail
+    # 5. Use yt-dlp in background thread with progress callback, quality selector, and auto-thumbnail
     return await asyncio.to_thread(_sync_ytdlp_download, url, output_dir, max_size_bytes, progress, quality)
 
 
