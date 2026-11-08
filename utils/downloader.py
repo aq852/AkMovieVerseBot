@@ -12,7 +12,11 @@ import aiofiles
 from curl_cffi import requests as cffi_requests
 import yt_dlp
 from PIL import Image
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
 
 from config import Config
 from utils.helpers import get_readable_size
