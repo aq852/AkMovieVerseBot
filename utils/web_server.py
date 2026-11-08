@@ -7023,6 +7023,15 @@ async def run_web_server():
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", Config.PORT)
-    await site.start()
-    logger.info(f"Health-check, Verification & Streaming web server successfully bound to port {Config.PORT}")
+    try:
+        site = web.TCPSite(runner, "0.0.0.0", Config.PORT, reuse_address=True)
+        await site.start()
+        logger.info(f"Health-check, Verification & Streaming web server successfully bound to port {Config.PORT}")
+    except OSError as e_bind:
+        if getattr(e_bind, "errno", None) == 98 or "already in use" in str(e_bind).lower():
+            logger.error(
+                f"❌ Port {Config.PORT} is already occupied! Another bot process is running in background. "
+                f"Run 'fuser -k {Config.PORT}/tcp' or 'pkill -9 -f bot.py' to release it."
+            )
+        else:
+            logger.error(f"Failed to bind web server on port {Config.PORT}: {e_bind}")
