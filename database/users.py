@@ -226,6 +226,10 @@ async def get_user_info(user_id: int) -> dict:
         return {}
 
 
+# Alias for backward-compatibility
+get_user = get_user_info
+
+
 async def can_user_create_filestore_link(user_id: int) -> tuple[bool, int, int]:
     """
     Check if user is allowed to generate a File Store link based on daily limit.

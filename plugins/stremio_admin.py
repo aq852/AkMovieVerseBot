@@ -10,7 +10,7 @@ except ImportError:
     from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import Config
-from database.users import is_premium, get_user
+from database.users import is_premium, get_user_info
 from database.stremio import (
     create_or_get_stremio_token,
     reset_stremio_token,
