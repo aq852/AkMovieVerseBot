@@ -1061,31 +1061,171 @@ async def unban_user_command(client: Client, message: Message):
     await message.reply_text(f"✅ User <code>{target_id}</code> has been unbanned.")
 
 
+from html import escape as html_escape
+
 # 7. /add_premium & /remove_premium
 @Client.on_message(filters.command("add_premium"))
 async def add_premium_command(client: Client, message: Message):
-    """Grant VIP access to a user for specified days."""
+    """Grant VIP access to a user for specified duration and notify both admin & user with formatted details."""
     if not Config.is_admin(message.from_user.id):
         return
 
-    args = message.text.split()
-    if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
-        await message.reply_text("⚠️ <b>Usage:</b> <code>/add_premium [user_id] [days]</code>\nExample: <code>/add_premium 12345678 30</code>")
+    target_id = None
+    duration_str = None
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+        parts = message.text.split(None, 1)
+        if len(parts) > 1:
+            duration_str = parts[1].strip()
+    else:
+        parts = message.text.split()
+        if len(parts) >= 3 and parts[1].lstrip("-").isdigit():
+            target_id = int(parts[1])
+            duration_str = " ".join(parts[2:])
+        elif len(parts) == 2 and parts[1].lstrip("-").isdigit():
+            target_id = int(parts[1])
+            duration_str = "30"
+
+    if not target_id:
+        await message.reply_text(
+            "⚠️ <b>Usage:</b> <code>/add_premium [user_id] [duration]</code>\n"
+            "<i>Or reply to a user's message with</i> <code>/add_premium 7 day</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/add_premium 12345678 7 day</code>\n"
+            "• <code>/add_premium 12345678 30 days</code>\n"
+            "• <code>/add_premium 12345678 1 month</code>"
+        )
         return
 
-    target_id = int(args[1])
-    days = int(args[2])
-    seconds = days * 86400
+    days = 30
+    seconds = 30 * 86400
+    display_access = "30 day"
+
+    if duration_str:
+        m = re.search(r"(\d+)\s*([a-zA-Z]*)", duration_str.lower())
+        if m:
+            num = int(m.group(1))
+            unit = m.group(2)
+            if unit.startswith("m"):
+                days = num * 30
+                seconds = days * 86400
+                display_access = f"{num} month" if num == 1 else f"{num} months"
+            elif unit.startswith("w"):
+                days = num * 7
+                seconds = days * 86400
+                display_access = f"{num} week" if num == 1 else f"{num} weeks"
+            elif unit.startswith("h"):
+                days = max(1, num // 24)
+                seconds = num * 3600
+                display_access = f"{num} hour" if num == 1 else f"{num} hours"
+            elif unit.startswith("y"):
+                days = num * 365
+                seconds = days * 86400
+                display_access = f"{num} year" if num == 1 else f"{num} years"
+            else:
+                days = num
+                seconds = days * 86400
+                display_access = f"{num} day" if num == 1 else f"{num} days"
+
+    # Fetch user display name
+    user_name = "User"
+    try:
+        user_obj = await client.get_users(target_id)
+        if user_obj:
+            user_name = user_obj.first_name or user_obj.username or "User"
+            if user_obj.last_name:
+                user_name = f"{user_name} {user_obj.last_name}".strip()
+    except Exception:
+        db_user = await mongo.users.find_one({"user_id": target_id})
+        if db_user and db_user.get("name"):
+            user_name = db_user["name"]
+
+    # IST timestamps (UTC+5:30)
+    ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now_ist = datetime.datetime.now(ist_tz)
+    joining_date = now_ist.strftime("%d-%m-%Y")
+    joining_time = now_ist.strftime("%I:%M:%S %p")
 
     await add_premium(target_id, seconds)
-    await message.reply_text(f"💎 <b>Granted {days} days of VIP Premium to <code>{target_id}</code>!</b>")
+
+    # Fetch updated expiry
+    user_doc = await mongo.users.find_one({"user_id": target_id})
+    expiry_dt = user_doc.get("premium_expires") if user_doc else None
+    if expiry_dt:
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=datetime.timezone.utc)
+        expiry_ist = expiry_dt.astimezone(ist_tz)
+        expiry_date = expiry_ist.strftime("%d-%m-%Y")
+        expiry_time = expiry_ist.strftime("%I:%M:%S %p")
+    else:
+        exp_calc = now_ist + datetime.timedelta(seconds=seconds)
+        expiry_date = exp_calc.strftime("%d-%m-%Y")
+        expiry_time = exp_calc.strftime("%I:%M:%S %p")
+
+    # Stremio pre-generation for VIP user
+    install_url = None
+    try:
+        from database.stremio import create_or_get_stremio_token
+        from plugins.stremio_admin import _get_stremio_base_url
+        stremio_token, _ = await create_or_get_stremio_token(target_id)
+        base_url = _get_stremio_base_url()
+        install_url = f"{base_url}/stremio/{stremio_token}/install"
+    except Exception as e_stremio:
+        logger.warning(f"Stremio pre-generation skipped in add_premium: {e_stremio}")
+
+    # 1. Send DM notification to User
+    user_dm_text = (
+        "<b>PREMIUM ADDED SUCCESSFULLY</b> ✅\n\n"
+        f"👤 <b>USER :</b> {html_escape(user_name)}\n"
+        f"⚡ <b>USER ID :</b> <code>{target_id}</code>\n"
+        f"⏰ <b>PREMIUM ACCESS :</b> <code>{display_access}</code>\n\n"
+        f"⏳ <b>JOINING DATE :</b> <code>{joining_date}</code>\n"
+        f"🕒 <b>JOINING TIME :</b> <code>{joining_time}</code>\n\n"
+        f"⌛ <b>EXPIRY DATE :</b> <code>{expiry_date}</code>\n"
+        f"🕒 <b>EXPIRY TIME :</b> <code>{expiry_time}</code>\n\n"
+        "🌟 <b>Your Active VIP Perks:</b>\n"
+        "• 🚫 <b>Zero Ads & No Shorteners</b> (Direct instant downloads)\n"
+        "• ⚡ <b>Superfast 1-Second Direct PM Delivery</b>\n"
+        "• 📺 <b>Smart TV Stremio Addon Access (4K/1080p)</b>\n"
+        "• 📦 <b>Bulk / Season Pack Deliveries</b>\n"
+        "• 🔓 <b>Unlimited Daily Searches & Requests</b>\n\n"
+        "💡 <i>Tip: Send /myplan anytime to inspect your subscription or /stremio for TV addon!</i>"
+    )
+
+    user_buttons = []
+    if install_url:
+        user_buttons.append([InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)])
+    user_buttons.append([InlineKeyboardButton("⭐ Check My VIP Plan", callback_data="check_my_plan")])
+
+    user_dm_sent = False
     try:
         await client.send_message(
             target_id,
-            f"🎉 <b>You have been granted {days} days of VIP Premium Access!</b>\n\nEnjoy instant file downloads without any shorteners."
+            user_dm_text,
+            reply_markup=InlineKeyboardMarkup(user_buttons)
         )
-    except Exception:
-        pass
+        user_dm_sent = True
+    except Exception as e_dm:
+        logger.warning(f"Failed to deliver premium DM to {target_id}: {e_dm}")
+
+    # 2. Reply to Admin
+    admin_reply = (
+        "<b>PREMIUM ADDED SUCCESSFULLY</b> ✅\n\n"
+        f"👤 <b>USER :</b> {html_escape(user_name)}\n"
+        f"⚡ <b>USER ID :</b> <code>{target_id}</code>\n"
+        f"⏰ <b>PREMIUM ACCESS :</b> <code>{display_access}</code>\n\n"
+        f"⏳ <b>JOINING DATE :</b> <code>{joining_date}</code>\n"
+        f"🕒 <b>JOINING TIME :</b> <code>{joining_time}</code>\n\n"
+        f"⌛ <b>EXPIRY DATE :</b> <code>{expiry_date}</code>\n"
+        f"🕒 <b>EXPIRY TIME :</b> <code>{expiry_time}</code>"
+    )
+    if user_dm_sent:
+        admin_reply += "\n\n📬 <i>Private notification & Stremio link delivered to user!</i>"
+    else:
+        admin_reply += "\n\n⚠️ <i>User notification could not be delivered (bot not started in PM or blocked).</i>"
+
+    await message.reply_text(admin_reply)
 
 
 @Client.on_message(filters.command("remove_premium"))
@@ -1094,14 +1234,71 @@ async def remove_premium_command(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
 
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
+    target_id = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+    else:
+        args = message.text.split()
+        if len(args) >= 2 and args[1].lstrip("-").isdigit():
+            target_id = int(args[1])
+
+    if not target_id:
         await message.reply_text("⚠️ <b>Usage:</b> <code>/remove_premium [user_id]</code>")
         return
 
-    target_id = int(args[1])
     await remove_premium(target_id)
     await message.reply_text(f"✅ Revoked VIP status for <code>{target_id}</code>.")
+    try:
+        await client.send_message(
+            target_id,
+            "ℹ️ <b>Your VIP Premium subscription has expired or been revoked.</b>\n\n"
+            "To renew and regain instant direct downloads & Smart TV streaming, check /plans."
+        )
+    except Exception:
+        pass
+
+
+@Client.on_callback_query(filters.regex(r"^check_my_plan$"))
+async def check_my_plan_callback(client: Client, query: CallbackQuery):
+    """Allow user to check their active plan details from inline button."""
+    user_id = query.from_user.id
+    from database.users import is_premium, get_user_info
+    user = await get_user_info(user_id)
+    user_is_vip = await is_premium(user_id)
+
+    if user_is_vip and user.get("premium_expires"):
+        expiry_dt = user["premium_expires"]
+        now = datetime.datetime.utcnow()
+        remaining = expiry_dt - now
+        days = max(0, remaining.days)
+        hours = max(0, remaining.seconds // 3600)
+
+        ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=datetime.timezone.utc)
+        exp_ist = expiry_dt.astimezone(ist_tz)
+
+        text = (
+            "💎 <b>YOUR VIP MEMBERSHIP STATUS</b> 💎\n\n"
+            "• <b>Status:</b> <code>ACTIVE VIP 👑</code>\n"
+            f"• <b>Remaining Time:</b> <code>{days} Days, {hours} Hours</code>\n"
+            f"• <b>Expires On:</b> <code>{exp_ist.strftime('%d %b %Y, %I:%M %p IST')}</code>\n\n"
+            "🌟 <b>Your Active Perks:</b>\n"
+            "• 📺 Smart TV Stremio Addon access\n"
+            "• 🚫 No shorteners or token verification\n"
+            "• ⚡ Instant 1-second direct PM delivery\n"
+            "• 🔓 Unlimited daily files & searches\n"
+            "• 📦 SEND ALL batch season deliveries\n\n"
+            "💡 <i>Enjoy your ultra-fast ad-free experience!</i>"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Extend VIP Plan", callback_data="view_plans")],
+            [InlineKeyboardButton("👥 Refer & Earn Free Days", callback_data="view_refer")]
+        ])
+        await query.message.edit_text(text, reply_markup=markup)
+    else:
+        from plugins.extra import get_plans_text, get_plans_markup
+        await query.message.edit_text(get_plans_text(), reply_markup=get_plans_markup())
 
 
 # 8. /premium_users or /premium_list

@@ -36,10 +36,45 @@ def _get_stremio_base_url() -> str:
 
 @Client.on_message(filters.command(["gen_stremio", "setstremio", "stremio"]) & filters.private)
 async def generate_stremio_command(client: Client, message: Message):
-    """Admin-only command to generate or view secret Stremio VIP Addon link for a user."""
+    """Admin command to generate secret Stremio VIP Addon link and notify user directly in DM."""
+    # Non-admin self-service: VIP users can fetch their own addon link anytime
     if not Config.is_admin(message.from_user.id):
+        target_user_id = message.from_user.id
+        user_is_vip = await is_premium(target_user_id)
+        if not user_is_vip:
+            await message.reply_text(
+                "⚠️ <b>AkMovieVerse Stremio Smart TV Addon is an exclusive VIP Perk!</b>\n\n"
+                "Upgrade to VIP Premium to stream movies & series directly on your TV/PC without ads.\n"
+                "👉 Use /plans to view available subscriptions."
+            )
+            return
+
+        token, _ = await create_or_get_stremio_token(target_user_id)
+        base_url = _get_stremio_base_url()
+        manifest_url = f"{base_url}/stremio/{token}/manifest.json"
+        install_url = f"{base_url}/stremio/{token}/install"
+        user_name = message.from_user.first_name or "VIP Member"
+
+        user_card = (
+            f"📺 <b>AkMovieVerse — Your Stremio Smart TV VIP Addon</b> 🎉\n\n"
+            f"Hello <b>{html_escape(user_name)}</b>, your VIP Stremio TV Addon is active!\n\n"
+            f"🌟 <b>Stream high-speed 4K/1080p Movies & Web Series with Multi-Audio directly inside Stremio on Android TV, Firestick, PC or Mobile.</b>\n\n"
+            f"🌐 <b>Addon Manifest URL (Copy & paste into Stremio):</b>\n"
+            f"<code>{manifest_url}</code>\n\n"
+            f"📲 <b>1-Click Instant Install:</b>\n"
+            f"Tap the button below to automatically install into your Stremio app:\n\n"
+            f"🛡️ <b>Streaming Policy:</b>\n"
+            f"• 🔒 <b>1-Device Active Streaming:</b> Max 1 screen can stream at the same time.\n"
+            f"• 🚫 Do not share your addon link with anyone to avoid streaming blocks."
+        )
+        buttons = [
+            [InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)],
+            [InlineKeyboardButton("⭐ Check My VIP Plan", callback_data="check_my_plan")]
+        ]
+        await message.reply_text(user_card, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
         return
 
+    # Admin mode
     text_parts = message.text.split(None, 1)
     target_user_id = None
 
@@ -67,6 +102,45 @@ async def generate_stremio_command(client: Client, message: Message):
     vip_badge = "✅ <b>Active VIP Member</b>" if user_is_vip else "⚠️ <b>Not VIP / Inactive</b> (User must be VIP to stream)"
     status_badge = "🆕 <b>Fresh Token Generated</b>" if is_new else "🔑 <b>Existing Active Token</b>"
 
+    # User display name
+    user_name = "VIP Member"
+    try:
+        user_obj = await client.get_users(target_user_id)
+        if user_obj and user_obj.first_name:
+            user_name = user_obj.first_name
+    except Exception:
+        pass
+
+    # 1. Send direct DM to the user with 1-Click Install button
+    user_stremio_card = (
+        f"📺 <b>AkMovieVerse — Your Stremio Smart TV VIP Addon</b> 🎉\n\n"
+        f"Hello <b>{html_escape(user_name)}</b>, your VIP Stremio TV Addon has been activated by Admin!\n\n"
+        f"🌟 <b>Stream high-speed 4K/1080p Movies & Web Series with Multi-Audio directly inside Stremio on Android TV, Firestick, PC or Mobile.</b>\n\n"
+        f"🌐 <b>Addon Manifest URL (Copy & paste into Stremio):</b>\n"
+        f"<code>{manifest_url}</code>\n\n"
+        f"📲 <b>1-Click Instant Install:</b>\n"
+        f"Tap the button below to install directly into your Stremio app:\n\n"
+        f"🛡️ <b>Streaming Policy:</b>\n"
+        f"• 🔒 <b>1-Device Active Streaming:</b> Max 1 screen can stream at the same time.\n"
+        f"• 🚫 Do not share your addon link with anyone to avoid streaming blocks."
+    )
+    user_buttons = [
+        [InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)],
+        [InlineKeyboardButton("⭐ Check My VIP Plan", callback_data="check_my_plan")]
+    ]
+    dm_sent = False
+    try:
+        await client.send_message(
+            target_user_id,
+            user_stremio_card,
+            reply_markup=InlineKeyboardMarkup(user_buttons),
+            disable_web_page_preview=True
+        )
+        dm_sent = True
+    except Exception as e_dm:
+        logger.warning(f"Could not deliver Stremio DM to user {target_user_id}: {e_dm}")
+
+    # 2. Reply to Admin
     reply_text = (
         f"📺 <b>AkMovieVerse — Stremio Smart TV Addon</b>\n\n"
         f"👤 <b>User ID:</b> <code>{target_user_id}</code>\n"
@@ -82,6 +156,12 @@ async def generate_stremio_command(client: Client, message: Message):
         f"• 🔄 <b>Reset Link:</b> <code>/reset_stremio {target_user_id}</code>\n"
         f"• 🗑️ <b>Revoke Access:</b> <code>/del_stremio {target_user_id}</code>"
     )
+
+    if target_user_id != message.from_user.id:
+        if dm_sent:
+            reply_text += "\n\n📬 <i>Addon details & 1-Click Install button delivered to user in private chat!</i>"
+        else:
+            reply_text += "\n\n⚠️ <i>Could not DM user directly (Bot not started in PM or blocked). Please forward them the link above.</i>"
 
     buttons = [
         [InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)],
@@ -144,6 +224,19 @@ async def reset_stremio_command(client: Client, message: Message):
         logger.error(f"Error sending reset Stremio message: {e}", exc_info=True)
         await message.reply_text(reply_text, disable_web_page_preview=True)
 
+    if target_user_id != message.from_user.id:
+        try:
+            await client.send_message(
+                target_user_id,
+                f"🔄 <b>Your Stremio Smart TV VIP Addon Has Been Refreshed!</b>\n\n"
+                f"Previous links have been destroyed. Tap below to install your updated addon:\n\n"
+                f"🌐 <b>Manifest URL:</b>\n<code>{manifest_url}</code>",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)]]),
+                disable_web_page_preview=True
+            )
+        except Exception:
+            pass
+
 
 @Client.on_message(filters.command(["del_stremio", "delstremio", "revokestremio"]) & filters.private)
 async def revoke_stremio_command(client: Client, message: Message):
@@ -166,6 +259,15 @@ async def revoke_stremio_command(client: Client, message: Message):
     success = await revoke_stremio_token(target_user_id)
     if success:
         await message.reply_text(f"🗑️ <b>Stremio VIP access revoked for user</b> <code>{target_user_id}</code>.")
+        if target_user_id != message.from_user.id:
+            try:
+                await client.send_message(
+                    target_user_id,
+                    "🗑️ <b>Your Stremio Smart TV VIP Addon access has been revoked or expired.</b>\n\n"
+                    "To renew and regain high-speed TV streaming, contact the admin or check /plans."
+                )
+            except Exception:
+                pass
     else:
         await message.reply_text(f"⚠️ No active Stremio token was found for user <code>{target_user_id}</code>.")
 
@@ -217,3 +319,16 @@ async def stremio_reset_callback(client: Client, query):
     except Exception as e:
         logger.error(f"Error editing stremio reset message: {e}", exc_info=True)
     await query.answer("✅ Token reset successfully!")
+
+    if target_user_id != query.from_user.id:
+        try:
+            await client.send_message(
+                target_user_id,
+                f"🔄 <b>Your Stremio Smart TV VIP Addon Has Been Refreshed!</b>\n\n"
+                f"Previous links have been destroyed. Tap below to install your updated addon:\n\n"
+                f"🌐 <b>Manifest URL:</b>\n<code>{manifest_url}</code>",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📲 1-Click Install in Stremio", url=install_url)]]),
+                disable_web_page_preview=True
+            )
+        except Exception:
+            pass
