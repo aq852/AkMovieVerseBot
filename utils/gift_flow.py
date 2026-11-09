@@ -116,34 +116,8 @@ async def deliver_gift_content(client: Client, user_id: int, gift: dict, is_redo
     title = gift.get("title", "Exclusive Reward")
     bot_uname = client.me.username if client.me else Config.BOT_USERNAME
 
-    # 1. Delivery header banner
-    if is_redownload:
-        header_text = (
-            "♻️ <b>WELCOME BACK! REWARD RE-DELIVERED</b> 🎁\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Package:</b> <code>{html.escape(title)}</code>\n"
-            f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_label}</code>\n"
-            f"🔒 <b>Content Protection:</b> <code>{'Active (No Forward)' if protect_flag else 'Disabled'}</code>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✨ <i>Active channel membership verified! Delivering your files again below:</i>"
-        )
-    else:
-        header_text = (
-            "🎉 <b>CONGRATULATIONS! REWARD UNLOCKED!</b> 🎁\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Package:</b> <code>{html.escape(title)}</code>\n"
-            f"⏳ <b>Self-Destruct:</b> <code>Auto-Deletes in {del_label}</code>\n"
-            f"🔒 <b>Content Protection:</b> <code>{'Active (No Forward)' if protect_flag else 'Disabled'}</code>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🚀 <i>Delivering your files below. Enjoy your exclusive reward!</i>"
-        )
-
-    celebration_msg = await client.send_message(
-        chat_id=user_id,
-        text=header_text
-    )
-
-    delivered_msgs = [celebration_msg]
+    # Direct Media Delivery (No redundant header text spam)
+    delivered_msgs = []
 
     if file_type == "single":
         file_doc = gift.get("file_doc") or {}
