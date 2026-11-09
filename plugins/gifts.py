@@ -1063,12 +1063,14 @@ async def set_gift_channels_command(client: Client, message: Message):
     parts = message.text.split(None, 1)
     if len(parts) < 2:
         return await message.reply_text(
-            "Usage: <code>/setgiftchannels <ch1, ch2, ch3...></code>\n\n"
-            "Supports:\n"
-            "• Public: <code>@AkMovieVerse, @AkBackup</code>\n"
-            "• Private: <code>-1001234567890</code>\n"
-            "• Private with custom invite: <code>-1001234567890 | https://t.me/+AbCdEfGh</code>\n"
-            "• Turn off: <code>/setgiftchannels off</code>"
+            "Usage: <code>/setgiftchannels ch1, ch2, ch3...</code>\n\n"
+            "<b>Supported Formats:</b>\n"
+            "• Public: <code>@AkMovieVerse</code>\n"
+            "• Private ID: <code>-1002031749807</code>\n"
+            "• Private with Invite Link: <code>-1002031749807 | https://t.me/+goqkqMMq</code>\n\n"
+            "<b>Example:</b>\n"
+            "<code>/setgiftchannels @AkMovieVerse, -1002031749807 | https://t.me/+goqkqMMq</code>\n\n"
+            "<i>To clear:</i> <code>/setgiftchannels off</code>"
         )
 
     arg = parts[1].strip()
@@ -1076,13 +1078,23 @@ async def set_gift_channels_command(client: Client, message: Message):
         await save_auto_gift_config({"channels": []})
         return await message.reply_text("✅ <b>Required Sponsor Channels Cleared!</b> (Gifts will have direct access with no channel tasks)")
 
-    channel_items = [c.strip() for c in arg.split(",") if c.strip()]
+    def sanitize_channel_item(item: str) -> str:
+        s = item.strip().strip("<>\"\'[]() ")
+        if "|" in s:
+            p = s.split("|", 1)
+            p0 = p[0].strip().strip("<>\"\'[]() ")
+            p1 = p[1].strip().strip("<>\"\'[]() ")
+            return f"{p0} | {p1}"
+        return s
+
+    channel_items = [sanitize_channel_item(c) for c in arg.split(",") if sanitize_channel_item(c)]
     await save_auto_gift_config({"channels": channel_items})
     await message.reply_text(
         f"✅ <b>REQUIRED SPONSOR CHANNELS UPDATED!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📢 <b>Channels:</b> <code>{', '.join(channel_items)}</code>\n\n"
-        f"🔒 <i>Users must join all these channels before unlocking the gift!</i>"
+        f"🔒 <i>Users must join all these channels before unlocking the gift!</i>\n"
+        f"⚠️ <b>Note:</b> Make sure the bot is an <b>ADMIN</b> in private channels with invite link permissions!"
     )
 
 

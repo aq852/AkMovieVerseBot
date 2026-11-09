@@ -32,52 +32,72 @@ logger = logging.getLogger(__name__)
 
 async def check_channel_membership(client: Client, user_id: int, channel_identifier: str) -> tuple[bool, str, str]:
     """Check if user has joined a required public or private channel.
-    Supports @username, numeric ID (-100...), and invite links (t.me/+...).
+    Supports @username, numeric ID (-100...), invite links (t.me/+...), and ID | invite_link syntax.
     Returns (is_member, channel_display_title, channel_invite_url).
     """
-    clean_ch = str(channel_identifier).strip()
+    raw_str = str(channel_identifier).strip().strip("<>\"\'[]() ")
     custom_invite = ""
-    if "|" in clean_ch:
-        parts = clean_ch.split("|", 1)
-        clean_ch = parts[0].strip()
-        custom_invite = parts[1].strip()
+    clean_ch = raw_str
+    if "|" in raw_str:
+        parts = raw_str.split("|", 1)
+        clean_ch = parts[0].strip().strip("<>\"\'[]() ")
+        custom_invite = parts[1].strip().strip("<>\"\'[]() ")
 
-    # Determine chat target (int for numeric IDs, str for @username)
+    # Determine chat target (int for numeric IDs, str for @username or invite link)
     if clean_ch.lstrip("-").isdigit():
         chat_target = int(clean_ch)
     else:
         chat_target = clean_ch
 
-    invite_url = custom_invite or (f"https://t.me/{clean_ch[1:]}" if str(clean_ch).startswith("@") else str(clean_ch))
+    invite_url = custom_invite
+    if not invite_url:
+        if str(clean_ch).startswith("@"):
+            invite_url = f"https://t.me/{clean_ch[1:]}"
+        elif str(clean_ch).startswith("http://") or str(clean_ch).startswith("https://") or str(clean_ch).startswith("t.me/"):
+            invite_url = str(clean_ch) if str(clean_ch).startswith("http") else f"https://{clean_ch}"
+        else:
+            invite_url = str(clean_ch)
+
     display_title = str(clean_ch)
+    real_chat_id = chat_target
 
     try:
         chat = await client.get_chat(chat_target)
-        if chat.title:
-            display_title = chat.title
-        if not custom_invite:
-            if chat.username:
-                invite_url = f"https://t.me/{chat.username}"
-            elif getattr(chat, "invite_link", None):
-                invite_url = chat.invite_link
-            else:
-                try:
-                    invite_obj = await client.create_chat_invite_link(chat_target)
-                    invite_url = invite_obj.invite_link
-                except Exception:
-                    pass
-    except Exception as e:
-        logger.debug(f"Could not fetch chat info for {chat_target}: {e}")
+        if chat:
+            real_chat_id = chat.id  # CRITICAL: Always use the resolved integer chat.id for membership lookup
+            if chat.title:
+                display_title = chat.title
+            if not custom_invite:
+                if chat.username:
+                    invite_url = f"https://t.me/{chat.username}"
+                elif getattr(chat, "invite_link", None):
+                    invite_url = chat.invite_link
+                else:
+                    try:
+                        invite_obj = await client.create_chat_invite_link(real_chat_id)
+                        if invite_obj and invite_obj.invite_link:
+                            invite_url = invite_obj.invite_link
+                    except Exception as e_inv:
+                        logger.debug(f"Could not create invite link for {real_chat_id}: {e_inv}")
+    except Exception as e_chat:
+        logger.debug(f"Could not fetch chat info for {chat_target}: {e_chat}")
 
-    # Check member status
+    # Ensure invite_url is a valid web link if target was numeric
+    if not invite_url.startswith("http://") and not invite_url.startswith("https://"):
+        if str(real_chat_id).startswith("-100"):
+            invite_url = f"https://t.me/c/{str(real_chat_id).replace('-100', '')}"
+        elif str(clean_ch).startswith("@"):
+            invite_url = f"https://t.me/{clean_ch[1:]}"
+
+    # Check member status using real_chat_id
     try:
-        member = await client.get_chat_member(chat_target, user_id)
+        member = await client.get_chat_member(real_chat_id, user_id)
         status_val = str(getattr(member, "status", "")).lower()
         if "left" in status_val or "banned" in status_val or "kicked" in status_val:
             return False, display_title, invite_url
         return True, display_title, invite_url
-    except Exception as e:
-        logger.debug(f"User {user_id} not in channel {chat_target}: {e}")
+    except Exception as e_mem:
+        logger.warning(f"check_channel_membership check failed for user {user_id} in {real_chat_id} ({display_title}): {e_mem}")
         return False, display_title, invite_url
 
 

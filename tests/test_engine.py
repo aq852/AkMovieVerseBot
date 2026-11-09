@@ -2193,79 +2193,76 @@ class TestAutoFilterEngine(unittest.TestCase):
         import asyncio
 
         async def _test():
-            # 1. Default config check & saving
-            cfg = await get_auto_gift_config()
-            self.assertIn("enabled", cfg)
-            self.assertIn("db_channel", cfg)
-            self.assertIn("post_channel", cfg)
-            self.assertIn("photo_wait_seconds", cfg)
-            self.assertIn("poster_mode", cfg)
+            # 1. Backup original config so tests NEVER overwrite user's production settings
+            orig_cfg = dict(await get_auto_gift_config())
+            try:
+                # 2. Update config with test parameters
+                await save_auto_gift_config({
+                    "enabled": True,
+                    "db_channel": -1001122334455,
+                    "post_channel": -1009988776655,
+                    "channels": ["@AkMovieVerse", "-1001234567890 | https://t.me/+customInvite"],
+                    "require_shortener": False,
+                    "allow_reclaim": True,
+                    "auto_delete_seconds": 600,
+                    "claims": 0,
+                    "duration_seconds": 0,
+                    "photo_wait_seconds": 30,
+                    "poster_mode": "sample"
+                })
 
-            # 2. Update config with private channel support, wait buffer, and poster mode
-            await save_auto_gift_config({
-                "enabled": True,
-                "db_channel": -1001122334455,
-                "post_channel": -1009988776655,
-                "channels": ["@AkMovieVerse", "-1001234567890 | https://t.me/+customInvite"],
-                "require_shortener": False,
-                "allow_reclaim": True,
-                "auto_delete_seconds": 600,
-                "claims": 0,
-                "duration_seconds": 0,
-                "photo_wait_seconds": 30,
-                "poster_mode": "sample"
-            })
+                updated = await get_auto_gift_config()
+                self.assertTrue(updated["enabled"])
+                self.assertEqual(updated["db_channel"], -1001122334455)
+                self.assertEqual(updated["post_channel"], -1009988776655)
+                self.assertEqual(len(updated["channels"]), 2)
+                self.assertEqual(updated["auto_delete_seconds"], 600)
+                self.assertEqual(updated["photo_wait_seconds"], 30)
+                self.assertEqual(updated["poster_mode"], "sample")
 
-            updated = await get_auto_gift_config()
-            self.assertTrue(updated["enabled"])
-            self.assertEqual(updated["db_channel"], -1001122334455)
-            self.assertEqual(updated["post_channel"], -1009988776655)
-            self.assertEqual(len(updated["channels"]), 2)
-            self.assertEqual(updated["auto_delete_seconds"], 600)
-            self.assertEqual(updated["photo_wait_seconds"], 30)
-            self.assertEqual(updated["poster_mode"], "sample")
+                # 3. Test Dashboard Formatter
+                text, markup = format_gift_settings_dashboard(updated)
+                self.assertIn("AUTO-GIFT PUBLISHER DASHBOARD", text)
+                self.assertIn("ENABLED", text)
+                self.assertIn("-1001122334455", text)
+                self.assertIn("-1009988776655", text)
+                self.assertIn("10 Minutes", text)
+                self.assertIn("Hybrid", text)
+                self.assertIn("30s Wait", text)
+                self.assertIn("Sample Video", text)
 
-            # 3. Test Dashboard Formatter
-            text, markup = format_gift_settings_dashboard(updated)
-            self.assertIn("AUTO-GIFT PUBLISHER DASHBOARD", text)
-            self.assertIn("ENABLED", text)
-            self.assertIn("-1001122334455", text)
-            self.assertIn("-1009988776655", text)
-            self.assertIn("10 Minutes", text)
-            self.assertIn("Hybrid", text)
-            self.assertIn("30s Wait", text)
-            self.assertIn("Sample Video", text)
+                # Check buttons
+                callback_data_list = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+                self.assertIn("agift_toggle", callback_data_list)
+                self.assertIn("agift_shortener", callback_data_list)
+                self.assertIn("agift_mode", callback_data_list)
+                self.assertIn("agift_wait", callback_data_list)
+                self.assertIn("agift_shield", callback_data_list)
+                self.assertIn("agift_autodel", callback_data_list)
+                self.assertIn("agift_refresh", callback_data_list)
 
-            # Check buttons
-            callback_data_list = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-            self.assertIn("agift_toggle", callback_data_list)
-            self.assertIn("agift_shortener", callback_data_list)
-            self.assertIn("agift_mode", callback_data_list)
-            self.assertIn("agift_wait", callback_data_list)
-            self.assertIn("agift_shield", callback_data_list)
-            self.assertIn("agift_autodel", callback_data_list)
-            self.assertIn("agift_refresh", callback_data_list)
+                # 4. Test sample clip extractor function safe fallback on non-existent video
+                ok = await extract_sample_clip_ffmpeg("non_existent.mp4", 0, 3, "out.mp4")
+                self.assertFalse(ok)
 
-            # 4. Test sample clip extractor function safe fallback on non-existent video
-            ok = await extract_sample_clip_ffmpeg("non_existent.mp4", 0, 3, "out.mp4")
-            self.assertFalse(ok)
-
-            # 5. Test pending queue tracking
-            evt = asyncio.Event()
-            _PENDING_GIFT_VIDEOS[9999] = {
-                "event": evt,
-                "photo_id": None,
-                "chat_id": -1001122334455,
-                "file_name": "Test_Movie.mp4",
-                "status_msg": None
-            }
-            self.assertIn(9999, _PENDING_GIFT_VIDEOS)
-            # Simulate photo arrival
-            _PENDING_GIFT_VIDEOS[9999]["photo_id"] = "photo_file_id_123"
-            _PENDING_GIFT_VIDEOS[9999]["event"].set()
-            self.assertTrue(_PENDING_GIFT_VIDEOS[9999]["event"].is_set())
-            self.assertEqual(_PENDING_GIFT_VIDEOS[9999]["photo_id"], "photo_file_id_123")
-            _PENDING_GIFT_VIDEOS.pop(9999, None)
+                # 5. Test pending queue tracking
+                evt = asyncio.Event()
+                _PENDING_GIFT_VIDEOS[9999] = {
+                    "event": evt,
+                    "photo_id": None,
+                    "chat_id": -1001122334455,
+                    "file_name": "Test_Movie.mp4",
+                    "status_msg": None
+                }
+                self.assertIn(9999, _PENDING_GIFT_VIDEOS)
+                _PENDING_GIFT_VIDEOS[9999]["photo_id"] = "photo_file_id_123"
+                _PENDING_GIFT_VIDEOS[9999]["event"].set()
+                self.assertTrue(_PENDING_GIFT_VIDEOS[9999]["event"].is_set())
+                self.assertEqual(_PENDING_GIFT_VIDEOS[9999]["photo_id"], "photo_file_id_123")
+                _PENDING_GIFT_VIDEOS.pop(9999, None)
+            finally:
+                # Restore original user settings
+                await save_auto_gift_config(orig_cfg)
 
         asyncio.run(_test())
 
