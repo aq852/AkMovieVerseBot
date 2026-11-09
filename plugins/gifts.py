@@ -1,3 +1,7 @@
+import os
+import shutil
+import tempfile
+import asyncio
 import re
 import html
 import logging
@@ -749,8 +753,14 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "require_shortener": False,
     "allow_reclaim": True,
     "auto_delete_seconds": 300,
-    "protect_content": True
+    "protect_content": True,
+    "photo_wait_seconds": 60,
+    "poster_mode": "ss"
 }
+
+# Pending queue of videos waiting for custom poster in GIFT_DB_CHANNEL
+# key: message_id -> dict: {"event": asyncio.Event, "photo_id": Optional[str], "chat_id": int, "file_name": str, "status_msg": Optional[Message]}
+_PENDING_GIFT_VIDEOS: dict[int, dict] = {}
 
 
 async def get_auto_gift_config() -> dict:
@@ -784,6 +794,29 @@ async def save_auto_gift_config(updates: dict):
         logger.error(f"Error saving auto gift config: {e}")
 
 
+async def extract_sample_clip_ffmpeg(video_path: str, start_sec: float, duration_sec: int, output_path: str) -> bool:
+    """Extract a 2-4 second preview clip using ffmpeg with safe fallback."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-ss", f"{start_sec:.2f}",
+            "-i", video_path,
+            "-t", str(duration_sec),
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "28",
+            "-movflags", "+faststart",
+            "-y", output_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await proc.communicate()
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
+            return True
+    except Exception as e:
+        logger.warning(f"ffmpeg sample clip extraction error: {e}")
+    return False
+
+
 def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup]:
     """Format stylish interactive dashboard and control keyboard for Auto-Gift publisher."""
     status_str = "🟢 ENABLED (Active)" if cfg.get("enabled") else "🔴 DISABLED (Paused)"
@@ -813,6 +846,17 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
     del_val = cfg.get("auto_delete_seconds", 300)
     del_str = "OFF (No deletion)" if del_val == 0 else f"{del_val // 60} Minutes"
 
+    wait_val = cfg.get("photo_wait_seconds", 60)
+    wait_str = "OFF (Instant Drop)" if wait_val == 0 else f"{wait_val}s Wait"
+
+    mode_val = cfg.get("poster_mode", "ss")
+    if mode_val == "sample":
+        mode_str = "🎬 2-4s Sample Video"
+    elif mode_val == "thumb":
+        mode_str = "📹 Video Thumbnail"
+    else:
+        mode_str = "📸 Auto Screenshot (SS)"
+
     lines = [
         "🎁 <b>AUTO-GIFT PUBLISHER DASHBOARD</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -825,22 +869,28 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         f"• <b>Shortener Verification:</b> {short_str}",
         f"• <b>Re-Download Shield:</b> {shield_str}",
         f"• <b>Auto-Delete Timer:</b> <code>{del_str}</code>",
-        "• <b>Poster Engine:</b> 📹 Video Thumbnail ➔ Auto Screenshot ➔ 3D Gift Box",
+        f"• <b>Photo Wait Window:</b> <code>{wait_str}</code>",
+        f"• <b>Poster Engine Mode:</b> <code>{mode_str}</code>",
+        "• <b>Fallback Chain:</b> Photo ➔ SS / Sample ➔ Thumb ➔ TMDB ➔ 3D Box",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "💡 <i>Any video dropped into your DB Channel will automatically be converted into a gift reward and published live!</i>\n",
         "<b>Commands to change settings:</b>",
         "• <code>/setgiftdb <channel_id></code> — Set listening DB channel",
         "• <code>/setgiftpost <channel_id></code> — Set public drops channel",
         "• <code>/setgiftchannels <@ch1, -100id...></code> — Set required channels",
+        "• <code>/setgiftwait <seconds></code> — 60s, 30s, or 0s for instant",
+        "• <code>/setgiftmode <ss|sample|thumb></code> — Screenshot, sample video, or thumb",
         "• <code>/setgiftdel <5m|10m|30m|off></code> — Set auto-delete timer",
         "• <code>/setgiftclaims <0|number></code> — 0 for unlimited",
-        "• <code>/setgiftduration <0|24h|48h></code> — 0 for lifetime"
+        "• <code>/setgiftshortener <on|off></code> — Shortener task toggle"
     ]
     text = "\n".join(lines)
 
     toggle_btn_text = "🔴 Turn OFF" if cfg.get("enabled") else "🟢 Turn ON"
     short_btn_text = "🔗 Shortener: OFF" if cfg.get("require_shortener") else "🔗 Shortener: ON"
     shield_btn_text = "🔒 Mode: Strict" if not cfg.get("allow_reclaim", True) else "🛡️ Mode: Hybrid"
+    mode_btn_text = f"🎨 Mode: {'SS' if mode_val == 'ss' else ('Sample' if mode_val == 'sample' else 'Thumb')}"
+    wait_btn_text = f"⏱️ Wait: {wait_str}"
 
     keyboard = [
         [
@@ -848,8 +898,12 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
             InlineKeyboardButton(short_btn_text, callback_data="agift_shortener")
         ],
         [
+            InlineKeyboardButton(mode_btn_text, callback_data="agift_mode"),
+            InlineKeyboardButton(wait_btn_text, callback_data="agift_wait")
+        ],
+        [
             InlineKeyboardButton(shield_btn_text, callback_data="agift_shield"),
-            InlineKeyboardButton(f"⏱️ Delete: {del_str}", callback_data="agift_autodel")
+            InlineKeyboardButton(f"⏳ Delete: {del_str}", callback_data="agift_autodel")
         ],
         [
             InlineKeyboardButton("🔄 Refresh Dashboard", callback_data="agift_refresh")
@@ -888,6 +942,29 @@ async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
         new_val = not cfg.get("require_shortener", False)
         await save_auto_gift_config({"require_shortener": new_val})
         await query.answer(f"Shortener {'Enabled' if new_val else 'Disabled'}!")
+
+    elif data == "agift_mode":
+        curr = cfg.get("poster_mode", "ss")
+        modes = ["ss", "sample", "thumb"]
+        try:
+            next_idx = (modes.index(curr) + 1) % len(modes)
+        except ValueError:
+            next_idx = 0
+        new_mode = modes[next_idx]
+        await save_auto_gift_config({"poster_mode": new_mode})
+        await query.answer(f"Poster Mode set to {new_mode.upper()}!")
+
+    elif data == "agift_wait":
+        curr = cfg.get("photo_wait_seconds", 60)
+        cycles = [60, 30, 0]
+        try:
+            next_idx = (cycles.index(curr) + 1) % len(cycles)
+        except ValueError:
+            next_idx = 0
+        new_wait = cycles[next_idx]
+        await save_auto_gift_config({"photo_wait_seconds": new_wait})
+        w_label = "Instant (0s)" if new_wait == 0 else f"{new_wait}s"
+        await query.answer(f"Photo Wait set to {w_label}!")
 
     elif data == "agift_shield":
         new_val = not cfg.get("allow_reclaim", True)
@@ -1028,6 +1105,44 @@ async def set_gift_shortener_command(client: Client, message: Message):
         await message.reply_text(f"Current Shortener Setting: <code>{'ON' if cfg.get('require_shortener') else 'OFF'}</code>\nUsage: <code>/setgiftshortener on|off</code>")
 
 
+@Client.on_message(filters.command("setgiftwait") & filters.private)
+async def set_gift_wait_command(client: Client, message: Message):
+    """Admin command to configure photo wait buffer in seconds (0 = instant)."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2 or not parts[1].strip().isdigit():
+        return await message.reply_text("Usage: <code>/setgiftwait <seconds></code>\nExample: <code>/setgiftwait 60</code> or <code>/setgiftwait 0</code> (instant)")
+
+    sec = int(parts[1].strip())
+    sec = max(0, min(300, sec))
+    await save_auto_gift_config({"photo_wait_seconds": sec})
+    w_str = "Instant (0s)" if sec == 0 else f"{sec} Seconds"
+    await message.reply_text(f"✅ <b>Photo Wait Buffer Set to:</b> <code>{w_str}</code>")
+
+
+@Client.on_message(filters.command("setgiftmode") & filters.private)
+async def set_gift_mode_command(client: Client, message: Message):
+    """Admin command to configure poster engine mode (ss | sample | thumb)."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    mode = parts[1].strip().lower() if len(parts) > 1 else ""
+    if mode not in ("ss", "sample", "thumb"):
+        return await message.reply_text(
+            "Usage: <code>/setgiftmode <ss | sample | thumb></code>\n\n"
+            "• <code>ss</code> : Auto Screenshot Frame with branding watermark (Default)\n"
+            "• <code>sample</code> : 2-4s Looping Sample Video Preview\n"
+            "• <code>thumb</code> : Native Video Thumbnail"
+        )
+
+    await save_auto_gift_config({"poster_mode": mode})
+    mode_names = {"ss": "Auto Screenshot Frame", "sample": "2-4s Sample Video", "thumb": "Native Video Thumbnail"}
+    await message.reply_text(f"✅ <b>Poster Engine Mode Set to:</b> <code>{mode_names[mode]}</code>")
+
+
 @Client.on_message(filters.command("setgiftdel") & filters.private)
 async def set_gift_del_command(client: Client, message: Message):
     """Admin command to configure auto-delete timer for delivered gift files."""
@@ -1091,6 +1206,67 @@ async def set_gift_duration_command(client: Client, message: Message):
     await message.reply_text(f"✅ <b>Default Duration Set to:</b> <code>{dur_sec // 3600} Hours</code>")
 
 
+@Client.on_message(filters.command(["postnow", "giftpostnow"]) & ~filters.private)
+async def auto_gift_post_now_command(client: Client, message: Message):
+    """Immediately publish pending video without waiting for photo timeout."""
+    if not message.reply_to_message or message.reply_to_message.id not in _PENDING_GIFT_VIDEOS:
+        pending_ids = [mid for mid, item in _PENDING_GIFT_VIDEOS.items() if item["chat_id"] == message.chat.id]
+        if not pending_ids:
+            return await message.reply_text("ℹ️ No pending gift drop waiting for photo in this channel.")
+        target_msg_id = max(pending_ids)
+    else:
+        target_msg_id = message.reply_to_message.id
+
+    item = _PENDING_GIFT_VIDEOS.get(target_msg_id)
+    if item:
+        item["event"].set()
+        await message.reply_text("⚡ <b>Skipping wait timer!</b> Processing and publishing gift drop now...", quote=True)
+
+
+# ==============================================================================
+# 🚀 Gift DB Channel Photo Listener (Custom Poster Interceptor)
+# ==============================================================================
+
+@Client.on_message(filters.photo & ~filters.private)
+async def auto_gift_photo_listener(client: Client, message: Message):
+    """Intercept custom poster photos sent into GIFT_DB_CHANNEL."""
+    cfg = await get_auto_gift_config()
+    if not cfg.get("enabled"):
+        return
+
+    db_ch = cfg.get("db_channel")
+    if not db_ch:
+        return
+
+    chat_id = message.chat.id
+    if str(chat_id) != str(db_ch) and (not message.chat.username or f"@{message.chat.username}".lower() != str(db_ch).lower()):
+        return
+
+    photo_id = message.photo.file_id
+
+    # Check if this photo is replying to a pending video
+    target_msg_id = None
+    if message.reply_to_message and message.reply_to_message.id in _PENDING_GIFT_VIDEOS:
+        target_msg_id = message.reply_to_message.id
+    else:
+        pending_ids = [mid for mid, item in _PENDING_GIFT_VIDEOS.items() if item["chat_id"] == chat_id]
+        if pending_ids:
+            target_msg_id = max(pending_ids)
+
+    if target_msg_id and target_msg_id in _PENDING_GIFT_VIDEOS:
+        item = _PENDING_GIFT_VIDEOS[target_msg_id]
+        item["photo_id"] = photo_id
+        item["event"].set()
+        try:
+            await message.reply_text(
+                f"📸 <b>Custom Poster Attached!</b>\n"
+                f"Assigned to <code>{html.escape(item['file_name'])}</code>. Publishing gift drop now...",
+                quote=True
+            )
+        except Exception:
+            pass
+
+
 # ==============================================================================
 # 🚀 Gift DB Channel Listener (Single-Post Automatic Publisher)
 # ==============================================================================
@@ -1135,19 +1311,96 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     clean_title = meta.get("clean_name") or file_name
     quality = meta.get("quality")
 
+    # Step 1: Check photo wait buffer (e.g. 60s for admin to send custom poster)
+    wait_sec = int(cfg.get("photo_wait_seconds", 60))
+    event = asyncio.Event()
+    pending_info = {
+        "event": event,
+        "photo_id": None,
+        "chat_id": chat_id,
+        "file_name": file_name,
+        "status_msg": None
+    }
+    _PENDING_GIFT_VIDEOS[message.id] = pending_info
+
+    if wait_sec > 0:
+        try:
+            pending_info["status_msg"] = await message.reply_text(
+                f"⏳ <b>Auto-Gift Pending:</b> <code>{html.escape(clean_title)}</code>\n"
+                f"⏱️ Waiting <b>{wait_sec}s</b> for custom poster photo (reply with photo or send photo)...\n"
+                f"💡 <i>Tip: Send /postnow or reply to skip waiting.</i>",
+                quote=True
+            )
+        except Exception:
+            pass
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=wait_sec)
+        except asyncio.TimeoutError:
+            pass
+
+    photo_id = pending_info.get("photo_id")
+    _PENDING_GIFT_VIDEOS.pop(message.id, None)
+
+    # Step 2: Poster & Sample Video Resolution Hierarchy
     poster_photo = None
-    if hasattr(media, "thumbs") and media.thumbs:
-        poster_photo = media.thumbs[0].file_id
+    sample_video_path = None
+    temp_dir = None
+    mode = cfg.get("poster_mode", "ss")
 
-    if not poster_photo:
-        tmdb_poster = await get_cached_poster_url(clean_title)
-        if tmdb_poster:
-            poster_photo = tmdb_poster
+    if photo_id:
+        poster_photo = photo_id
+    else:
+        # No custom photo sent: check if we can extract auto-screenshot or 2-4s sample video
+        max_extract_bytes = 250 * 1024 * 1024  # 250 MB safeguard limit
+        if mode in ("ss", "sample") and file_size <= max_extract_bytes:
+            temp_dir = tempfile.mkdtemp(prefix="autogift_")
+            try:
+                if pending_info["status_msg"]:
+                    status_text = "📸 Extracting HD screenshot..." if mode == "ss" else "🎬 Extracting 3s sample video preview..."
+                    try:
+                        await pending_info["status_msg"].edit_text(f"⚙️ <b>{status_text}</b>")
+                    except Exception:
+                        pass
 
-    if not poster_photo:
-        from database.gifts import DEFAULT_GIFT_POSTER
-        poster_photo = DEFAULT_GIFT_POSTER
+                video_local = await asyncio.wait_for(
+                    client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
+                    timeout=90.0
+                )
+                if video_local and os.path.exists(video_local):
+                    from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
+                    duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
+                    if duration <= 2:
+                        duration = 10.0
+                    start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
 
+                    if mode == "sample":
+                        s_path = os.path.join(temp_dir, "sample_preview.mp4")
+                        if await extract_sample_clip_ffmpeg(video_local, start_sec, 3, s_path):
+                            sample_video_path = s_path
+
+                    if not sample_video_path:
+                        f_path = os.path.join(temp_dir, "screenshot.jpg")
+                        if await extract_frame_ffmpeg(video_local, start_sec, f_path):
+                            watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
+                            apply_watermark(f_path, watermark_text=watermark)
+                            poster_photo = f_path
+            except Exception as e_proc:
+                logger.warning(f"Auto-gift media extraction failed: {e_proc}")
+
+        # Fallbacks if local media extraction was not performed or failed
+        if not poster_photo and not sample_video_path:
+            if hasattr(media, "thumbs") and media.thumbs:
+                poster_photo = media.thumbs[0].file_id
+            else:
+                tmdb_poster = await get_cached_poster_url(clean_title)
+                if tmdb_poster:
+                    poster_photo = tmdb_poster
+                else:
+                    from database.gifts import DEFAULT_GIFT_POSTER
+                    poster_photo = DEFAULT_GIFT_POSTER
+
+    # Step 3: Index file in MongoDB
     from database.files import save_file
     file_doc = {
         "file_id": file_id,
@@ -1165,6 +1418,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     except Exception as e_save:
         logger.debug(f"Auto-gift save_file note: {e_save}")
 
+    # Step 4: Create Gift in Database
     gift_doc = await create_gift(
         title=clean_title,
         file_type="single",
@@ -1186,6 +1440,8 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     gift_id = gift_doc.get("gift_id")
     if not gift_id:
         logger.error("Failed to generate gift_id for auto-gift drop!")
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
         return
 
     bot_uname = client.me.username if client.me else Config.BOT_USERNAME
@@ -1212,14 +1468,34 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         [InlineKeyboardButton("🎁 Claim Exclusive Reward ➔", url=claim_url)]
     ])
 
+    # Step 5: Send Live Card to Public Drops Channel
     try:
-        await client.send_photo(
-            chat_id=post_ch,
-            photo=poster_photo,
-            caption=caption_text,
-            reply_markup=markup
-        )
-        logger.info(f"Auto-gift successfully published to {post_ch} (Gift ID: {gift_id})")
+        if sample_video_path and os.path.exists(sample_video_path):
+            try:
+                await client.send_video(
+                    chat_id=post_ch,
+                    video=sample_video_path,
+                    caption=caption_text,
+                    reply_markup=markup,
+                    supports_streaming=True
+                )
+                logger.info(f"Auto-gift published with sample video preview to {post_ch} (Gift ID: {gift_id})")
+            except Exception as e_vid:
+                logger.warning(f"Sending sample video failed: {e_vid}, falling back to photo")
+                await client.send_photo(
+                    chat_id=post_ch,
+                    photo=poster_photo or DEFAULT_GIFT_POSTER,
+                    caption=caption_text,
+                    reply_markup=markup
+                )
+        else:
+            await client.send_photo(
+                chat_id=post_ch,
+                photo=poster_photo,
+                caption=caption_text,
+                reply_markup=markup
+            )
+            logger.info(f"Auto-gift successfully published to {post_ch} (Gift ID: {gift_id})")
     except Exception as e_post:
         logger.error(f"Failed to publish auto-gift to {post_ch}: {e_post}")
         try:
@@ -1231,12 +1507,20 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
             )
         except Exception:
             pass
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
+    # Step 6: Update status message or reply in DB channel
+    final_text = (
+        f"✅ <b>Gift Drop Published!</b>\n"
+        f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+        f"🔗 <b>Link:</b> {claim_url}"
+    )
     try:
-        await message.reply_text(
-            f"✅ <b>Gift Drop Published!</b>\n"
-            f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
-            f"🔗 <b>Link:</b> {claim_url}"
-        )
+        if pending_info.get("status_msg"):
+            await pending_info["status_msg"].edit_text(final_text)
+        else:
+            await message.reply_text(final_text, quote=True)
     except Exception:
         pass
