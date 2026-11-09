@@ -1437,7 +1437,9 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         file_doc=file_doc,
         total_files=1,
         total_size=file_size,
-        poster_url=poster_photo if isinstance(poster_photo, str) and poster_photo.startswith("http") else None,
+        poster_url=(
+            poster_photo if isinstance(poster_photo, str) and (poster_photo.startswith("http") or not os.path.exists(poster_photo)) else None
+        ),
         channels=cfg.get("channels", []),
         require_shortener=cfg.get("require_shortener", False),
         is_vip_only=False,
