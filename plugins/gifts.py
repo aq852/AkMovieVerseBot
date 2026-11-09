@@ -733,3 +733,510 @@ async def set_gift_channel_command(client: Client, message: Message):
         f"📢 <b>Target Channel:</b> <code>{title}</code> (<code>{target}</code>)\n\n"
         f"🚀 <i>Every new gift created with /gift or /giftbatch will now be automatically published directly to this channel!</i>"
     )
+
+# ==============================================================================
+# 🎁 Automated Gift Drops Engine & Interactive Settings Dashboard
+# ==============================================================================
+
+_AUTO_GIFT_CONFIG_CACHE = {
+    "loaded": False,
+    "enabled": False,
+    "db_channel": None,
+    "post_channel": None,
+    "claims": 0,
+    "duration_seconds": 0,
+    "channels": [],
+    "require_shortener": False,
+    "allow_reclaim": True,
+    "auto_delete_seconds": 300,
+    "protect_content": True
+}
+
+
+async def get_auto_gift_config() -> dict:
+    """Retrieve auto-gift publisher configuration from MongoDB with in-memory caching."""
+    global _AUTO_GIFT_CONFIG_CACHE
+    if _AUTO_GIFT_CONFIG_CACHE["loaded"]:
+        return _AUTO_GIFT_CONFIG_CACHE
+    try:
+        doc = await mongo.db["bot_settings"].find_one({"key": "auto_gift_config"})
+        if doc and "config" in doc:
+            _AUTO_GIFT_CONFIG_CACHE.update(doc["config"])
+    except Exception as e:
+        logger.debug(f"Error loading auto gift config: {e}")
+    _AUTO_GIFT_CONFIG_CACHE["loaded"] = True
+    return _AUTO_GIFT_CONFIG_CACHE
+
+
+async def save_auto_gift_config(updates: dict):
+    """Persist updated auto-gift publisher configuration to MongoDB."""
+    global _AUTO_GIFT_CONFIG_CACHE
+    cfg = await get_auto_gift_config()
+    cfg.update(updates)
+    _AUTO_GIFT_CONFIG_CACHE.update(cfg)
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "auto_gift_config"},
+            {"$set": {"config": cfg, "updated_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+    except Exception as e:
+        logger.error(f"Error saving auto gift config: {e}")
+
+
+def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Format stylish interactive dashboard and control keyboard for Auto-Gift publisher."""
+    status_str = "🟢 ENABLED (Active)" if cfg.get("enabled") else "🔴 DISABLED (Paused)"
+    db_val = cfg.get("db_channel")
+    db_str = f"<code>{db_val}</code>" if db_val else "<i>Not Set (Send /setgiftdb)</i>"
+    
+    post_val = cfg.get("post_channel")
+    post_str = f"<code>{post_val}</code>" if post_val else "<i>Not Set (Send /setgiftpost)</i>"
+    
+    claims_val = cfg.get("claims", 0)
+    claims_str = "♾️ Unlimited (No limit)" if claims_val == 0 else f"{claims_val} Claims"
+
+    dur_val = cfg.get("duration_seconds", 0)
+    if dur_val == 0:
+        dur_str = "♾️ Lifetime (Never expires)"
+    elif dur_val >= 86400:
+        dur_str = f"{dur_val // 86400} Days"
+    else:
+        dur_str = f"{dur_val // 3600} Hours"
+
+    chs = cfg.get("channels", [])
+    chs_str = ", ".join(chs) if chs else "<i>None (Direct File Delivery)</i>"
+
+    short_str = "🟢 ON (Task Required)" if cfg.get("require_shortener") else "🔴 OFF (Direct Claim)"
+    shield_str = "🛡️ Hybrid (Anti-Leave Shield)" if cfg.get("allow_reclaim", True) else "🔒 Strict (1-Claim Only)"
+
+    del_val = cfg.get("auto_delete_seconds", 300)
+    del_str = "OFF (No deletion)" if del_val == 0 else f"{del_val // 60} Minutes"
+
+    lines = [
+        "🎁 <b>AUTO-GIFT PUBLISHER DASHBOARD</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"• <b>Status:</b> {status_str}",
+        f"• <b>Listening DB Channel:</b> {db_str}",
+        f"• <b>Public Drops Channel:</b> {post_str}",
+        f"• <b>Default Claims:</b> <code>{claims_str}</code>",
+        f"• <b>Default Duration:</b> <code>{dur_str}</code>",
+        f"• <b>Required Channels:</b> <code>{chs_str}</code>",
+        f"• <b>Shortener Verification:</b> {short_str}",
+        f"• <b>Re-Download Shield:</b> {shield_str}",
+        f"• <b>Auto-Delete Timer:</b> <code>{del_str}</code>",
+        "• <b>Poster Engine:</b> 📹 Video Thumbnail ➔ Auto Screenshot ➔ 3D Gift Box",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "💡 <i>Any video dropped into your DB Channel will automatically be converted into a gift reward and published live!</i>\n",
+        "<b>Commands to change settings:</b>",
+        "• <code>/setgiftdb <channel_id></code> — Set listening DB channel",
+        "• <code>/setgiftpost <channel_id></code> — Set public drops channel",
+        "• <code>/setgiftchannels <@ch1, -100id...></code> — Set required channels",
+        "• <code>/setgiftdel <5m|10m|30m|off></code> — Set auto-delete timer",
+        "• <code>/setgiftclaims <0|number></code> — 0 for unlimited",
+        "• <code>/setgiftduration <0|24h|48h></code> — 0 for lifetime"
+    ]
+    text = "\n".join(lines)
+
+    toggle_btn_text = "🔴 Turn OFF" if cfg.get("enabled") else "🟢 Turn ON"
+    short_btn_text = "🔗 Shortener: OFF" if cfg.get("require_shortener") else "🔗 Shortener: ON"
+    shield_btn_text = "🔒 Mode: Strict" if not cfg.get("allow_reclaim", True) else "🛡️ Mode: Hybrid"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(f"⚡ {toggle_btn_text}", callback_data="agift_toggle"),
+            InlineKeyboardButton(short_btn_text, callback_data="agift_shortener")
+        ],
+        [
+            InlineKeyboardButton(shield_btn_text, callback_data="agift_shield"),
+            InlineKeyboardButton(f"⏱️ Delete: {del_str}", callback_data="agift_autodel")
+        ],
+        [
+            InlineKeyboardButton("🔄 Refresh Dashboard", callback_data="agift_refresh")
+        ]
+    ]
+
+    return text, InlineKeyboardMarkup(keyboard)
+
+
+@Client.on_message(filters.command(["giftsettings", "autogift", "giftconfig"]) & filters.private)
+async def gift_settings_command(client: Client, message: Message):
+    """Admin interactive dashboard to inspect and configure automated gift drops."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied:</b> Admin only.")
+
+    cfg = await get_auto_gift_config()
+    text, markup = format_gift_settings_dashboard(cfg)
+    await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+
+@Client.on_callback_query(filters.regex(r"^agift_"))
+async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
+    """Handle interactive dashboard button clicks."""
+    if not Config.is_admin(query.from_user.id):
+        return await query.answer("⛔ Admin only.", show_alert=True)
+
+    data = query.data
+    cfg = await get_auto_gift_config()
+
+    if data == "agift_toggle":
+        new_val = not cfg.get("enabled", False)
+        await save_auto_gift_config({"enabled": new_val})
+        await query.answer(f"Auto-Gift {'Enabled' if new_val else 'Disabled'}!")
+
+    elif data == "agift_shortener":
+        new_val = not cfg.get("require_shortener", False)
+        await save_auto_gift_config({"require_shortener": new_val})
+        await query.answer(f"Shortener {'Enabled' if new_val else 'Disabled'}!")
+
+    elif data == "agift_shield":
+        new_val = not cfg.get("allow_reclaim", True)
+        await save_auto_gift_config({"allow_reclaim": new_val})
+        await query.answer(f"Mode switched to {'Hybrid' if new_val else 'Strict'}!")
+
+    elif data == "agift_autodel":
+        curr = cfg.get("auto_delete_seconds", 300)
+        cycles = [300, 600, 1800, 0]
+        try:
+            next_idx = (cycles.index(curr) + 1) % len(cycles)
+        except ValueError:
+            next_idx = 0
+        new_val = cycles[next_idx]
+        await save_auto_gift_config({"auto_delete_seconds": new_val})
+        del_label = "OFF" if new_val == 0 else f"{new_val // 60}m"
+        await query.answer(f"Auto-Delete set to {del_label}!")
+
+    elif data == "agift_refresh":
+        await query.answer("Dashboard Refreshed!")
+
+    cfg = await get_auto_gift_config()
+    text, markup = format_gift_settings_dashboard(cfg)
+    try:
+        await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+    except Exception:
+        pass
+
+
+@Client.on_message(filters.command("setgiftdb") & filters.private)
+async def set_gift_db_command(client: Client, message: Message):
+    """Admin command to configure the private channel where gift files are uploaded."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text("Usage: <code>/setgiftdb <channel_id or @username></code>\nExample: <code>/setgiftdb -1001234567890</code>")
+
+    arg = parts[1].strip()
+    target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
+    title = str(target)
+    try:
+        chat = await client.get_chat(target)
+        if chat and chat.title:
+            title = chat.title
+            target = chat.id
+    except Exception as e:
+        logger.debug(f"Could not fetch chat info for {target}: {e}")
+
+    await save_auto_gift_config({"db_channel": target})
+    await message.reply_text(
+        f"✅ <b>GIFT DB CHANNEL CONFIGURED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📥 <b>Listening Channel:</b> <code>{title}</code> (<code>{target}</code>)\n\n"
+        f"🚀 <i>Any video sent or forwarded into this channel will automatically trigger a gift drop!</i>"
+    )
+
+
+@Client.on_message(filters.command("setgiftpost") & filters.private)
+async def set_gift_post_command(client: Client, message: Message):
+    """Admin command to configure the public channel where gift drop cards are posted."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text("Usage: <code>/setgiftpost <channel_id or @username></code>\nExample: <code>/setgiftpost @AkMovieVerse_Gifts</code>")
+
+    arg = parts[1].strip()
+    target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
+    title = str(target)
+    try:
+        chat = await client.get_chat(target)
+        if chat and chat.title:
+            title = chat.title
+            target = chat.id
+    except Exception as e:
+        logger.debug(f"Could not fetch chat info for {target}: {e}")
+
+    await save_auto_gift_config({"post_channel": target})
+    await message.reply_text(
+        f"✅ <b>GIFT PUBLIC DROPS CHANNEL CONFIGURED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📢 <b>Target Drops Channel:</b> <code>{title}</code> (<code>{target}</code>)\n\n"
+        f"🚀 <i>Every new automated gift drop will be published live to this channel!</i>"
+    )
+
+
+@Client.on_message(filters.command("setgiftchannels") & filters.private)
+async def set_gift_channels_command(client: Client, message: Message):
+    """Admin command to configure required sponsor channels (supports @channel, -100id, and -100id|invite)."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text(
+            "Usage: <code>/setgiftchannels <ch1, ch2, ch3...></code>\n\n"
+            "Supports:\n"
+            "• Public: <code>@AkMovieVerse, @AkBackup</code>\n"
+            "• Private: <code>-1001234567890</code>\n"
+            "• Private with custom invite: <code>-1001234567890 | https://t.me/+AbCdEfGh</code>\n"
+            "• Turn off: <code>/setgiftchannels off</code>"
+        )
+
+    arg = parts[1].strip()
+    if arg.lower() in ("off", "none", "clear", "0"):
+        await save_auto_gift_config({"channels": []})
+        return await message.reply_text("✅ <b>Required Sponsor Channels Cleared!</b> (Gifts will have direct access with no channel tasks)")
+
+    channel_items = [c.strip() for c in arg.split(",") if c.strip()]
+    await save_auto_gift_config({"channels": channel_items})
+    await message.reply_text(
+        f"✅ <b>REQUIRED SPONSOR CHANNELS UPDATED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📢 <b>Channels:</b> <code>{', '.join(channel_items)}</code>\n\n"
+        f"🔒 <i>Users must join all these channels before unlocking the gift!</i>"
+    )
+
+
+@Client.on_message(filters.command("setgiftshortener") & filters.private)
+async def set_gift_shortener_command(client: Client, message: Message):
+    """Admin command to toggle shortener verification on automated gift drops."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    val = parts[1].strip().lower() if len(parts) > 1 else ""
+    if val in ("on", "true", "yes", "enable", "1"):
+        await save_auto_gift_config({"require_shortener": True})
+        await message.reply_text("✅ <b>Shortener Verification Enabled for Auto-Gifts!</b>")
+    elif val in ("off", "false", "no", "disable", "0"):
+        await save_auto_gift_config({"require_shortener": False})
+        await message.reply_text("✅ <b>Shortener Verification Disabled for Auto-Gifts!</b> (Direct Access)")
+    else:
+        cfg = await get_auto_gift_config()
+        await message.reply_text(f"Current Shortener Setting: <code>{'ON' if cfg.get('require_shortener') else 'OFF'}</code>\nUsage: <code>/setgiftshortener on|off</code>")
+
+
+@Client.on_message(filters.command("setgiftdel") & filters.private)
+async def set_gift_del_command(client: Client, message: Message):
+    """Admin command to configure auto-delete timer for delivered gift files."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text("Usage: <code>/setgiftdel <5m|10m|30m|1h|off></code>")
+
+    arg = parts[1].strip().lower()
+    if arg in ("off", "0", "disable", "none"):
+        await save_auto_gift_config({"auto_delete_seconds": 0})
+        return await message.reply_text("✅ <b>Auto-Delete Disabled!</b> Delivered files will remain in chat permanently.")
+
+    dur_sec = parse_short_duration(arg)
+    if dur_sec is None or dur_sec <= 0:
+        return await message.reply_text("⚠️ Invalid duration! Use <code>5m</code>, <code>10m</code>, <code>30m</code>, or <code>1h</code>.")
+
+    await save_auto_gift_config({"auto_delete_seconds": dur_sec})
+    mins = dur_sec // 60
+    await message.reply_text(f"✅ <b>Gift Auto-Delete Timer Set to {mins} Minutes!</b> (Files will self-destruct after {mins}m)")
+
+
+@Client.on_message(filters.command("setgiftclaims") & filters.private)
+async def set_gift_claims_command(client: Client, message: Message):
+    """Admin command to configure default maximum claim limits."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2 or not parts[1].strip().isdigit():
+        return await message.reply_text("Usage: <code>/setgiftclaims <number></code> (Use 0 for unlimited)")
+
+    claims = int(parts[1].strip())
+    await save_auto_gift_config({"claims": claims})
+    c_str = "Unlimited" if claims == 0 else f"{claims} Claims"
+    await message.reply_text(f"✅ <b>Default Claims Set to:</b> <code>{c_str}</code>")
+
+
+@Client.on_message(filters.command("setgiftduration") & filters.private)
+async def set_gift_duration_command(client: Client, message: Message):
+    """Admin command to configure default gift drop expiry duration."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text("Usage: <code>/setgiftduration <0|24h|48h|7d></code> (Use 0 for lifetime)")
+
+    arg = parts[1].strip().lower()
+    if arg in ("0", "lifetime", "forever", "off"):
+        await save_auto_gift_config({"duration_seconds": 0})
+        return await message.reply_text("✅ <b>Default Duration Set to:</b> <code>Lifetime (Never Expires)</code>")
+
+    dur_sec = parse_short_duration(arg)
+    if dur_sec is None or dur_sec <= 0:
+        return await message.reply_text("⚠️ Invalid duration format! Use <code>24h</code>, <code>48h</code>, or <code>7d</code>.")
+
+    await save_auto_gift_config({"duration_seconds": dur_sec})
+    await message.reply_text(f"✅ <b>Default Duration Set to:</b> <code>{dur_sec // 3600} Hours</code>")
+
+
+# ==============================================================================
+# 🚀 Gift DB Channel Listener (Single-Post Automatic Publisher)
+# ==============================================================================
+
+@Client.on_message(filters.channel & (filters.video | filters.document))
+async def auto_gift_db_channel_listener(client: Client, message: Message):
+    """Automatically convert media dropped into GIFT_DB_CHANNEL into live gift drops."""
+    cfg = await get_auto_gift_config()
+    if not cfg.get("enabled"):
+        return
+
+    db_ch = cfg.get("db_channel")
+    post_ch = cfg.get("post_channel")
+    if not db_ch or not post_ch:
+        return
+
+    chat_id = message.chat.id
+    if chat_id != db_ch and str(chat_id) != str(db_ch):
+        if message.chat.username and f"@{message.chat.username}".lower() != str(db_ch).lower():
+            return
+
+    media = message.video or message.document
+    if not media:
+        return
+
+    if message.document:
+        fn_check = (getattr(message.document, "file_name", "") or "").lower()
+        mime_check = (getattr(message.document, "mime_type", "") or "").lower()
+        valid_exts = (".mkv", ".mp4", ".avi", ".webm", ".mov", ".flv", ".ts", ".m4v", ".zip", ".rar")
+        if not (any(fn_check.endswith(ext) for ext in valid_exts) or mime_check.startswith("video/")):
+            return
+
+    file_id = media.file_id
+    file_unique_id = media.file_unique_id
+    file_name = getattr(media, "file_name", None) or f"Video_{message.id}.mp4"
+    file_size = getattr(media, "file_size", 0)
+    mime_type = getattr(media, "mime_type", "")
+    caption = message.caption or ""
+
+    from utils.helpers import parse_media_metadata, get_readable_size, get_cached_poster_url
+    meta = parse_media_metadata(file_name, caption=caption)
+    clean_title = meta.get("clean_name") or file_name
+    quality = meta.get("quality")
+
+    poster_photo = None
+    if hasattr(media, "thumbs") and media.thumbs:
+        poster_photo = media.thumbs[0].file_id
+
+    if not poster_photo:
+        tmdb_poster = await get_cached_poster_url(clean_title)
+        if tmdb_poster:
+            poster_photo = tmdb_poster
+
+    if not poster_photo:
+        from database.gifts import DEFAULT_GIFT_POSTER
+        poster_photo = DEFAULT_GIFT_POSTER
+
+    from database.files import save_file
+    file_doc = {
+        "file_id": file_id,
+        "file_unique_id": file_unique_id,
+        "file_name": file_name,
+        "file_size": file_size,
+        "file_type": "video" if message.video else "document",
+        "mime_type": mime_type,
+        "caption": caption,
+        "channel_id": message.chat.id,
+        "message_id": message.id
+    }
+    try:
+        await save_file(file_doc)
+    except Exception as e_save:
+        logger.debug(f"Auto-gift save_file note: {e_save}")
+
+    gift_doc = await create_gift(
+        title=clean_title,
+        file_type="single",
+        file_doc=file_doc,
+        total_files=1,
+        total_size=file_size,
+        poster_url=poster_photo if isinstance(poster_photo, str) and poster_photo.startswith("http") else None,
+        channels=cfg.get("channels", []),
+        require_shortener=cfg.get("require_shortener", False),
+        is_vip_only=False,
+        protect_content=cfg.get("protect_content", True),
+        auto_delete_seconds=cfg.get("auto_delete_seconds", 300),
+        max_claims=cfg.get("claims", 0),
+        duration_seconds=cfg.get("duration_seconds", 0),
+        created_by=0,
+        allow_reclaim=cfg.get("allow_reclaim", True)
+    )
+
+    gift_id = gift_doc.get("gift_id")
+    if not gift_id:
+        logger.error("Failed to generate gift_id for auto-gift drop!")
+        return
+
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+    claim_url = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
+
+    dur_val = cfg.get("duration_seconds", 0)
+    validity_str = "♾️ Lifetime Access" if dur_val == 0 else f"⏳ {dur_val // 3600} Hours"
+    
+    claims_val = cfg.get("claims", 0)
+    claims_str = "♾️ Unlimited Claims" if claims_val == 0 else f"🔥 First {claims_val} Users Only"
+
+    caption_text = (
+        "🎁 <b>EXCLUSIVE REWARD DROP</b> 🎁\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
+        f"📦 <b>Details:</b> <code>{quality or 'HD'} • {get_readable_size(file_size)}</code>\n"
+        f"⚡ <b>Availability:</b> <code>{claims_str}</code>\n"
+        f"⏳ <b>Validity:</b> <code>{validity_str}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 <i>Click the button below to claim and receive your file instantly:</i>"
+    )
+
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎁 Claim Exclusive Reward ➔", url=claim_url)]
+    ])
+
+    try:
+        await client.send_photo(
+            chat_id=post_ch,
+            photo=poster_photo,
+            caption=caption_text,
+            reply_markup=markup
+        )
+        logger.info(f"Auto-gift successfully published to {post_ch} (Gift ID: {gift_id})")
+    except Exception as e_post:
+        logger.error(f"Failed to publish auto-gift to {post_ch}: {e_post}")
+        try:
+            await client.send_message(
+                chat_id=post_ch,
+                text=caption_text,
+                reply_markup=markup,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            pass
+
+    try:
+        await message.reply_text(
+            f"✅ <b>Gift Drop Published!</b>\n"
+            f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+            f"🔗 <b>Link:</b> {claim_url}"
+        )
+    except Exception:
+        pass

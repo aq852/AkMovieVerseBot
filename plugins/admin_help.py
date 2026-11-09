@@ -407,9 +407,9 @@ CATEGORY_CONTENT = {
 # Condensed Full Cheat Sheet (Guaranteed < 4096 Telegram char limit)
 CHEAT_SHEET_TEXT = (
     "📜 <b>Admin Commands Quick Reference</b>\n"
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "━━━━━━━━━━━━━━━━━━\n"
     "<blockquote expandable><b>🎁 GIFTS &amp; REWARDS:</b>\n"
-    "• <code>/gift</code> | <code>/giftbatch</code> | <code>/setgiftchannel</code> | <code>/gifts</code> | <code>/giftstats</code> | <code>/delgift</code> | <code>/giftban</code> | <code>/giftunban</code>\n"
+    "• <code>/gift</code> | <code>/giftbatch</code> | <code>/setgiftchannel</code> | <code>/gifts</code> | <code>/giftstats</code> | <code>/delgift</code> | <code>/giftban</code> | <code>/giftunban</code> | <code>/giftsettings</code>\n"
     "\n"
     "<b>📢 ADS &amp; SHORTENERS:</b>\n"
     "• <code>/setad</code> | <code>/ads</code> | <code>/delad</code> | <code>/shorteners</code> | <code>/shortenerstats</code> | <code>/set_web_url</code> | <code>/add_shortener</code> | <code>/del_shortener</code> | <code>/setfreelimit</code>\n"
@@ -455,7 +455,7 @@ CHEAT_SHEET_TEXT = (
     "• <code>/id</code> | <code>/info</code> | <code>/imdb</code> | <code>/request</code> | <code>/myrequests</code> | <code>/myalerts</code> | <code>/start</code> | <code>/help</code> | <code>/commands</code> | <code>/adminhelp</code>\n"
     "</blockquote>\n"
     "\n"
-    "💡 <i>Tap a category below for usage &amp; examples!</i>"
+    "💡 <i>Tap category below for usage &amp; examples!</i>"
 )
 
 

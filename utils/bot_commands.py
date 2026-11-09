@@ -157,6 +157,7 @@ ADMIN_COMMANDS = [
     BotCommand("gift", "Create task-locked gift: reply /gift [claims] [time]"),
     BotCommand("giftbatch", "Create batch gift: /giftbatch <batch_id> [claims]"),
     BotCommand("setgiftchannel", "Set gift drop channel: /setgiftchannel <id|off>"),
+    BotCommand("giftsettings", "Auto-gift publisher dashboard: /giftsettings"),
     BotCommand("gifts", "Active gift reward campaigns dashboard"),
     BotCommand("giftstats", "Live gift reward analytics: /giftstats [id]"),
     BotCommand("delgift", "Revoke gift campaign: /delgift <gift_id>"),

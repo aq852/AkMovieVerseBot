@@ -2180,5 +2180,61 @@ class TestAutoFilterEngine(unittest.TestCase):
         # Should not group all 3 into 1 group
         self.assertGreater(len(groups), 1)
 
+
+    def test_auto_gift_pipeline_and_settings(self):
+        """Verify Auto-Gift publisher settings dashboard, persistence, and channel listener logic."""
+        from plugins.gifts import (
+            get_auto_gift_config,
+            save_auto_gift_config,
+            format_gift_settings_dashboard
+        )
+        import asyncio
+
+        async def _test():
+            # 1. Default config check & saving
+            cfg = await get_auto_gift_config()
+            self.assertIn("enabled", cfg)
+            self.assertIn("db_channel", cfg)
+            self.assertIn("post_channel", cfg)
+
+            # 2. Update config with private channel support
+            await save_auto_gift_config({
+                "enabled": True,
+                "db_channel": -1001122334455,
+                "post_channel": -1009988776655,
+                "channels": ["@AkMovieVerse", "-1001234567890 | https://t.me/+customInvite"],
+                "require_shortener": False,
+                "allow_reclaim": True,
+                "auto_delete_seconds": 600,
+                "claims": 0,
+                "duration_seconds": 0
+            })
+
+            updated = await get_auto_gift_config()
+            self.assertTrue(updated["enabled"])
+            self.assertEqual(updated["db_channel"], -1001122334455)
+            self.assertEqual(updated["post_channel"], -1009988776655)
+            self.assertEqual(len(updated["channels"]), 2)
+            self.assertEqual(updated["auto_delete_seconds"], 600)
+
+            # 3. Test Dashboard Formatter
+            text, markup = format_gift_settings_dashboard(updated)
+            self.assertIn("AUTO-GIFT PUBLISHER DASHBOARD", text)
+            self.assertIn("ENABLED", text)
+            self.assertIn("-1001122334455", text)
+            self.assertIn("-1009988776655", text)
+            self.assertIn("10 Minutes", text)
+            self.assertIn("Hybrid", text)
+
+            # Check buttons
+            callback_data_list = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+            self.assertIn("agift_toggle", callback_data_list)
+            self.assertIn("agift_shortener", callback_data_list)
+            self.assertIn("agift_shield", callback_data_list)
+            self.assertIn("agift_autodel", callback_data_list)
+            self.assertIn("agift_refresh", callback_data_list)
+
+        asyncio.run(_test())
+
 if __name__ == "__main__":
     unittest.main()
