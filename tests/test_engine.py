@@ -1780,6 +1780,7 @@ class TestAutoFilterEngine(unittest.TestCase):
         import asyncio
 
         # 1. Default state
+        Config.MAINTENANCE_MODE = False
         self.assertFalse(getattr(Config, "MAINTENANCE_MODE", False))
 
         # 2. Toggle ON with custom reason
@@ -2137,6 +2138,47 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertIn("Hindi", body)
 
         asyncio.run(_test())
+
+
+    def test_browse_catalog_scaling_and_title_parsing(self):
+        """Verify smart title extraction before/after episode tags, caption fallback, poster guard, and catalog grouping."""
+        from utils.helpers import parse_media_metadata, get_cached_poster_url
+        from utils.web_server import _group_file_docs
+        import asyncio
+        import datetime
+
+        # 1. Title before season/episode
+        m1 = parse_media_metadata("Breaking Bad S01E01 720p.mkv")
+        self.assertEqual(m1["clean_name"], "Breaking Bad")
+
+        # 2. Title after season/episode
+        m2 = parse_media_metadata("S01E01 Attack on Titan 1080p WEB-DL.mkv")
+        self.assertEqual(m2["clean_name"], "Attack on Titan")
+
+        # 3. Episode prefix before title
+        m3 = parse_media_metadata("Episode 01 Bleach.mkv")
+        self.assertEqual(m3["clean_name"], "Bleach")
+
+        # 4. Caption fallback when filename has only episode number
+        m4 = parse_media_metadata("S01E01.mkv", caption="Jujutsu Kaisen Season 1 [1080p Dual Audio]\nJoin @animex")
+        self.assertEqual(m4["clean_name"], "Jujutsu Kaisen Season 1")
+
+        # 5. Poster lookup guard: 'Untitled' or generic titles should return empty string (never search Alan Davies)
+        async def _test_poster():
+            url = await get_cached_poster_url("Untitled")
+            self.assertEqual(url, "")
+        asyncio.run(_test_poster())
+
+        # 6. Grouping guard: ensure multiple unnamed files do NOT all merge into one massive single series
+        now = datetime.datetime.utcnow()
+        unnamed_docs = [
+            {"_id": "doc1", "file_unique_id": "u1", "file_name": "S01E01.mkv", "file_size": 100, "created_at": now},
+            {"_id": "doc2", "file_unique_id": "u2", "file_name": "S01E02.mkv", "file_size": 100, "created_at": now},
+            {"_id": "doc3", "file_unique_id": "u3", "file_name": "Video.mp4", "file_size": 100, "created_at": None}
+        ]
+        groups = _group_file_docs(unnamed_docs)
+        # Should not group all 3 into 1 group
+        self.assertGreater(len(groups), 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -114,7 +114,7 @@ async def get_cached_poster_url(title: str) -> str:
     clean_q = re.sub(r"\s*Season.*", "", clean_q, flags=re.IGNORECASE).strip()
     clean_q = re.sub(r"[\-_:\[\]\(\)]", " ", clean_q).strip()
     clean_q = re.sub(r"\s+", " ", clean_q)
-    if not clean_q or len(clean_q) < 2:
+    if not clean_q or len(clean_q) < 2 or clean_q.lower() in ["untitled", "movie video", "video", "none", "clip", "mediaclip"]:
         return ""
 
     # 1. Fast in-memory cache check
@@ -202,7 +202,7 @@ async def get_cached_poster_url(title: str) -> str:
     return ""
 
 
-def parse_media_metadata(filename: str) -> dict:
+def parse_media_metadata(filename: str, caption: str = "") -> dict:
     """Parse raw release filenames into clean titles, series/episode info, quality, and audio/codec badges."""
     if not filename:
         return {"title": "Movie Video", "quality": None, "badges": [], "is_dual_audio": False, "is_combined": False}
@@ -371,17 +371,57 @@ def parse_media_metadata(filename: str) -> dict:
     if src_match:
         split_indices.append(src_match.start())
 
-    if split_indices:
-        base_title = norm[:min(split_indices)].strip(" -_~|:")
-    else:
-        base_title = norm.strip()
-
-    # Clean release group clutter, pirate websites, and punctuation from base title
     from utils.title_cleaner import clean_movie_title
-    base_title = clean_movie_title(base_title, keep_year=False)
 
-    if not base_title or len(base_title) < 2:
-        base_title = clean_movie_title(raw_no_ext[:35], keep_year=False)
+    base_title = ""
+    # 6.a Candidate from text BEFORE season / episode / part / year / qual / src
+    if split_indices and min(split_indices) > 0:
+        cand_before = norm[:min(split_indices)].strip(" -_~|:")
+        clean_before = clean_movie_title(cand_before, keep_year=False) if cand_before else ""
+        if clean_before and clean_before.lower() not in ["untitled", "movie video", "video", "none"]:
+            base_title = clean_before
+
+    # 6.b If base_title before was empty/generic, and it has season/episode tags (e.g. S01E01 Title or Episode 01 Title),
+    # look AFTER the season/episode tag!
+    if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
+        ep_ends = []
+        if season_m:
+            ep_ends.append(season_m.end())
+        if single_ep_m:
+            ep_ends.append(single_ep_m.end())
+        if range_m:
+            ep_ends.append(range_m.end())
+        if ep_ends:
+            last_ep_end = max(ep_ends)
+            after_text = norm[last_ep_end:].strip(" -_~|:")
+            cuts = []
+            for pat in [
+                r"\b(2160p|4k|1080p|720p|540p|480p|360p)\b",
+                r"\b(19\d{2}|20\d{2})\b",
+                r"\b(WEB-?DL|WEBRip|BluRay|BRRip|HDRip|HDTV|CAMRip)\b",
+                r"\b(HEVC|H\.?265|x265|H\.?264|x264|AV1|10bit)\b"
+            ]:
+                m = re.search(pat, after_text, re.IGNORECASE)
+                if m:
+                    cuts.append(m.start())
+            cand_after = after_text[:min(cuts)].strip(" -_~|:") if cuts else after_text
+            clean_after = clean_movie_title(cand_after, keep_year=False) if cand_after else ""
+            if clean_after and clean_after.lower() not in ["untitled", "movie video", "video", "none"]:
+                base_title = clean_after
+
+    # 6.c If still no clean title and caption is provided, try extracting title from caption!
+    if (not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]) and caption:
+        first_line = caption.strip().split("\n")[0].strip()
+        if first_line:
+            clean_cap = clean_movie_title(first_line, keep_year=False)
+            if clean_cap and clean_cap.lower() not in ["untitled", "movie video", "video", "none"]:
+                base_title = clean_cap
+
+    # 6.d Final fallback to raw cleaned name
+    if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
+        base_title = clean_movie_title(raw_no_ext, keep_year=False)
+        if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
+            base_title = raw_no_ext[:40].strip() or "Media Clip"
 
     yr_str = f" ({year_m.group(1)})" if year_m and year_m.group(1) not in base_title else ""
     part_suffix = f" [{part_label}]" if is_part and part_label else ""

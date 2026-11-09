@@ -4801,7 +4801,8 @@ def _group_file_docs(docs: list) -> list:
 
     for d in docs:
         fname = d.get("file_name", "")
-        meta = parse_media_metadata(fname)
+        caption = d.get("caption", "")
+        meta = parse_media_metadata(fname, caption=caption)
         clean = meta.get("clean_name") or fname
         is_series = meta.get("is_series", False)
         s_num = meta.get("season")
@@ -4809,7 +4810,13 @@ def _group_file_docs(docs: list) -> list:
 
         norm_key = re.sub(r"[^\w]", "", clean.lower())
 
-        if is_series:
+        # Prevent generic/unnamed files from hijacking the catalog into a giant single card
+        if not norm_key or norm_key in ["untitled", "movievideo", "video", "none", "clip", "mediaclip"]:
+            fid = d.get("file_unique_id") or str(d.get("_id"))
+            group_key = f"clip:{fid}"
+            disp_title = clean or "Media Clip"
+            is_series = False
+        elif is_series:
             group_key = f"series:{norm_key}:s{s_num or 1}"
             disp_title = f"{clean} (Season {s_num or 1})"
         else:
@@ -4994,7 +5001,7 @@ def _group_file_docs(docs: list) -> list:
             )
             g["primary_file_id"] = ep_files[0].get("file_unique_id") or str(ep_files[0].get("_id"))
 
-    return sorted(groups.values(), key=lambda x: x["latest_date"], reverse=True)
+    return sorted(groups.values(), key=lambda x: x["latest_date"] or datetime.datetime.min, reverse=True)
 
 
 async def _preload_catalog_posters(items: list):
@@ -5010,12 +5017,34 @@ async def _preload_catalog_posters(items: list):
 
 
 async def get_grouped_catalog() -> list:
-    """Scan all files from MongoDB and group them into canonical Media Titles (Series & Movies)."""
+    """Scan files from MongoDB and group them into canonical Media Titles (Series & Movies)."""
     now = asyncio.get_event_loop().time()
     if _GROUPED_CATALOG_CACHE["groups"] and (now - _GROUPED_CATALOG_CACHE["timestamp"] < _CATALOG_CACHE_TTL):
         return _GROUPED_CATALOG_CACHE["groups"]
 
-    docs = await mongo.files.find({}).sort("_id", -1).to_list(1000)
+    fetch_limit = 5000
+    projection = {
+        "file_name": 1,
+        "file_size": 1,
+        "file_unique_id": 1,
+        "caption": 1,
+        "created_at": 1
+    }
+
+    try:
+        if not mongo.has_secondary:
+            docs = await mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+        else:
+            t1 = mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t2 = mongo.files_secondary.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            res1, res2 = await asyncio.gather(t1, t2, return_exceptions=True)
+            docs1 = res1 if isinstance(res1, list) else []
+            docs2 = res2 if isinstance(res2, list) else []
+            docs = sorted(docs1 + docs2, key=lambda d: d.get("created_at") or datetime.datetime.min, reverse=True)[:fetch_limit]
+    except Exception as e:
+        logger.error(f"Error fetching catalog docs from MongoDB: {e}")
+        docs = []
+
     sorted_catalog = _group_file_docs(docs)
     _GROUPED_CATALOG_CACHE["groups"] = sorted_catalog
     _GROUPED_CATALOG_CACHE["timestamp"] = now
