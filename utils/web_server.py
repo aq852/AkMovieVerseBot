@@ -6234,6 +6234,16 @@ async def verify_redirect_handler(request):
             html = VERIFY_ERROR_HTML.format(bot_username=Config.BOT_USERNAME or "bot")
             return web.Response(text=html, content_type="text/html", status=404)
 
+        # Record click timestamp for anti-cheat verification on gift task tokens
+        if str(token).startswith("gtok_"):
+            try:
+                await mongo.db["gift_task_tokens"].update_one(
+                    {"token": token},
+                    {"$set": {"clicked_at": datetime.datetime.utcnow()}}
+                )
+            except Exception as e_clk:
+                logger.debug(f"Error recording clicked_at for {token}: {e_clk}")
+
         target_url = doc.get("short_link") or doc.get("target_url")
         if not target_url:
             bot_username = Config.BOT_USERNAME or "bot"

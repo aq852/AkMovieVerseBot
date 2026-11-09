@@ -28,7 +28,10 @@ async def create_gift(
     created_by: int = 0,
     external_links: Optional[List[Dict[str, str]]] = None,
     required_invites: int = 0,
-    allow_reclaim: bool = True
+    allow_reclaim: bool = True,
+    ad_link: Optional[str] = None,
+    ad_wait_seconds: int = 3,
+    ad_button_text: str = "🌐 View Sponsored Offer ↗️"
 ) -> Dict[str, Any]:
     """Create a new gift reward campaign."""
     gift_id = secrets.token_hex(4).lower()  # 8 characters, e.g. "a9f2bc10"
@@ -60,6 +63,9 @@ async def create_gift(
         "allow_reclaim": bool(allow_reclaim),
         "external_links": external_links or [],
         "required_invites": int(required_invites or 0),
+        "ad_link": ad_link.strip() if ad_link else None,
+        "ad_wait_seconds": int(ad_wait_seconds or 3),
+        "ad_button_text": ad_button_text or "🌐 View Sponsored Offer ↗️",
         "claimed_count": 0,
         "claimed_users": [],
         "redownloads_count": 0,
@@ -262,7 +268,7 @@ async def is_gift_banned(user_id: int) -> bool:
 # Gift Task Verification Tokens (Shortener & External Ad Bypass)
 # ==============================================================================
 
-async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "shortener", target_url: str = "") -> str:
+async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "shortener", target_url: str = "", ad_wait_seconds: int = 0) -> str:
     """Generate a unique 1-time verification token for shortener or external link visit task."""
     token = f"gtok_{secrets.token_hex(6)}"
     now = datetime.datetime.utcnow()
@@ -274,6 +280,8 @@ async def create_gift_task_token(gift_id: str, user_id: int, task_type: str = "s
         "user_id": user_id,
         "task_type": task_type,
         "target_url": target_url.strip(),
+        "ad_wait_seconds": ad_wait_seconds,
+        "clicked_at": None,
         "is_verified": False,
         "created_at": now,
         "expires_at": expires_at

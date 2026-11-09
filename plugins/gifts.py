@@ -279,7 +279,10 @@ async def create_single_gift_handler(client: Client, message: Message):
         created_by=message.from_user.id,
         external_links=flags["external_links"],
         required_invites=flags["required_invites"],
-        allow_reclaim=flags["allow_reclaim"]
+        allow_reclaim=flags["allow_reclaim"],
+        ad_link=cfg.get("ad_link"),
+        ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
+        ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
     )
 
     if not doc:
@@ -911,7 +914,10 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "photo_wait_seconds": 60,
     "poster_mode": "ss",
     "post_header": "🔥 EXCLUSIVE DROP 🔥",
-    "post_button": "⚡ Get Full Video ➔"
+    "post_button": "⚡ Get Full Video ➔",
+    "ad_link": None,
+    "ad_wait_seconds": 3,
+    "ad_button_text": "🌐 View Sponsored Offer ↗️"
 }
 
 # Pending queue of videos waiting for custom poster in GIFT_DB_CHANNEL
@@ -1013,6 +1019,10 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
     else:
         mode_str = "📸 Auto Screenshot (SS)"
 
+    ad_val = cfg.get("ad_link")
+    ad_str = f"<code>{ad_val[:32]}...</code>" if ad_val else "<i>Disabled (Direct Claim)</i>"
+    ad_wait_val = cfg.get("ad_wait_seconds", 3)
+
     lines = [
         "🎁 <b>AUTO-GIFT PUBLISHER DASHBOARD</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -1023,6 +1033,7 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         f"• <b>Default Duration:</b> <code>{dur_str}</code>",
         f"• <b>Required Channels:</b> <code>{chs_str}</code>",
         f"• <b>Shortener Verification:</b> {short_str}",
+        f"• <b>Sponsor Ad Task:</b> {ad_str} ({ad_wait_val}s Anti-Cheat)",
         f"• <b>Re-Download Shield:</b> {shield_str}",
         f"• <b>Auto-Delete Timer:</b> <code>{del_str}</code>",
         f"• <b>Photo Wait Window:</b> <code>{wait_str}</code>",
@@ -1042,7 +1053,9 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         "• <code>/setgiftclaims <0|number></code> — 0 for unlimited",
         "• <code>/setgiftshortener <on|off></code> — Shortener task toggle",
         "• <code>/setgiftheader <text></code> — Customize drop post header",
-        "• <code>/setgiftbutton <text></code> — Customize drop claim button"
+        "• <code>/setgiftbutton <text></code> — Customize drop claim button",
+        "• <code>/setgiftad <url|off></code> — Set Adsterra / sponsor direct link",
+        "• <code>/setgiftadwait <seconds></code> — Anti-cheat timer (default 3s)"
     ]
     text = "\n".join(lines)
 
@@ -1418,6 +1431,63 @@ async def set_gift_button_command(client: Client, message: Message):
     await save_auto_gift_config({"post_button": new_btn})
     await message.reply_text(f"✅ <b>Post Button Updated!</b>\n\nNew Button: <code>{html.escape(new_btn)}</code>")
 
+@Client.on_message(filters.command("setgiftad") & filters.private)
+async def set_gift_ad_command(client: Client, message: Message):
+    """Admin command to configure Adsterra direct link or sponsor ad task."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        cfg = await get_auto_gift_config()
+        curr = cfg.get("ad_link")
+        curr_str = f"<code>{curr}</code>" if curr else "<i>None (Disabled)</i>"
+        return await message.reply_text(
+            f"📢 <b>Current Sponsor Ad Link:</b> {curr_str}\n\n"
+            f"<b>Usage:</b> <code>/setgiftad <url></code>\n"
+            f"<b>Example:</b> <code>/setgiftad https://www.profitablecpmrate.com/abcdefgh</code>\n\n"
+            f"<i>To disable:</i> <code>/setgiftad off</code>"
+        )
+
+    arg = parts[1].strip()
+    if arg.lower() in ("off", "none", "clear", "0", "disable"):
+        await save_auto_gift_config({"ad_link": None})
+        return await message.reply_text("✅ <b>Sponsor Ad Task Disabled!</b> (No ad task required on gift drops)")
+
+    if not (arg.startswith("http://") or arg.startswith("https://")):
+        return await message.reply_text("⚠️ Invalid URL! Link must start with <code>https://</code> or <code>http://</code>.")
+
+    await save_auto_gift_config({"ad_link": arg})
+    wait_sec = (await get_auto_gift_config()).get("ad_wait_seconds", 3)
+    await message.reply_text(
+        f"✅ <b>SPONSOR AD TASK CONFIGURED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🌐 <b>Ad URL:</b> <code>{html.escape(arg)}</code>\n"
+        f"⏱️ <b>Anti-Cheat Timer:</b> <code>{wait_sec} Seconds</code>\n"
+        f"🛡️ <i>Users must spend at least {wait_sec}s on the sponsor link before they can claim!</i>\n"
+        f"🔒 <i>URL will be masked with your domain on Telegram buttons!</i>"
+    )
+
+
+@Client.on_message(filters.command("setgiftadwait") & filters.private)
+async def set_gift_ad_wait_command(client: Client, message: Message):
+    """Admin command to configure anti-cheat wait timer in seconds for sponsor ads."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2 or not parts[1].strip().isdigit():
+        return await message.reply_text(
+            "Usage: <code>/setgiftadwait <seconds></code>\n"
+            "Example: <code>/setgiftadwait 3</code> or <code>/setgiftadwait 5</code>"
+        )
+
+    sec = int(parts[1].strip())
+    sec = max(1, min(60, sec))
+    await save_auto_gift_config({"ad_wait_seconds": sec})
+    await message.reply_text(f"✅ <b>Sponsor Ad Anti-Cheat Timer Set to:</b> <code>{sec} Seconds</code>")
+
+
 
 
 @Client.on_message(filters.command(["postnow", "giftpostnow"]) & ~filters.private)
@@ -1650,7 +1720,10 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         max_claims=cfg.get("claims", 0),
         duration_seconds=cfg.get("duration_seconds", 0),
         created_by=0,
-        allow_reclaim=cfg.get("allow_reclaim", True)
+        allow_reclaim=cfg.get("allow_reclaim", True),
+        ad_link=cfg.get("ad_link"),
+        ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
+        ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
     )
 
     gift_id = gift_doc.get("gift_id")

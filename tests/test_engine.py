@@ -2210,7 +2210,9 @@ class TestAutoFilterEngine(unittest.TestCase):
                     "photo_wait_seconds": 30,
                     "poster_mode": "sample",
                     "post_header": "🔥 EXCLUSIVE DROP 🔥",
-                    "post_button": "⚡ Get Full Video ➔"
+                    "post_button": "⚡ Get Full Video ➔",
+                    "ad_link": "https://adsterra.com/direct-link-123",
+                    "ad_wait_seconds": 3
                 })
 
                 updated = await get_auto_gift_config()
@@ -2223,6 +2225,8 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertEqual(updated["poster_mode"], "sample")
                 self.assertEqual(updated["post_header"], "🔥 EXCLUSIVE DROP 🔥")
                 self.assertEqual(updated["post_button"], "⚡ Get Full Video ➔")
+                self.assertEqual(updated["ad_link"], "https://adsterra.com/direct-link-123")
+                self.assertEqual(updated["ad_wait_seconds"], 3)
 
                 # 3. Test Dashboard Formatter
                 text, markup = format_gift_settings_dashboard(updated)
@@ -2236,6 +2240,8 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertIn("Sample Video", text)
                 self.assertIn("🔥 EXCLUSIVE DROP 🔥", text)
                 self.assertIn("⚡ Get Full Video ➔", text)
+                self.assertIn("Sponsor Ad Task", text)
+                self.assertIn("3s Anti-Cheat", text)
 
                 # Check buttons
                 callback_data_list = [btn.callback_data for row in markup.inline_keyboard for btn in row]
@@ -2266,11 +2272,51 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertTrue(_PENDING_GIFT_VIDEOS[9999]["event"].is_set())
                 self.assertEqual(_PENDING_GIFT_VIDEOS[9999]["photo_id"], "photo_file_id_123")
                 _PENDING_GIFT_VIDEOS.pop(9999, None)
+
+                # 6. Test Adsterra / Sponsor Task Anti-Cheat Timer
+                from database.gifts import create_gift_task_token, is_gift_task_verified
+                from database.mongo import mongo
+                import datetime
+                ad_tok = await create_gift_task_token(
+                    gift_id="test_ad_gift_99",
+                    user_id=77889900,
+                    task_type="ad_task",
+                    target_url="https://adsterra.com/direct-link-test",
+                    ad_wait_seconds=3
+                )
+                self.assertTrue(ad_tok.startswith("gtok_"))
+
+                # Before click
+                doc_before = await mongo.db["gift_task_tokens"].find_one({"token": ad_tok})
+                self.assertIsNotNone(doc_before)
+                self.assertIsNone(doc_before.get("clicked_at"))
+                self.assertFalse(doc_before.get("is_verified"))
+
+                # Simulate click from web gateway
+                past_click = datetime.datetime.utcnow() - datetime.timedelta(seconds=4)
+                await mongo.db["gift_task_tokens"].update_one(
+                    {"token": ad_tok},
+                    {"$set": {"clicked_at": past_click}}
+                )
+                doc_after = await mongo.db["gift_task_tokens"].find_one({"token": ad_tok})
+                elapsed = (datetime.datetime.utcnow() - doc_after["clicked_at"]).total_seconds()
+                self.assertGreaterEqual(elapsed, 3.0)
+
+                # Verify task
+                await mongo.db["gift_task_tokens"].update_one(
+                    {"token": ad_tok},
+                    {"$set": {"is_verified": True, "verified_at": datetime.datetime.utcnow()}}
+                )
+                self.assertTrue(await is_gift_task_verified("test_ad_gift_99", 77889900, "ad_task"))
+                await mongo.db["gift_task_tokens"].delete_many({"gift_id": "test_ad_gift_99"})
             finally:
                 # Restore original user settings
                 await save_auto_gift_config(orig_cfg)
 
         asyncio.run(_test())
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
