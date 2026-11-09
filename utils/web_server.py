@@ -6228,13 +6228,19 @@ async def verify_redirect_handler(request):
     try:
         doc = await mongo.verify.find_one({"token": token})
         if not doc:
+            doc = await mongo.db["gift_task_tokens"].find_one({"token": token})
+
+        if not doc:
             html = VERIFY_ERROR_HTML.format(bot_username=Config.BOT_USERNAME or "bot")
             return web.Response(text=html, content_type="text/html", status=404)
 
-        target_url = doc.get("short_link")
+        target_url = doc.get("short_link") or doc.get("target_url")
         if not target_url:
             bot_username = Config.BOT_USERNAME or "bot"
-            target_url = f"https://t.me/{bot_username}?start=verify_{token}"
+            if str(token).startswith("gtok_"):
+                target_url = f"https://t.me/{bot_username}?start=vgtok_{token}"
+            else:
+                target_url = f"https://t.me/{bot_username}?start=verify_{token}"
 
         import base64
         target_b64 = base64.b64encode(target_url.encode("utf-8")).decode("utf-8")

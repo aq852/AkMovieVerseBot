@@ -516,8 +516,25 @@ async def render_gift_page(
             token = await create_gift_task_token(gift_id, user_id, "shortener")
             target_url = f"https://t.me/{bot_uname}?start=vgtok_{token}"
             short_link = await get_shortlink(target_url)
+
+            # Save shortlink in token document for web gateway masking
+            try:
+                await mongo.db["gift_task_tokens"].update_one(
+                    {"token": token},
+                    {"$set": {"short_link": short_link}}
+                )
+            except Exception as e_tok:
+                logger.debug(f"Error saving short_link in gift_task_tokens: {e_tok}")
+
+            # Mask shortener link through clean branded gateway domain
+            web_gateway = Config.WEB_URL or Config.STREAM_URL
+            if web_gateway and str(web_gateway).startswith("http"):
+                masked_url = f"{str(web_gateway).rstrip('/')}/verify/{token}"
+            else:
+                masked_url = short_link
+
             button_rows.append([
-                InlineKeyboardButton("🔑 Complete Ad/Shortener Task ↗️", url=short_link)
+                InlineKeyboardButton("🔑 Complete 1-Time Ad Bypass ↗️", url=masked_url)
             ])
 
     card_lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

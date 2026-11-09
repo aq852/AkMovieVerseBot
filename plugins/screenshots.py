@@ -3,7 +3,7 @@ Video Screenshot Generator Module (Admin Only)
 ==============================================
 Extracts high-definition sample screenshots from videos/clips at evenly spaced intervals,
 applies custom branding watermark via Pillow, and delivers them in a compact Telegram photo album.
-Safeguards server memory with a 250 MB size cap.
+Safeguards server memory with a 500 MB size cap.
 """
 
 import os
@@ -28,7 +28,7 @@ from utils.helpers import get_readable_size, format_clean_title
 
 logger = logging.getLogger(__name__)
 
-MAX_SCREENSHOT_FILE_SIZE_MB = 250
+MAX_SCREENSHOT_FILE_SIZE_MB = 500
 
 
 def apply_watermark(image_path: str, watermark_text: str = "@AkMovieVerse") -> str:
@@ -140,7 +140,7 @@ async def generate_screenshots_command(client: Client, message: Message):
     if not media:
         return await message.reply_text("⚠️ <b>Invalid Media:</b> Please reply to a valid video file.")
 
-    # File size validation (250MB limit)
+    # File size validation (500MB limit)
     file_size = getattr(media, "file_size", 0)
     max_bytes = MAX_SCREENSHOT_FILE_SIZE_MB * 1024 * 1024
     if file_size > max_bytes:

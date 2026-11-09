@@ -295,19 +295,23 @@ async def create_single_gift_handler(client: Client, message: Message):
     validity_str = "Lifetime" if flags["duration_seconds"] == 0 else "Limited Time"
     vip_badge = " • 👑 <b>VIP Only</b>" if flags["is_vip_only"] else ""
 
+    cfg = await get_auto_gift_config()
+    post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+    post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
+
     card_text = (
-        "🎁 <b>EXCLUSIVE REWARD DROP</b> 🎁\n"
+        f"<b>{post_hdr}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 <b>Item:</b> <code>{html.escape(clean_title)}</code>\n"
         f"💾 <b>Size:</b> <code>{get_readable_size(file_size)}</code>  •  👥 <b>Stock:</b> <code>{stock_str}</code>\n"
         f"⏳ <b>Validity:</b> <code>{validity_str}</code>  •  ⏱️ <b>Auto-Delete:</b> <code>{del_str}</code>{vip_badge}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔗 <b>Claim Link:</b>\n"
-        f"<a href=\"{gift_link}\"><b>{gift_link}</b></a>"
+        "🔗 <b>Download / Watch Online:</b>\n"
+        f"👉 <a href=\"{gift_link}\"><b>⚡ CLICK HERE TO GET FULL VIDEO ⚡</b></a>"
     )
 
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎁 CLAIM EXCLUSIVE REWARD ↗️", url=gift_link)]
+        [InlineKeyboardButton(post_btn, url=gift_link)]
     ])
 
     # Auto-publish to configured gift drops channel
@@ -453,19 +457,23 @@ async def create_batch_gift_handler(client: Client, message: Message):
     stock_str = f"First {flags['claims']} Users" if flags["claims"] > 0 else "Unlimited"
     validity_str = "Lifetime" if flags["duration_seconds"] == 0 else "Limited Time"
 
+    cfg = await get_auto_gift_config()
+    post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+    post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
+
     card_text = (
-        "🎁 <b>EXCLUSIVE BATCH REWARD PACK</b> 🎁\n"
+        f"<b>{post_hdr}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 <b>Package:</b> <code>{html.escape(clean_title)}</code>\n"
         f"📁 <b>Files:</b> <code>{total_files} Files</code>  •  💾 <b>Size:</b> <code>{get_readable_size(total_size)}</code>\n"
         f"👥 <b>Stock:</b> <code>{stock_str}</code>  •  ⏱️ <b>Auto-Delete:</b> <code>{del_str}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔗 <b>Claim Link:</b>\n"
-        f"<a href=\"{gift_link}\"><b>{gift_link}</b></a>"
+        "🔗 <b>Download / Watch Online:</b>\n"
+        f"👉 <a href=\"{gift_link}\"><b>⚡ CLICK HERE TO GET COMPLETE PACK ⚡</b></a>"
     )
 
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎁 CLAIM COMPLETE BATCH PACK ↗️", url=gift_link)]
+        [InlineKeyboardButton(post_btn, url=gift_link)]
     ])
 
     # Auto-publish to configured gift drops channel
@@ -901,7 +909,9 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "auto_delete_seconds": 300,
     "protect_content": True,
     "photo_wait_seconds": 60,
-    "poster_mode": "ss"
+    "poster_mode": "ss",
+    "post_header": "🔥 EXCLUSIVE DROP 🔥",
+    "post_button": "⚡ Get Full Video ➔"
 }
 
 # Pending queue of videos waiting for custom poster in GIFT_DB_CHANNEL
@@ -1017,6 +1027,8 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         f"• <b>Auto-Delete Timer:</b> <code>{del_str}</code>",
         f"• <b>Photo Wait Window:</b> <code>{wait_str}</code>",
         f"• <b>Poster Engine Mode:</b> <code>{mode_str}</code>",
+        f"• <b>Post Header:</b> <code>{html.escape(cfg.get('post_header', '🔥 EXCLUSIVE DROP 🔥'))}</code>",
+        f"• <b>Post Button:</b> <code>{html.escape(cfg.get('post_button', '⚡ Get Full Video ➔'))}</code>",
         "• <b>Fallback Chain:</b> Photo ➔ SS / Sample ➔ Thumb ➔ TMDB ➔ 3D Box",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "💡 <i>Any video dropped into your DB Channel will automatically be converted into a gift reward and published live!</i>\n",
@@ -1028,7 +1040,9 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         "• <code>/setgiftmode <ss|sample|thumb></code> — Screenshot, sample video, or thumb",
         "• <code>/setgiftdel <5m|10m|30m|off></code> — Set auto-delete timer",
         "• <code>/setgiftclaims <0|number></code> — 0 for unlimited",
-        "• <code>/setgiftshortener <on|off></code> — Shortener task toggle"
+        "• <code>/setgiftshortener <on|off></code> — Shortener task toggle",
+        "• <code>/setgiftheader <text></code> — Customize drop post header",
+        "• <code>/setgiftbutton <text></code> — Customize drop claim button"
     ]
     text = "\n".join(lines)
 
@@ -1363,6 +1377,48 @@ async def set_gift_duration_command(client: Client, message: Message):
     await save_auto_gift_config({"duration_seconds": dur_sec})
     await message.reply_text(f"✅ <b>Default Duration Set to:</b> <code>{dur_sec // 3600} Hours</code>")
 
+@Client.on_message(filters.command("setgiftheader") & filters.private)
+async def set_gift_header_command(client: Client, message: Message):
+    """Admin command to configure custom header for automated gift drops."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        cfg = await get_auto_gift_config()
+        curr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+        return await message.reply_text(
+            f"Current Header: <code>{html.escape(curr)}</code>\n\n"
+            f"Usage: <code>/setgiftheader <text></code>\n"
+            f"Example: <code>/setgiftheader 🔥 EXCLUSIVE REWARD DROP 🔥</code>"
+        )
+
+    new_hdr = parts[1].strip()
+    await save_auto_gift_config({"post_header": new_hdr})
+    await message.reply_text(f"✅ <b>Post Header Updated!</b>\n\nNew Header: <b>{html.escape(new_hdr)}</b>")
+
+
+@Client.on_message(filters.command("setgiftbutton") & filters.private)
+async def set_gift_button_command(client: Client, message: Message):
+    """Admin command to configure custom button label for automated gift drops."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        cfg = await get_auto_gift_config()
+        curr = cfg.get("post_button", "⚡ Get Full Video ➔")
+        return await message.reply_text(
+            f"Current Button: <code>{html.escape(curr)}</code>\n\n"
+            f"Usage: <code>/setgiftbutton <text></code>\n"
+            f"Example: <code>/setgiftbutton ⚡ Get Full Video ➔</code>"
+        )
+
+    new_btn = parts[1].strip()
+    await save_auto_gift_config({"post_button": new_btn})
+    await message.reply_text(f"✅ <b>Post Button Updated!</b>\n\nNew Button: <code>{html.escape(new_btn)}</code>")
+
+
 
 @Client.on_message(filters.command(["postnow", "giftpostnow"]) & ~filters.private)
 async def auto_gift_post_now_command(client: Client, message: Message):
@@ -1510,7 +1566,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         poster_photo = photo_id
     else:
         # No custom photo sent: check if we can extract auto-screenshot or 2-4s sample video
-        max_extract_bytes = 250 * 1024 * 1024  # 250 MB safeguard limit
+        max_extract_bytes = 500 * 1024 * 1024  # 500 MB safeguard limit
         if mode in ("ss", "sample") and file_size <= max_extract_bytes:
             temp_dir = tempfile.mkdtemp(prefix="autogift_")
             try:
@@ -1613,19 +1669,23 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     claims_val = cfg.get("claims", 0)
     claims_str = "♾️ Unlimited Claims" if claims_val == 0 else f"🔥 First {claims_val} Users Only"
 
+    post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+    post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
+
     caption_text = (
-        "🎁 <b>EXCLUSIVE REWARD DROP</b> 🎁\n"
+        f"<b>{post_hdr}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
         f"📦 <b>Details:</b> <code>{quality or 'HD'} • {get_readable_size(file_size)}</code>\n"
         f"⚡ <b>Availability:</b> <code>{claims_str}</code>\n"
         f"⏳ <b>Validity:</b> <code>{validity_str}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "👇 <i>Click the button below to claim and receive your file instantly:</i>"
+        "🔗 <b>Download / Watch Online:</b>\n"
+        f"👉 <a href=\"{claim_url}\"><b>⚡ CLICK HERE TO GET FULL VIDEO ⚡</b></a>"
     )
 
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎁 Claim Exclusive Reward ➔", url=claim_url)]
+        [InlineKeyboardButton(post_btn, url=claim_url)]
     ])
 
     # Step 5: Send Live Card to Public Drops Channel

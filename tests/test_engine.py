@@ -1714,7 +1714,7 @@ class TestAutoFilterEngine(unittest.TestCase):
         from PIL import Image
         from plugins.screenshots import apply_watermark, MAX_SCREENSHOT_FILE_SIZE_MB
 
-        self.assertEqual(MAX_SCREENSHOT_FILE_SIZE_MB, 250)
+        self.assertEqual(MAX_SCREENSHOT_FILE_SIZE_MB, 500)
 
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
             temp_path = tf.name
@@ -2208,7 +2208,9 @@ class TestAutoFilterEngine(unittest.TestCase):
                     "claims": 0,
                     "duration_seconds": 0,
                     "photo_wait_seconds": 30,
-                    "poster_mode": "sample"
+                    "poster_mode": "sample",
+                    "post_header": "🔥 EXCLUSIVE DROP 🔥",
+                    "post_button": "⚡ Get Full Video ➔"
                 })
 
                 updated = await get_auto_gift_config()
@@ -2219,6 +2221,8 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertEqual(updated["auto_delete_seconds"], 600)
                 self.assertEqual(updated["photo_wait_seconds"], 30)
                 self.assertEqual(updated["poster_mode"], "sample")
+                self.assertEqual(updated["post_header"], "🔥 EXCLUSIVE DROP 🔥")
+                self.assertEqual(updated["post_button"], "⚡ Get Full Video ➔")
 
                 # 3. Test Dashboard Formatter
                 text, markup = format_gift_settings_dashboard(updated)
@@ -2230,6 +2234,8 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertIn("Hybrid", text)
                 self.assertIn("30s Wait", text)
                 self.assertIn("Sample Video", text)
+                self.assertIn("🔥 EXCLUSIVE DROP 🔥", text)
+                self.assertIn("⚡ Get Full Video ➔", text)
 
                 # Check buttons
                 callback_data_list = [btn.callback_data for row in markup.inline_keyboard for btn in row]
