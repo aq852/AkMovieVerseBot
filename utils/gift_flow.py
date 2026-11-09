@@ -401,37 +401,44 @@ async def render_gift_page(
         if new_invites < required_invites:
             invites_done = False
 
-    # E. Sponsored Ad Task (Adsterra / Partner Direct Link with Anti-Cheat Wait Timer)
-    ad_link = gift.get("ad_link")
+    # E. Sponsored Ad Tasks (Multi-Ad Support with Anti-Cheat Wait Timer)
+    raw_ad_links = gift.get("ad_links") or ([gift["ad_link"]] if gift.get("ad_link") else [])
+    ad_links = [str(u).strip() for u in raw_ad_links if str(u).strip().startswith("http")]
     ad_wait_sec = gift.get("ad_wait_seconds", 3)
-    ad_done = True
-    ad_token = ""
-    if ad_link:
-        ad_done = await is_gift_task_verified(gift_id, user_id, "ad_task")
-        if not ad_done:
+    ad_tasks_status = []  # list of (idx, is_done, token, ad_url)
+    all_ads_done = True
+
+    for a_idx, a_url in enumerate(ad_links, start=1):
+        a_task_type = f"ad_task_{a_idx}" if len(ad_links) > 1 else "ad_task"
+        is_a_done = await is_gift_task_verified(gift_id, user_id, a_task_type)
+        a_token = ""
+        if not is_a_done:
+            all_ads_done = False
             tok_doc = await mongo.db["gift_task_tokens"].find_one({
                 "gift_id": gift_id,
                 "user_id": user_id,
-                "task_type": "ad_task"
+                "task_type": a_task_type
             })
             if not tok_doc:
-                ad_token = await create_gift_task_token(
-                    gift_id, user_id, task_type="ad_task", target_url=ad_link, ad_wait_seconds=ad_wait_sec
+                a_token = await create_gift_task_token(
+                    gift_id, user_id, task_type=a_task_type, target_url=a_url, ad_wait_seconds=ad_wait_sec
                 )
             else:
-                ad_token = tok_doc["token"]
+                a_token = tok_doc["token"]
                 if callback_query:
                     clicked_at = tok_doc.get("clicked_at")
                     if not clicked_at:
+                        label = f"Sponsor Offer #{a_idx}" if len(ad_links) > 1 else "the Sponsor Offer"
                         return await callback_query.answer(
-                            "❌ Please tap the 'View Sponsored Offer' button first!",
+                            f"❌ Please tap '{label}' first!",
                             show_alert=True
                         )
                     elapsed = (datetime.datetime.utcnow() - clicked_at).total_seconds()
                     if elapsed < ad_wait_sec:
                         rem = int(ad_wait_sec - elapsed) + 1
+                        label = f"Sponsor Offer #{a_idx}" if len(ad_links) > 1 else "the sponsor page"
                         return await callback_query.answer(
-                            f"⏳ Please stay on the sponsor page for at least {ad_wait_sec}s!\n(Wait {rem}s more before verifying)",
+                            f"⏳ Please stay on {label} for at least {ad_wait_sec}s!\n(Wait {rem}s more before verifying)",
                             show_alert=True
                         )
                     else:
@@ -439,7 +446,11 @@ async def render_gift_page(
                             {"_id": tok_doc["_id"]},
                             {"$set": {"is_verified": True, "verified_at": datetime.datetime.utcnow()}}
                         )
-                        ad_done = True
+                        is_a_done = True
+        ad_tasks_status.append((a_idx, is_a_done, a_token, a_url))
+
+    if len(ad_tasks_status) > 0 and all(st[1] for st in ad_tasks_status):
+        all_ads_done = True
 
     # If VIP user, all tasks are automatically waived (VIP Perk)
     if user_is_vip:
@@ -447,12 +458,12 @@ async def render_gift_page(
         shortener_done = True
         all_ext_done = True
         invites_done = True
-        ad_done = True
+        all_ads_done = True
 
     # ==========================================================================
     # CASE A: ALL TASKS COMPLETED -> DELIVER REWARD!
     # ==========================================================================
-    if all_channels_done and shortener_done and all_ext_done and invites_done and ad_done:
+    if all_channels_done and shortener_done and all_ext_done and invites_done and all_ads_done:
         success, reason = await record_gift_claim(gift_id, user_id)
         if not success:
             if callback_query:
@@ -578,23 +589,24 @@ async def render_gift_page(
                 InlineKeyboardButton("🔑 Complete 1-Time Ad Bypass ↗️", url=masked_url)
             ])
 
-    # 5. Sponsored Ad Task row (Adsterra / Partner Link)
-    if ad_link:
-        tick = "✅" if ad_done else "❌"
-        status_txt = "Verified" if ad_done else f"Pending ({ad_wait_sec}s visit)"
-        card_lines.append(f"{tick} <b>Task {task_num}:</b> View Sponsored Partner Offer ({status_txt})")
+    # 5. Sponsored Ad Tasks rows (Multi-Ad Support)
+    web_gateway = Config.WEB_URL or Config.STREAM_URL
+    for a_idx, is_a_done, a_token, a_url in ad_tasks_status:
+        tick = "✅" if is_a_done else "❌"
+        status_txt = "Verified" if is_a_done else f"Pending ({ad_wait_sec}s visit)"
+        label = f"View Sponsor Offer #{a_idx}" if len(ad_tasks_status) > 1 else "View Sponsored Partner Offer"
+        card_lines.append(f"{tick} <b>Task {task_num}:</b> {label} ({status_txt})")
         task_num += 1
 
-        if not ad_done:
-            web_gateway = Config.WEB_URL or Config.STREAM_URL
+        if not is_a_done:
             if web_gateway and str(web_gateway).startswith("http"):
-                masked_url = f"{str(web_gateway).rstrip('/')}/verify/{ad_token}"
+                masked_url = f"{str(web_gateway).rstrip('/')}/verify/{a_token}"
             else:
-                masked_url = ad_link
+                masked_url = a_url
 
-            ad_btn_title = gift.get("ad_button_text") or "🌐 View Sponsored Offer ↗️"
+            btn_label = f"🌐 View Sponsor Offer #{a_idx} ↗️" if len(ad_tasks_status) > 1 else (gift.get("ad_button_text") or "🌐 View Sponsored Offer ↗️")
             button_rows.append([
-                InlineKeyboardButton(ad_btn_title, url=masked_url)
+                InlineKeyboardButton(btn_label, url=masked_url)
             ])
 
     card_lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

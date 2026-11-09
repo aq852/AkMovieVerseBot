@@ -30,6 +30,7 @@ async def create_gift(
     required_invites: int = 0,
     allow_reclaim: bool = True,
     ad_link: Optional[str] = None,
+    ad_links: Optional[List[str]] = None,
     ad_wait_seconds: int = 3,
     ad_button_text: str = "🌐 View Sponsored Offer ↗️"
 ) -> Dict[str, Any]:
@@ -63,7 +64,8 @@ async def create_gift(
         "allow_reclaim": bool(allow_reclaim),
         "external_links": external_links or [],
         "required_invites": int(required_invites or 0),
-        "ad_link": ad_link.strip() if ad_link else None,
+        "ad_link": (ad_links[0].strip() if ad_links and len(ad_links) > 0 else (ad_link.strip() if ad_link else None)),
+        "ad_links": [str(u).strip() for u in ad_links if str(u).strip().startswith("http")] if ad_links else ([ad_link.strip()] if ad_link and str(ad_link).strip().startswith("http") else []),
         "ad_wait_seconds": int(ad_wait_seconds or 3),
         "ad_button_text": ad_button_text or "🌐 View Sponsored Offer ↗️",
         "claimed_count": 0,

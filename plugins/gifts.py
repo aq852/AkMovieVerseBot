@@ -281,6 +281,7 @@ async def create_single_gift_handler(client: Client, message: Message):
         required_invites=flags["required_invites"],
         allow_reclaim=flags["allow_reclaim"],
         ad_link=cfg.get("ad_link"),
+        ad_links=cfg.get("ad_links", []),
         ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
         ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
     )
@@ -916,6 +917,7 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "post_header": "🔥 EXCLUSIVE DROP 🔥",
     "post_button": "⚡ Get Full Video ➔",
     "ad_link": None,
+    "ad_links": [],
     "ad_wait_seconds": 3,
     "ad_button_text": "🌐 View Sponsored Offer ↗️"
 }
@@ -1019,9 +1021,12 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
     else:
         mode_str = "📸 Auto Screenshot (SS)"
 
-    ad_val = cfg.get("ad_link")
-    ad_str = f"<code>{ad_val[:32]}...</code>" if ad_val else "<i>Disabled (Direct Claim)</i>"
+    ad_links = cfg.get("ad_links", [])
+    if not ad_links and cfg.get("ad_link"):
+        ad_links = [cfg["ad_link"]]
+    ad_count = len(ad_links)
     ad_wait_val = cfg.get("ad_wait_seconds", 3)
+    ad_str = f"<code>{ad_count} Active</code> ({ad_wait_val}s Anti-Cheat each)" if ad_count > 0 else "<i>Disabled (Direct Claim)</i>"
 
     lines = [
         "🎁 <b>AUTO-GIFT PUBLISHER DASHBOARD</b>",
@@ -1433,39 +1438,48 @@ async def set_gift_button_command(client: Client, message: Message):
 
 @Client.on_message(filters.command("setgiftad") & filters.private)
 async def set_gift_ad_command(client: Client, message: Message):
-    """Admin command to configure Adsterra direct link or sponsor ad task."""
+    """Admin command to configure single or multiple Adsterra / sponsor direct links."""
     if not Config.is_admin(message.from_user.id):
         return await message.reply_text("⛔ Admin only.")
 
     parts = message.text.split(None, 1)
     if len(parts) < 2:
         cfg = await get_auto_gift_config()
-        curr = cfg.get("ad_link")
-        curr_str = f"<code>{curr}</code>" if curr else "<i>None (Disabled)</i>"
+        links = cfg.get("ad_links", [])
+        if not links and cfg.get("ad_link"):
+            links = [cfg["ad_link"]]
+        curr_str = "\n".join([f"• <code>{html.escape(l)}</code>" for l in links]) if links else "<i>None (Disabled)</i>"
         return await message.reply_text(
-            f"📢 <b>Current Sponsor Ad Link:</b> {curr_str}\n\n"
-            f"<b>Usage:</b> <code>/setgiftad <url></code>\n"
-            f"<b>Example:</b> <code>/setgiftad https://www.profitablecpmrate.com/abcdefgh</code>\n\n"
+            f"📢 <b>Current Sponsor Ad Links ({len(links)}):</b>\n{curr_str}\n\n"
+            f"<b>Usage:</b> <code>/setgiftad <url1, url2, ...></code>\n"
+            f"<b>Example (Single):</b> <code>/setgiftad https://auctionr.org/...</code>\n"
+            f"<b>Example (Multiple):</b> <code>/setgiftad https://link1.com, https://link2.com</code>\n\n"
             f"<i>To disable:</i> <code>/setgiftad off</code>"
         )
 
     arg = parts[1].strip()
     if arg.lower() in ("off", "none", "clear", "0", "disable"):
-        await save_auto_gift_config({"ad_link": None})
-        return await message.reply_text("✅ <b>Sponsor Ad Task Disabled!</b> (No ad task required on gift drops)")
+        await save_auto_gift_config({"ad_links": [], "ad_link": None})
+        return await message.reply_text("✅ <b>All Sponsor Ad Tasks Disabled!</b> (Direct claim with no ad tasks)")
 
-    if not (arg.startswith("http://") or arg.startswith("https://")):
-        return await message.reply_text("⚠️ Invalid URL! Link must start with <code>https://</code> or <code>http://</code>.")
+    raw_urls = [u.strip() for u in arg.split(",") if u.strip()]
+    valid_urls = [u for u in raw_urls if u.startswith("http://") or u.startswith("https://")]
+    if not valid_urls:
+        return await message.reply_text("⚠️ No valid links found! Links must start with <code>https://</code> or <code>http://</code>.")
 
-    await save_auto_gift_config({"ad_link": arg})
+    await save_auto_gift_config({
+        "ad_links": valid_urls,
+        "ad_link": valid_urls[0]
+    })
     wait_sec = (await get_auto_gift_config()).get("ad_wait_seconds", 3)
+    items_str = "\n".join([f"{idx}. <code>{html.escape(u)}</code>" for idx, u in enumerate(valid_urls, start=1)])
     await message.reply_text(
-        f"✅ <b>SPONSOR AD TASK CONFIGURED!</b>\n"
+        f"✅ <b>{len(valid_urls)} SPONSOR AD TASKS CONFIGURED!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🌐 <b>Ad URL:</b> <code>{html.escape(arg)}</code>\n"
-        f"⏱️ <b>Anti-Cheat Timer:</b> <code>{wait_sec} Seconds</code>\n"
-        f"🛡️ <i>Users must spend at least {wait_sec}s on the sponsor link before they can claim!</i>\n"
-        f"🔒 <i>URL will be masked with your domain on Telegram buttons!</i>"
+        f"{items_str}\n\n"
+        f"⏱️ <b>Anti-Cheat Timer:</b> <code>{wait_sec} Seconds per offer</code>\n"
+        f"🛡️ <i>Users must spend at least {wait_sec}s on EACH link to verify!</i>\n"
+        f"💰 <i>Multi-ad earnings activated on every gift claim!</i>"
     )
 
 
@@ -1722,6 +1736,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         created_by=0,
         allow_reclaim=cfg.get("allow_reclaim", True),
         ad_link=cfg.get("ad_link"),
+        ad_links=cfg.get("ad_links", []),
         ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
         ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
     )
