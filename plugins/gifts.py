@@ -338,6 +338,13 @@ async def create_single_gift_handler(client: Client, message: Message):
                 )
 
             if ch_msg:
+                try:
+                    await mongo.db["gift_rewards"].update_one(
+                        {"gift_id": gift_id},
+                        {"$set": {"post_chat_id": gift_channel, "post_msg_id": ch_msg.id}}
+                    )
+                except Exception:
+                    pass
                 if str(gift_channel).startswith("-100"):
                     clean_cid = str(gift_channel)[4:]
                     channel_post_url = f"https://t.me/c/{clean_cid}/{ch_msg.id}"
@@ -489,6 +496,13 @@ async def create_batch_gift_handler(client: Client, message: Message):
                 )
 
             if ch_msg:
+                try:
+                    await mongo.db["gift_rewards"].update_one(
+                        {"gift_id": gift_id},
+                        {"$set": {"post_chat_id": gift_channel, "post_msg_id": ch_msg.id}}
+                    )
+                except Exception:
+                    pass
                 if str(gift_channel).startswith("-100"):
                     clean_cid = str(gift_channel)[4:]
                     channel_post_url = f"https://t.me/c/{clean_cid}/{ch_msg.id}"
@@ -612,7 +626,7 @@ async def list_gifts_dashboard(client: Client, message: Message):
 
 @Client.on_message(filters.command(["delgift", "revokegift"]) & filters.private)
 async def delete_gift_handler(client: Client, message: Message):
-    """Admin tool to immediately revoke and stop a gift reward link."""
+    """Admin tool to immediately revoke and stop a gift reward link, and remove its channel post."""
     if not Config.is_admin(message.from_user.id):
         return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
 
@@ -621,11 +635,143 @@ async def delete_gift_handler(client: Client, message: Message):
         return await message.reply_text("<b>Usage:</b> <code>/delgift &lt;gift_id&gt;</code>")
 
     gid = parts[1].strip()
+    gift_doc = await mongo.db["gift_rewards"].find_one({"gift_id": gid})
+    post_deleted = False
+    if gift_doc:
+        post_cid = gift_doc.get("post_chat_id")
+        post_mid = gift_doc.get("post_msg_id")
+        if post_cid and post_mid:
+            try:
+                await client.delete_messages(chat_id=post_cid, message_ids=post_mid)
+                post_deleted = True
+            except Exception as e_del:
+                logger.debug(f"Could not delete gift channel post: {e_del}")
+
     ok = await delete_gift(gid)
     if ok:
-        await message.reply_text(f"🗑️ <b>Gift campaign <code>{html.escape(gid)}</code> has been revoked successfully!</b>")
+        note = " (and its channel post was removed)" if post_deleted else ""
+        await message.reply_text(f"🗑️ <b>Gift campaign <code>{html.escape(gid)}</code> has been revoked successfully!</b>{note}")
     else:
         await message.reply_text("❌ Gift not found or already inactive.")
+
+
+@Client.on_message(filters.command(["delallgifts", "deleteallgifts", "clearallgifts", "revokeallgifts"]) & filters.private)
+async def delete_all_gifts_command(client: Client, message: Message):
+    """Admin tool to purge all gifts and delete their channel posts."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied:</b> Admin privileges required.")
+
+    total_count = await mongo.db["gift_rewards"].count_documents({})
+    if total_count == 0:
+        return await message.reply_text("ℹ️ <b>No gifts found:</b> Database currently has 0 gifts.")
+
+    confirm_markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🗑️ Yes, Delete All Gifts & Posts", callback_data="confirm_delallgifts"),
+            InlineKeyboardButton("❌ Cancel", callback_data="cancel_delallgifts")
+        ]
+    ])
+
+    await message.reply_text(
+        "⚠️ <b>CONFIRM BULK DELETE ALL GIFTS?</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• Total Gifts Found: <b>{total_count}</b>\n"
+        "• This will <b>delete all gift cards/posts</b> from your gift channel!\n"
+        "• All active gift links will immediately be revoked.\n\n"
+        "<i>Are you sure you want to proceed?</i>",
+        reply_markup=confirm_markup
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^(confirm|cancel)_delallgifts$"))
+async def del_all_gifts_callback(client: Client, query: CallbackQuery):
+    """Callback query handler for bulk gift deletion."""
+    if not Config.is_admin(query.from_user.id):
+        return await query.answer("⛔ Admin only.", show_alert=True)
+
+    if query.data == "cancel_delallgifts":
+        await query.answer("Bulk deletion cancelled.")
+        try:
+            await query.message.edit_text("❌ <b>Bulk delete cancelled.</b> All gift campaigns remain active.")
+        except Exception:
+            pass
+        return
+
+    await query.answer("Starting bulk deletion...", show_alert=False)
+    try:
+        await query.message.edit_text("⏳ <b>Deleting channel posts and clearing gift database...</b>")
+    except Exception:
+        pass
+
+    cursor = mongo.db["gift_rewards"].find({})
+    posts_by_channel = {}
+    total_gifts = 0
+
+    async for g in cursor:
+        total_gifts += 1
+        cid = g.get("post_chat_id")
+        mid = g.get("post_msg_id")
+        if cid and mid:
+            posts_by_channel.setdefault(cid, []).append(mid)
+
+    posts_deleted = 0
+    for cid, msg_ids in posts_by_channel.items():
+        for i in range(0, len(msg_ids), 100):
+            batch = msg_ids[i:i+100]
+            try:
+                await client.delete_messages(chat_id=cid, message_ids=batch)
+                posts_deleted += len(batch)
+            except Exception as e_del:
+                logger.warning(f"Error deleting post batch in {cid}: {e_del}")
+
+    # Wipe gift records and tokens from database
+    await mongo.db["gift_rewards"].delete_many({})
+    try:
+        await mongo.db["gift_task_tokens"].delete_many({})
+    except Exception:
+        pass
+
+    try:
+        await query.message.edit_text(
+            "✅ <b>ALL GIFTS SUCCESSFULLY DELETED!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🗑️ <b>Total Gifts Purged:</b> <code>{total_gifts}</code>\n"
+            f"📢 <b>Channel Posts Removed:</b> <code>{posts_deleted}</code>\n\n"
+            "🚀 <i>Your drops channel and database are clean!</i>"
+        )
+    except Exception:
+        pass
+
+
+@Client.on_message(filters.command(["cleargiftchannel", "cleargiftposts"]) & filters.private)
+async def clear_gift_channel_posts_command(client: Client, message: Message):
+    """Admin tool to delete recent posts directly from the gift drops channel."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    cfg = await get_auto_gift_config()
+    post_ch = cfg.get("post_channel") or await get_gift_channel()
+    if not post_ch:
+        return await message.reply_text("❌ No gift post channel configured yet. Use /setgiftpost first.")
+
+    parts = message.text.split()
+    count = 30
+    if len(parts) > 1 and parts[1].isdigit():
+        count = max(1, min(100, int(parts[1])))
+
+    status = await message.reply_text(f"⏳ <b>Scanning last {count} messages in {post_ch}...</b>")
+    msg_ids = []
+    try:
+        async for m in client.get_chat_history(post_ch, limit=count):
+            msg_ids.append(m.id)
+
+        if msg_ids:
+            await client.delete_messages(chat_id=post_ch, message_ids=msg_ids)
+            await status.edit_text(f"✅ <b>Successfully deleted {len(msg_ids)} recent posts from {post_ch}!</b>")
+        else:
+            await status.edit_text("ℹ️ No messages found to delete.")
+    except Exception as e:
+        await status.edit_text(f"❌ <b>Error deleting messages:</b> <code>{html.escape(str(e))}</code>\n<i>Ensure bot is Admin with 'Delete Messages' permission!</i>")
 
 
 # ==============================================================================
@@ -1483,10 +1629,11 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     ])
 
     # Step 5: Send Live Card to Public Drops Channel
+    sent_pub_msg = None
     try:
         if sample_video_path and os.path.exists(sample_video_path):
             try:
-                await client.send_video(
+                sent_pub_msg = await client.send_video(
                     chat_id=post_ch,
                     video=sample_video_path,
                     caption=caption_text,
@@ -1496,14 +1643,14 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                 logger.info(f"Auto-gift published with sample video preview to {post_ch} (Gift ID: {gift_id})")
             except Exception as e_vid:
                 logger.warning(f"Sending sample video failed: {e_vid}, falling back to photo")
-                await client.send_photo(
+                sent_pub_msg = await client.send_photo(
                     chat_id=post_ch,
                     photo=poster_photo or DEFAULT_GIFT_POSTER,
                     caption=caption_text,
                     reply_markup=markup
                 )
         else:
-            await client.send_photo(
+            sent_pub_msg = await client.send_photo(
                 chat_id=post_ch,
                 photo=poster_photo,
                 caption=caption_text,
@@ -1513,7 +1660,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     except Exception as e_post:
         logger.error(f"Failed to publish auto-gift to {post_ch}: {e_post}")
         try:
-            await client.send_message(
+            sent_pub_msg = await client.send_message(
                 chat_id=post_ch,
                 text=caption_text,
                 reply_markup=markup,
@@ -1524,6 +1671,15 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     finally:
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if sent_pub_msg:
+        try:
+            await mongo.db["gift_rewards"].update_one(
+                {"gift_id": gift_id},
+                {"$set": {"post_chat_id": post_ch, "post_msg_id": sent_pub_msg.id}}
+            )
+        except Exception:
+            pass
 
     # Step 6: Update status message or reply in DB channel
     final_text = (
