@@ -3396,6 +3396,11 @@ CATALOG_HTML = """<!DOCTYPE html>
             background: rgba(234, 88, 12, 0.9);
             color: #ffffff;
         }}
+        .cbadge-anime {{
+            background: linear-gradient(135deg, #ec4899, #d946ef);
+            color: #ffffff;
+            font-weight: 800;
+        }}
         .cbadge-new {{
             background: linear-gradient(135deg, #ef4444, #dc2626);
             color: #ffffff;
@@ -3628,6 +3633,7 @@ CATALOG_HTML = """<!DOCTYPE html>
             <a href="{browse_url}?filter=recent&q={search_query}" class="filter-pill {active_filter_recent}">⚡ Recently Updated</a>
             <a href="{browse_url}?filter=series&q={search_query}" class="filter-pill {active_filter_series}">📺 Web Series</a>
             <a href="{browse_url}?filter=movies&q={search_query}" class="filter-pill {active_filter_movies}">🎬 Movies</a>
+            <a href="{browse_url}?filter=anime&q={search_query}" class="filter-pill {active_filter_anime}">🌸 Anime</a>
             <a href="{browse_url}?quality=1080p&q={search_query}" class="filter-pill {active_filter_1080p}">💎 1080p FHD</a>
             <a href="{browse_url}?quality=720p&q={search_query}" class="filter-pill {active_filter_720p}">⚡ 720p HD</a>
             <a href="{browse_url}?quality=2160p&q={search_query}" class="filter-pill {active_filter_4k}">👑 4K UHD</a>
@@ -4791,7 +4797,16 @@ async def watch_handler(request: web.Request):
 
 # In-memory cached catalog to keep response times < 20ms
 _GROUPED_CATALOG_CACHE = {"timestamp": 0, "groups": []}
-_CATALOG_CACHE_TTL = 60.0  # 60 seconds
+_CATALOG_CACHE_TTL = 300.0  # 5 minutes fresh in-memory cache
+
+ANIME_KEYWORD_REGEX = re.compile(
+    r"\b(anime|naruto|one[\s._-]*piece|bleach|dragon[\s._-]*ball|demon[\s._-]*slayer|jujutsu|"
+    r"attack[\s._-]*on[\s._-]*titan|ghibli|pokemon|death[\s._-]*note|hero[\s._-]*academia|"
+    r"solo[\s._-]*leveling|chainsaw|tokyo[\s._-]*ghoul|hunter[\s._-]*x[\s._-]*hunter|haikyuu|"
+    r"beyblade|digimon|inuyasha|doraemon|shinchan|black[\s._-]*clover|steins[\s._-]*gate|"
+    r"fullmetal|code[\s._-]*geass|vinland|sword[\s._-]*art|fate|evangelion|berserk|isekai)\b",
+    re.IGNORECASE
+)
 
 
 def _group_file_docs(docs: list) -> list:
@@ -4954,6 +4969,10 @@ def _group_file_docs(docs: list) -> list:
         diff = (current_time - g["latest_date"]).total_seconds() if g["latest_date"] else 999999
         new_window = getattr(Config, "STREAM_NEW_TAG_DAYS", 2) * 86400
         g["is_recent"] = (diff <= new_window)
+        g["is_anime"] = bool(
+            ANIME_KEYWORD_REGEX.search(g.get("clean_name", "")) or
+            any(ANIME_KEYWORD_REGEX.search(f.get("file_name", "")) for f in g.get("files", []))
+        )
         g["episodes_count"] = len(g["episodes_map"])
         g["languages_list"] = sorted(list(g["languages"]))
         g["sorted_qualities"] = sorted(
@@ -5017,12 +5036,12 @@ async def _preload_catalog_posters(items: list):
 
 
 async def get_grouped_catalog() -> list:
-    """Scan files from MongoDB and group them into canonical Media Titles (Series & Movies)."""
+    """Scan files from MongoDB and group them into canonical Media Titles (Series, Movies & Anime)."""
     now = asyncio.get_event_loop().time()
     if _GROUPED_CATALOG_CACHE["groups"] and (now - _GROUPED_CATALOG_CACHE["timestamp"] < _CATALOG_CACHE_TTL):
         return _GROUPED_CATALOG_CACHE["groups"]
 
-    fetch_limit = int(getattr(Config, 'STREAM_CATALOG_LIMIT', 10000))
+    fetch_limit = int(getattr(Config, 'STREAM_CATALOG_LIMIT', 25000))
     projection = {
         "file_name": 1,
         "file_size": 1,
@@ -5032,15 +5051,44 @@ async def get_grouped_catalog() -> list:
     }
 
     try:
+        anime_regex = (
+            r"Anime|Naruto|One[\s._-]*Piece|Bleach|Dragon[\s._-]*Ball|Demon[\s._-]*Slayer|"
+            r"Attack[\s._-]*on[\s._-]*Titan|Jujutsu|Tokyo[\s._-]*Ghoul|Hunter[\s._-]*x[\s._-]*Hunter|"
+            r"Death[\s._-]*Note|Hero[\s._-]*Academia|Chainsaw|Solo[\s._-]*Leveling|Ghibli|Pokemon|"
+            r"Beyblade|Digimon|Haikyuu|Black[\s._-]*Clover|Inuyasha|Doraemon|Shinchan"
+        )
+
         if not mongo.has_secondary:
-            docs = await mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t_recent = mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t_anime = mongo.files.find({"file_name": {"$regex": anime_regex, "$options": "i"}}, projection).sort("_id", -1).limit(15000).to_list(15000)
+            res_recent, res_anime = await asyncio.gather(t_recent, t_anime, return_exceptions=True)
+            docs_recent = res_recent if isinstance(res_recent, list) else []
+            docs_anime = res_anime if isinstance(res_anime, list) else []
+
+            seen_ids = set()
+            docs = []
+            for d in docs_recent + docs_anime:
+                did = str(d["_id"])
+                if did not in seen_ids:
+                    seen_ids.add(did)
+                    docs.append(d)
         else:
             t1 = mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
             t2 = mongo.files_secondary.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
-            res1, res2 = await asyncio.gather(t1, t2, return_exceptions=True)
+            t_anime = mongo.files.find({"file_name": {"$regex": anime_regex, "$options": "i"}}, projection).sort("_id", -1).limit(15000).to_list(15000)
+            res1, res2, res_anime = await asyncio.gather(t1, t2, t_anime, return_exceptions=True)
             docs1 = res1 if isinstance(res1, list) else []
             docs2 = res2 if isinstance(res2, list) else []
-            docs = sorted(docs1 + docs2, key=lambda d: d.get("created_at") or datetime.datetime.min, reverse=True)[:fetch_limit]
+            docs_anime = res_anime if isinstance(res_anime, list) else []
+
+            seen_ids = set()
+            docs = []
+            for d in docs1 + docs2 + docs_anime:
+                did = str(d["_id"])
+                if did not in seen_ids:
+                    seen_ids.add(did)
+                    docs.append(d)
+            docs = sorted(docs, key=lambda d: d.get("created_at") or datetime.datetime.min, reverse=True)
     except Exception as e:
         logger.error(f"Error fetching catalog docs from MongoDB: {e}")
         docs = []
@@ -5382,6 +5430,8 @@ async def browse_handler(request: web.Request):
             continue
         if filter_type == "movies" and item["is_series"]:
             continue
+        if filter_type == "anime" and not item.get("is_anime"):
+            continue
         if filter_type == "recent" and not item["is_recent"]:
             continue
         if filter_type == "dualaudio":
@@ -5431,6 +5481,8 @@ async def browse_handler(request: web.Request):
         poster_url = poster if isinstance(poster, str) and poster else ""
 
         badges_top_html = []
+        if item.get("is_anime"):
+            badges_top_html.append('<span class="cbadge cbadge-anime">🌸 ANIME</span>')
         if item["is_recent"]:
             badges_top_html.append('<span class="cbadge cbadge-new">🔥 NEW EPS</span>' if item["is_series"] else '<span class="cbadge cbadge-new">🔥 NEW</span>')
         
@@ -5565,6 +5617,7 @@ async def browse_handler(request: web.Request):
         active_filter_recent=get_filter_class("recent"),
         active_filter_series=get_filter_class("series"),
         active_filter_movies=get_filter_class("movies"),
+        active_filter_anime=get_filter_class("anime"),
         active_filter_1080p=get_filter_class("", "1080p"),
         active_filter_720p=get_filter_class("", "720p"),
         active_filter_4k=get_filter_class("", "2160p"),
@@ -7179,6 +7232,9 @@ async def run_web_server():
     app.router.add_route("OPTIONS", "/stremio/{token}/manifest.json", stremio_options_handler)
     app.router.add_get("/stremio/{token}/stream/{media_type}/{item_id}", stremio_stream_handler)
     app.router.add_route("OPTIONS", "/stremio/{token}/stream/{media_type}/{item_id}", stremio_options_handler)
+
+    # Pre-warm media catalog cache in background for instant < 10ms browse page loads
+    asyncio.create_task(get_grouped_catalog())
 
     runner = web.AppRunner(app)
     await runner.setup()

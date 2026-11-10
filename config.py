@@ -84,7 +84,7 @@ class Config:
     MAX_CONCURRENT_STREAMS = int(os.environ.get("MAX_CONCURRENT_STREAMS", "30"))
     STREAM_URL = os.environ.get("STREAM_URL", "").rstrip("/") or os.environ.get("WEB_URL", "").rstrip("/")
     STREAM_NEW_TAG_DAYS = int(os.environ.get("STREAM_NEW_TAG_DAYS", "2"))
-    STREAM_CATALOG_LIMIT = int(os.environ.get("STREAM_CATALOG_LIMIT", "10000"))
+    STREAM_CATALOG_LIMIT = int(os.environ.get("STREAM_CATALOG_LIMIT", "25000"))
 
     # VIP Payment & Portal Settings
     UPI_ID = os.environ.get("UPI_ID", "ak00007@ptyes")
