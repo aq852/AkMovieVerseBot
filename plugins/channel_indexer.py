@@ -188,6 +188,9 @@ async def auto_channel_listener(client: Client, message: Message):
     if is_junk:
         return
 
+    media_info["source"] = "auto_index"
+    media_info["is_web_stream"] = True
+
     success, status = await save_file(media_info)
     if success:
         logger.info(f"Auto-indexed: {media_info['file_name']} from channel {message.chat.id}")
@@ -383,6 +386,8 @@ async def run_channel_crawl(
                     junk_count += 1
                     continue
 
+                media_info["source"] = "bulk_index"
+                media_info["is_web_stream"] = False
                 batch_media.append(media_info)
 
             # High-performance 50x bulk save into MongoDB

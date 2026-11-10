@@ -4825,8 +4825,8 @@ def _group_file_docs(docs: list) -> list:
 
         norm_key = re.sub(r"[^\w]", "", clean.lower())
 
-        # Prevent generic/unnamed files from hijacking the catalog into a giant single card
-        if not norm_key or norm_key in ["untitled", "movievideo", "video", "none", "clip", "mediaclip"]:
+        # Prevent generic/unnamed files and bare-code releases from hijacking the catalog into a giant single card or fake series
+        if meta.get("is_bare_code") or not norm_key or norm_key in ["untitled", "movievideo", "video", "none", "clip", "mediaclip"]:
             fid = d.get("file_unique_id") or str(d.get("_id"))
             group_key = f"clip:{fid}"
             disp_title = clean or "Media Clip"
@@ -5035,6 +5035,31 @@ async def _preload_catalog_posters(items: list):
             await asyncio.sleep(0.05)
 
 
+async def get_stream_catalog_settings() -> dict:
+    """Retrieve dynamic streaming catalog filter settings from MongoDB with sensible defaults."""
+    try:
+        from database.mongo import get_bot_setting
+        cutoff_id = await get_bot_setting("stream_catalog_cutoff_id", None)
+        mode = await get_bot_setting("stream_catalog_mode", "auto")
+        channels = await get_bot_setting("stream_catalog_channels", [])
+        hide_bare = await get_bot_setting("stream_hide_bare_codes", True)
+        return {
+            "cutoff_id": cutoff_id,
+            "mode": mode,
+            "channels": channels,
+            "hide_bare_codes": hide_bare
+        }
+    except Exception as e:
+        logger.debug(f"Error fetching stream catalog settings: {e}")
+        return {"cutoff_id": None, "mode": "auto", "channels": [], "hide_bare_codes": True}
+
+
+def clear_catalog_cache():
+    """Bust in-memory grouped catalog cache so website reflects settings updates immediately."""
+    _GROUPED_CATALOG_CACHE["groups"] = []
+    _GROUPED_CATALOG_CACHE["timestamp"] = 0
+
+
 async def get_grouped_catalog() -> list:
     """Scan files from MongoDB and group them into canonical Media Titles (Series, Movies & Anime)."""
     now = asyncio.get_event_loop().time()
@@ -5047,8 +5072,40 @@ async def get_grouped_catalog() -> list:
         "file_size": 1,
         "file_unique_id": 1,
         "caption": 1,
-        "created_at": 1
+        "created_at": 1,
+        "channel_id": 1,
+        "source": 1,
+        "is_web_stream": 1
     }
+
+    settings = await get_stream_catalog_settings()
+    cutoff_id = settings.get("cutoff_id")
+    mode = settings.get("mode", "auto")
+    channels = settings.get("channels", [])
+
+    base_query = {}
+    if cutoff_id:
+        try:
+            base_query["_id"] = {"$gte": ObjectId(cutoff_id)}
+        except Exception:
+            pass
+
+    if mode == "auto":
+        # In auto mode, only files marked as web stream or auto_index appear
+        # If cutoff_id is set, also allow files uploaded after cutoff unless specifically bulk_index
+        if cutoff_id:
+            base_query["$or"] = [
+                {"is_web_stream": True},
+                {"source": "auto_index"},
+                {"source": {"$ne": "bulk_index"}}
+            ]
+        else:
+            base_query["$or"] = [
+                {"is_web_stream": True},
+                {"source": "auto_index"}
+            ]
+    elif mode == "channels" and channels:
+        base_query["channel_id"] = {"$in": channels}
 
     try:
         anime_regex = (
@@ -5057,10 +5114,15 @@ async def get_grouped_catalog() -> list:
             r"Death[\s._-]*Note|Hero[\s._-]*Academia|Chainsaw|Solo[\s._-]*Leveling|Ghibli|Pokemon|"
             r"Beyblade|Digimon|Haikyuu|Black[\s._-]*Clover|Inuyasha|Doraemon|Shinchan"
         )
+        anime_filter = {"file_name": {"$regex": anime_regex, "$options": "i"}}
+        if base_query:
+            anime_query = {"$and": [base_query, anime_filter]}
+        else:
+            anime_query = anime_filter
 
         if not mongo.has_secondary:
-            t_recent = mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
-            t_anime = mongo.files.find({"file_name": {"$regex": anime_regex, "$options": "i"}}, projection).sort("_id", -1).limit(15000).to_list(15000)
+            t_recent = mongo.files.find(base_query, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t_anime = mongo.files.find(anime_query, projection).sort("_id", -1).limit(15000).to_list(15000)
             res_recent, res_anime = await asyncio.gather(t_recent, t_anime, return_exceptions=True)
             docs_recent = res_recent if isinstance(res_recent, list) else []
             docs_anime = res_anime if isinstance(res_anime, list) else []
@@ -5073,9 +5135,9 @@ async def get_grouped_catalog() -> list:
                     seen_ids.add(did)
                     docs.append(d)
         else:
-            t1 = mongo.files.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
-            t2 = mongo.files_secondary.find({}, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
-            t_anime = mongo.files.find({"file_name": {"$regex": anime_regex, "$options": "i"}}, projection).sort("_id", -1).limit(15000).to_list(15000)
+            t1 = mongo.files.find(base_query, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t2 = mongo.files_secondary.find(base_query, projection).sort("_id", -1).limit(fetch_limit).to_list(fetch_limit)
+            t_anime = mongo.files.find(anime_query, projection).sort("_id", -1).limit(15000).to_list(15000)
             res1, res2, res_anime = await asyncio.gather(t1, t2, t_anime, return_exceptions=True)
             docs1 = res1 if isinstance(res1, list) else []
             docs2 = res2 if isinstance(res2, list) else []
@@ -5103,6 +5165,7 @@ async def get_grouped_catalog() -> list:
 async def post_handler(request: web.Request):
     """Serve responsive Netflix/EonMovies-style Media Post Page for both Movies and Web Series."""
     slug_or_id = request.match_info.get("item_slug", "").strip() or request.match_info.get("series_slug", "").strip()
+    slug_or_id = urllib.parse.unquote(slug_or_id).strip()
     base_url = get_stream_base_url(request)
     browse_url = f"{base_url}/browse"
     channel_url = getattr(Config, "CHANNEL_URL", None) or "https://t.me/AkMovieVerse"
@@ -5160,7 +5223,7 @@ async def post_handler(request: web.Request):
                 "total_size": int(file_doc.get("file_size", 0))
             }
 
-    # 4. Smart Direct MongoDB Title Search Fallback (Zero 404s for any movie/series across all 588k+ files)
+    # 4. Smart Direct Multi-Cluster MongoDB Title Search Fallback (Zero 404s for any movie/series across all 588k+ files)
     if not target_item:
         raw_slug_words = [w for w in re.split(r"[^\w]+", slug_or_id) if w and len(w) >= 2]
         ignored_tokens = {"season", "series", "episode", "episodes", "complete", "pack", "movie", "movies", "hindi", "english", "dual", "audio", "print", "prints", "part", "parts"}
@@ -5170,10 +5233,13 @@ async def post_handler(request: web.Request):
 
         if search_tokens:
             try:
-                token_filters = [{"file_name": {"$regex": re.escape(t), "$options": "i"}} for t in search_tokens[:4]]
-                direct_docs = await mongo.files.find({"$and": token_filters}).sort("_id", -1).limit(60).to_list(60)
+                from database.files import get_search_results
+                query_str = " ".join(search_tokens)
+                direct_docs = await get_search_results(query_str, limit=60)
                 if not direct_docs and len(search_tokens) >= 2:
-                    direct_docs = await mongo.files.find({"$and": [{"file_name": {"$regex": re.escape(t), "$options": "i"}} for t in search_tokens[:2]]}).sort("_id", -1).limit(60).to_list(60)
+                    direct_docs = await get_search_results(" ".join(search_tokens[:2]), limit=60)
+                if not direct_docs and search_tokens:
+                    direct_docs = await get_search_results(search_tokens[0], limit=40)
 
                 if direct_docs:
                     grouped_matches = _group_file_docs(direct_docs)
@@ -5429,6 +5495,10 @@ async def browse_handler(request: web.Request):
     filtered_catalog = []
 
     for item in all_catalog:
+        # Hide bare clips without proper titles from main browse catalog unless user specifically searched for them
+        if not query and item.get("key", "").startswith("clip:"):
+            continue
+
         # 1. Search Query Filter
         if query:
             q_clean = query.lower()

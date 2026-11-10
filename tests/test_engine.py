@@ -2316,7 +2316,57 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_stream_catalog_management_and_bare_codes(self):
+        """Verify bare-code filtering (e.g. S02E33), dynamic stream cutoff settings, and cache clearance."""
+        from utils.helpers import parse_media_metadata
+        from utils.web_server import _group_file_docs, get_stream_catalog_settings, clear_catalog_cache
+        from database.mongo import set_bot_setting, get_bot_setting
+        import asyncio
 
+        # 1. Bare code detection
+        m_bare1 = parse_media_metadata("S02E33 720p AMZN WEB DL DDP2 0 H 265.mkv")
+        self.assertTrue(m_bare1["is_bare_code"])
+
+        m_bare2 = parse_media_metadata("S01E05 1080p.mkv")
+        self.assertTrue(m_bare2["is_bare_code"])
+
+        m_real = parse_media_metadata("Rares für Bares S02E27 720p AMZN WEB DL DDP2 0 H 265.mkv")
+        self.assertFalse(m_real["is_bare_code"])
+        self.assertEqual(m_real["clean_name"], "Rares für Bares")
+
+        m_movie = parse_media_metadata("Suicide.Squad.2016.1080p.EXTENDED.BluRay.mkv")
+        self.assertFalse(m_movie["is_bare_code"])
+        self.assertEqual(m_movie["clean_name"], "Suicide Squad")
+
+        # 2. Grouping verification: Bare code files are classified as clip: and NOT merged into fake series
+        docs = [
+            {"_id": "b1", "file_unique_id": "u_b1", "file_name": "S02E33 720p AMZN WEB DL DDP2 0 H 265.mkv", "file_size": 100},
+            {"_id": "b2", "file_unique_id": "u_b2", "file_name": "S02E32 720p AMZN WEB DL DDP2 0 H 265.mkv", "file_size": 100},
+            {"_id": "r1", "file_unique_id": "u_r1", "file_name": "Rares für Bares S02E27 720p AMZN WEB DL DDP2 0 H 265.mkv", "file_size": 100}
+        ]
+        groups = _group_file_docs(docs)
+        group_keys = [g["key"] for g in groups]
+        self.assertIn("clip:u_b1", group_keys)
+        self.assertIn("clip:u_b2", group_keys)
+        self.assertTrue(any(k.startswith("series:rares") for k in group_keys))
+
+        # 3. Dynamic stream settings & cache clearing
+        async def _test_settings():
+            orig_cutoff = await get_bot_setting("stream_catalog_cutoff_id", None)
+            orig_mode = await get_bot_setting("stream_catalog_mode", "auto")
+            w1 = await set_bot_setting("stream_catalog_cutoff_id", "673000000000000000000001")
+            w2 = await set_bot_setting("stream_catalog_mode", "channels")
+            if w1 and w2:
+                try:
+                    settings = await get_stream_catalog_settings()
+                    self.assertEqual(settings["cutoff_id"], "673000000000000000000001")
+                    self.assertEqual(settings["mode"], "channels")
+                finally:
+                    await set_bot_setting("stream_catalog_cutoff_id", orig_cutoff)
+                    await set_bot_setting("stream_catalog_mode", orig_mode)
+            clear_catalog_cache()
+
+        asyncio.run(_test_settings())
 
 
 if __name__ == "__main__":

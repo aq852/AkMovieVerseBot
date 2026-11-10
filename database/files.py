@@ -182,6 +182,8 @@ async def save_file(media: dict) -> tuple[bool, str]:
             "caption": media.get("caption", ""),
             "channel_id": media.get("channel_id"),
             "message_id": media.get("message_id"),
+            "source": media.get("source", "auto_index"),
+            "is_web_stream": media.get("is_web_stream", True),
             "created_at": datetime.datetime.utcnow()
         }
 
@@ -286,6 +288,8 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
             "caption": m.get("caption", ""),
             "channel_id": m.get("channel_id"),
             "message_id": m.get("message_id"),
+            "source": m.get("source", "bulk_index"),
+            "is_web_stream": m.get("is_web_stream", False),
             "created_at": now_utc
         }
         operations.append(InsertOne(file_doc))

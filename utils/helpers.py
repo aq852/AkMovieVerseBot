@@ -469,6 +469,8 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
         if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
             base_title = raw_no_ext[:40].strip() or "Media Clip"
 
+    is_bare_code = bool(re.match(r'^(?:S\d{1,2}[\s._-]*E\d{1,3}|S\d{1,2}|E\d{1,3}|Season|Episode)\b', base_title, re.IGNORECASE)) if base_title else False
+
     yr_str = f" ({year_m.group(1)})" if year_m and year_m.group(1) not in base_title else ""
     part_suffix = f" [{part_label}]" if is_part and part_label else ""
     clean_title = f"{base_title}{yr_str}{extra_title}{part_suffix}".strip()
@@ -495,6 +497,7 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
     return {
         "title": clean_title or raw,
         "clean_name": base_title,
+        "is_bare_code": is_bare_code,
         "year": int(year_m.group(1)) if year_m else None,
         "season": s_num,
         "episode": ep_num,
