@@ -4791,7 +4791,7 @@ async def watch_handler(request: web.Request):
 
 # In-memory cached catalog to keep response times < 20ms
 _GROUPED_CATALOG_CACHE = {"timestamp": 0, "groups": []}
-_CATALOG_CACHE_TTL = 30.0  # 30 seconds
+_CATALOG_CACHE_TTL = 60.0  # 60 seconds
 
 
 def _group_file_docs(docs: list) -> list:
@@ -5022,7 +5022,7 @@ async def get_grouped_catalog() -> list:
     if _GROUPED_CATALOG_CACHE["groups"] and (now - _GROUPED_CATALOG_CACHE["timestamp"] < _CATALOG_CACHE_TTL):
         return _GROUPED_CATALOG_CACHE["groups"]
 
-    fetch_limit = 5000
+    fetch_limit = int(getattr(Config, 'STREAM_CATALOG_LIMIT', 10000))
     projection = {
         "file_name": 1,
         "file_size": 1,
@@ -5105,6 +5105,38 @@ async def post_handler(request: web.Request):
                 "parts_map": {},
                 "total_size": int(file_doc.get("file_size", 0))
             }
+
+    # 4. Smart Direct MongoDB Title Search Fallback (Zero 404s for any movie/series across all 588k+ files)
+    if not target_item:
+        raw_slug_words = [w for w in re.split(r"[^\w]+", slug_or_id) if w and len(w) >= 2]
+        ignored_tokens = {"season", "series", "episode", "episodes", "complete", "pack", "movie", "movies", "hindi", "english", "dual", "audio", "print", "prints", "part", "parts"}
+        search_tokens = [w for w in raw_slug_words if w.lower() not in ignored_tokens and not w.isdigit()]
+        if not search_tokens and raw_slug_words:
+            search_tokens = [w for w in raw_slug_words if not w.isdigit()]
+
+        if search_tokens:
+            try:
+                token_filters = [{"file_name": {"$regex": re.escape(t), "$options": "i"}} for t in search_tokens[:4]]
+                direct_docs = await mongo.files.find({"$and": token_filters}).sort("_id", -1).limit(60).to_list(60)
+                if not direct_docs and len(search_tokens) >= 2:
+                    direct_docs = await mongo.files.find({"$and": [{"file_name": {"$regex": re.escape(t), "$options": "i"}} for t in search_tokens[:2]]}).sort("_id", -1).limit(60).to_list(60)
+
+                if direct_docs:
+                    grouped_matches = _group_file_docs(direct_docs)
+                    if grouped_matches:
+                        norm_slug = re.sub(r"[^\w]", "", slug_or_id.lower())
+                        best_match = None
+                        for gm in grouped_matches:
+                            gm_norm = re.sub(r"[^\w]", "", gm.get("slug", "").lower())
+                            gm_clean = re.sub(r"[^\w]", "", gm.get("clean_name", "").lower())
+                            if norm_slug in gm_norm or gm_norm in norm_slug or norm_slug in gm_clean or gm_clean in norm_slug:
+                                best_match = gm
+                                break
+                        target_item = best_match or grouped_matches[0]
+                        if _GROUPED_CATALOG_CACHE.get("groups"):
+                            _GROUPED_CATALOG_CACHE["groups"].append(target_item)
+            except Exception as e:
+                logger.error(f"Direct post_handler mongo search error for '{slug_or_id}': {e}")
 
     if not target_item:
         return web.Response(text="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#07090e] text-white flex flex-col items-center justify-center min-h-screen p-4 text-center" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;"><div class="text-5xl mb-4">🔍</div><h1 class="text-2xl font-bold mb-2">Title Not Found</h1><p class="text-gray-400 mb-6">This media item was not found in the catalog.</p><a href="/browse" class="px-5 py-2.5 bg-red-600 rounded-xl text-white font-bold">Return to Browse Catalog</a></body></html>""", content_type="text/html", status=404)
@@ -5376,6 +5408,8 @@ async def browse_handler(request: web.Request):
                     for g in extra_groups:
                         if g["key"] not in existing_keys:
                             filtered_catalog.append(g)
+                            if _GROUPED_CATALOG_CACHE.get("groups"):
+                                _GROUPED_CATALOG_CACHE["groups"].append(g)
             except Exception as e:
                 logger.debug(f"Direct browse search error: {e}")
 

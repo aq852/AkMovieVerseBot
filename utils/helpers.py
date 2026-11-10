@@ -284,22 +284,48 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
         range_m = re.search(r'\b(?:E|EP)\s*(\d{1,3})\s*[-–to]+\s*(?:E|EP)?\s*(\d{1,3})\b', norm, re.IGNORECASE)
     
     has_combined_word = bool(re.search(r'\b(COMBINED|COMPLETE|PACK|ALL\s*EPISODES)\b', norm, re.IGNORECASE))
-    season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})(?:[\s._-]*(?:E|EP|Episode|x)[\s._-]*(\d{1,3}))?\b', norm, re.IGNORECASE)
+    season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})(?:[\s._-]*(?:E|EP|Episode|x)[\s._-]*(\d{1,3}))\b', norm, re.IGNORECASE)
+    if not season_m:
+        season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})[\s._-]+(\d{1,3})\b', norm, re.IGNORECASE)
     if not season_m:
         season_m = re.search(r'\b(?:S|Season)[\s._-]*(\d{1,2})\b', norm, re.IGNORECASE)
 
     single_ep_m = re.search(r'\b(?:E|EP|Episode)[\s._-]*(\d{1,4})\b', norm, re.IGNORECASE)
-    has_single_ep = bool(single_ep_m or (season_m and season_m.group(2)))
+    has_single_ep = bool(single_ep_m or (season_m and len(season_m.groups()) >= 2 and season_m.group(2)))
     year_m = re.search(r'\b(19\d{2}|20\d{2})\b', norm)
 
-    is_series = bool(season_m or single_ep_m or range_m or has_combined_word)
+    # 5.a Trailing and Leading episode numbers without 'E' prefix (e.g. "Title_07", "Title - 01 480p", "04 - Title")
+    trail_ep_m = None
+    lead_ep_m = None
+    if not season_m and not single_ep_m and not range_m and not has_combined_word:
+        trail_match = re.search(
+            r'(?:[-_–\s]+|\b)(?:ep|e|episode)?\s*0*([1-9]\d{0,2})\s*(?:[-_–\s]+(?:480p|720p|1080p|2160p|4k|hevc|x264|x265|bluray|web|hdrip|dvdscr|aac|flac|hindi|english|dual)|$)',
+            norm, re.IGNORECASE
+        )
+        if trail_match:
+            cand_ep = int(trail_match.group(1))
+            if not (year_m and trail_match.start() == year_m.start()):
+                trail_ep_m = trail_match
+
+        if not trail_ep_m:
+            lead_match = re.match(r'^\s*0*([1-9]\d{0,2})\s*[-_–\s]+(.*?)$', norm, re.IGNORECASE)
+            if lead_match:
+                cand_lead = int(lead_match.group(1))
+                if cand_lead <= 999:
+                    lead_ep_m = lead_match
+
+    is_series = bool(season_m or single_ep_m or range_m or has_combined_word or trail_ep_m or lead_ep_m)
     s_num = int(season_m.group(1)) if season_m else (1 if is_series else None)
     
     ep_num = None
-    if season_m and season_m.group(2):
+    if season_m and len(season_m.groups()) >= 2 and season_m.group(2):
         ep_num = int(season_m.group(2))
     elif single_ep_m:
         ep_num = int(single_ep_m.group(1))
+    elif trail_ep_m:
+        ep_num = int(trail_ep_m.group(1))
+    elif lead_ep_m:
+        ep_num = int(lead_ep_m.group(1))
 
     combined_badge = None
     extra_title = ""
@@ -360,6 +386,8 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
         split_indices.append(season_m.start())
     if single_ep_m:
         split_indices.append(single_ep_m.start())
+    if trail_ep_m:
+        split_indices.append(trail_ep_m.start())
     if range_m:
         split_indices.append(range_m.start())
     if part_match_start is not None:
@@ -374,14 +402,21 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
     from utils.title_cleaner import clean_movie_title
 
     base_title = ""
-    # 6.a Candidate from text BEFORE season / episode / part / year / qual / src
-    if split_indices and min(split_indices) > 0:
+    # 6.a Leading episode number format (e.g. "04 - Suicide Squad Isekai")
+    if lead_ep_m:
+        cand_lead = lead_ep_m.group(2)
+        clean_lead = clean_movie_title(cand_lead, keep_year=False) if cand_lead else ""
+        if clean_lead and clean_lead.lower() not in ["untitled", "movie video", "video", "none"]:
+            base_title = clean_lead
+
+    # 6.b Candidate from text BEFORE season / episode / part / year / qual / src
+    if not base_title and split_indices and min(split_indices) > 0:
         cand_before = norm[:min(split_indices)].strip(" -_~|:")
         clean_before = clean_movie_title(cand_before, keep_year=False) if cand_before else ""
         if clean_before and clean_before.lower() not in ["untitled", "movie video", "video", "none"]:
             base_title = clean_before
 
-    # 6.b If base_title before was empty/generic, and it has season/episode tags (e.g. S01E01 Title or Episode 01 Title),
+    # 6.c If base_title before was empty/generic, and it has season/episode tags (e.g. S01E01 Title or Episode 01 Title),
     # look AFTER the season/episode tag!
     if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
         ep_ends = []
@@ -409,15 +444,23 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
             if clean_after and clean_after.lower() not in ["untitled", "movie video", "video", "none"]:
                 base_title = clean_after
 
-    # 6.c If still no clean title and caption is provided, try extracting title from caption!
-    if (not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]) and caption:
+    # 6.d If still no clean title or title is a bare code (e.g. S02E01 720p AMZN...) and caption is provided:
+    is_bare_code = bool(re.match(r'^(?:S\d{1,2}|E\d{1,3}|Season|Episode)\b', base_title, re.IGNORECASE)) if base_title else False
+    if (not base_title or is_bare_code or base_title.lower() in ["untitled", "movie video", "video", "none"]) and caption:
         first_line = caption.strip().split("\n")[0].strip()
         if first_line:
-            clean_cap = clean_movie_title(first_line, keep_year=False)
-            if clean_cap and clean_cap.lower() not in ["untitled", "movie video", "video", "none"]:
-                base_title = clean_cap
+            has_ep_in_cap = bool(re.search(r"\b(?:S\d{1,2}[\s._-]*E\d{1,3}|E\d{1,3}|Episode[\s._-]*\d{1,3})\b", first_line, re.IGNORECASE))
+            if has_ep_in_cap:
+                cap_meta = parse_media_metadata(first_line, caption="")
+                cap_clean = cap_meta.get("clean_name")
+                if cap_clean and not re.match(r"^(?:S\d{1,2}|E\d{1,3}|Season|Episode)\b", cap_clean, re.IGNORECASE) and cap_clean.lower() not in ["untitled", "movie video", "video", "none"]:
+                    base_title = cap_clean
+            if not base_title or is_bare_code or base_title.lower() in ["untitled", "movie video", "video", "none"]:
+                clean_cap = clean_movie_title(first_line, keep_year=False)
+                if clean_cap and not re.match(r"^(?:S\d{1,2}|E\d{1,3}|Season|Episode)\b", clean_cap, re.IGNORECASE) and clean_cap.lower() not in ["untitled", "movie video", "video", "none"]:
+                    base_title = clean_cap
 
-    # 6.d Final fallback to raw cleaned name
+    # 6.e Final fallback to raw cleaned name
     if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:
         base_title = clean_movie_title(raw_no_ext, keep_year=False)
         if not base_title or base_title.lower() in ["untitled", "movie video", "video", "none"]:

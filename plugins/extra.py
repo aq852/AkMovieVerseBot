@@ -433,6 +433,26 @@ async def back_home_callback(client: Client, query: CallbackQuery):
     await query.answer()
 
 
+async def get_vip_payment_info() -> dict:
+    """Retrieve dynamic VIP payment info (UPI ID, QR URL, USDT Address) from MongoDB with Config fallback."""
+    try:
+        from database.mongo import mongo
+        doc = await mongo.db["bot_settings"].find_one({"key": "vip_payment"})
+        if doc:
+            return {
+                "upi_id": doc.get("upi_id") or Config.UPI_ID,
+                "upi_qr_url": doc.get("upi_qr_url") or Config.UPI_QR_URL,
+                "usdt_trc20": doc.get("usdt_trc20") or Config.USDT_TRC20
+            }
+    except Exception as e:
+        logger.debug(f"Error reading vip_payment settings: {e}")
+    return {
+        "upi_id": Config.UPI_ID,
+        "upi_qr_url": Config.UPI_QR_URL,
+        "usdt_trc20": Config.USDT_TRC20
+    }
+
+
 @Client.on_callback_query(filters.regex(r"^view_plans"))
 async def view_plans_callback(client: Client, query: CallbackQuery):
     text = get_plans_text()
@@ -440,10 +460,12 @@ async def view_plans_callback(client: Client, query: CallbackQuery):
 
     try:
         if query.message.photo:
-            if Config.UPI_QR_URL:
+            pay_info = await get_vip_payment_info()
+            qr_url = pay_info.get("upi_qr_url")
+            if qr_url:
                 try:
                     await query.message.edit_media(
-                        media=InputMediaPhoto(Config.UPI_QR_URL, caption=text),
+                        media=InputMediaPhoto(qr_url, caption=text),
                         reply_markup=markup
                     )
                     await query.answer()
@@ -461,12 +483,16 @@ async def view_plans_callback(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^buyplan_"))
 async def buy_plan_callback(client: Client, query: CallbackQuery):
     plan_key = query.data.split("buyplan_")[1]
+    pay_info = await get_vip_payment_info()
+    active_usdt = pay_info.get("usdt_trc20") or Config.USDT_TRC20
+    active_upi = pay_info.get("upi_id") or Config.UPI_ID
+    active_qr = pay_info.get("upi_qr_url") or Config.UPI_QR_URL
 
     if plan_key == "crypto":
         text = (
             "🌐 <b>AKMOVIEVERSE VIP — CRYPTO / USDT TRC-20</b>\n\n"
             "Pay using USDT on the TRC-20 network or Binance Pay.\n\n"
-            f"💎 <b>USDT TRC-20 Address:</b> (tap to copy)\n<code>{Config.USDT_TRC20}</code>\n\n"
+            f"💎 <b>USDT TRC-20 Address:</b> (tap to copy)\n<code>{active_usdt}</code>\n\n"
             "💰 <b>Crypto Pricing Equivalents:</b>\n"
             "• <b>30 Days:</b> 1 USDT\n"
             "• <b>60 Days:</b> 1.5 USDT\n"
@@ -498,9 +524,9 @@ async def buy_plan_callback(client: Client, query: CallbackQuery):
         f"💎 <b>AKMOVIEVERSE VIP — {plan['name'].upper()}</b>\n"
         f"💰 <b>Amount to Pay:</b> <code>{plan['price']}</code> ({plan['usd']})\n\n"
         f"📲 <b>UPI ID:</b> (tap to copy)\n"
-        f"<code>{Config.UPI_ID}</code>\n\n"
+        f"<code>{active_upi}</code>\n\n"
         f"📝 <b>Easy Steps to Activate:</b>\n"
-        f"1. Scan the QR code or pay <b>{plan['price']}</b> to <code>{Config.UPI_ID}</code>.\n"
+        f"1. Scan the QR code or pay <b>{plan['price']}</b> to <code>{active_upi}</code>.\n"
         f"2. Take a screenshot of the successful transaction.\n"
         f"3. Click <b>'📸 Send Payment Proof'</b> below and upload your screenshot.\n"
         f"4. Your VIP will be verified & activated within minutes!"
@@ -515,12 +541,12 @@ async def buy_plan_callback(client: Client, query: CallbackQuery):
         if query.message.photo:
             await query.message.edit_caption(caption=text, reply_markup=markup)
         else:
-            if Config.UPI_QR_URL:
+            if active_qr:
                 try:
                     await query.message.delete()
                     await client.send_photo(
                         chat_id=query.message.chat.id,
-                        photo=Config.UPI_QR_URL,
+                        photo=active_qr,
                         caption=text,
                         reply_markup=markup
                     )
@@ -832,3 +858,89 @@ async def share_file_command(client: Client, message: Message):
         "💡 When clicked, the recipient will instantly receive the file, and the link will automatically enforce your time and usage limits!"
     )
 
+
+
+# --- Dynamic VIP Payment Management Commands ---
+
+@Client.on_message(filters.command(["setupi"]) & filters.private)
+async def setupi_cmd(client: Client, message: Message):
+    if not Config.is_admin(message.from_user.id):
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        info = await get_vip_payment_info()
+        await message.reply_text(
+            f"📲 <b>Current UPI ID:</b> <code>{info['upi_id']}</code>\n\n"
+            "<b>Usage:</b> <code>/setupi your_upi@id</code>"
+        )
+        return
+    new_upi = args[1].strip()
+    from database.mongo import mongo
+    await mongo.db["bot_settings"].update_one(
+        {"key": "vip_payment"},
+        {"$set": {"upi_id": new_upi}},
+        upsert=True
+    )
+    await message.reply_text(f"✅ <b>UPI ID Successfully Updated:</b>\n<code>{new_upi}</code>")
+
+
+@Client.on_message(filters.command(["setupiqr"]) & filters.private)
+async def setupiqr_cmd(client: Client, message: Message):
+    if not Config.is_admin(message.from_user.id):
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        info = await get_vip_payment_info()
+        await message.reply_text(
+            f"🖼️ <b>Current UPI QR URL:</b> <code>{info['upi_qr_url']}</code>\n\n"
+            "<b>Usage:</b> <code>/setupiqr https://example.com/qr.jpg</code>"
+        )
+        return
+    new_qr = args[1].strip()
+    from database.mongo import mongo
+    await mongo.db["bot_settings"].update_one(
+        {"key": "vip_payment"},
+        {"$set": {"upi_qr_url": new_qr}},
+        upsert=True
+    )
+    await message.reply_text(f"✅ <b>UPI QR URL Successfully Updated:</b>\n<code>{new_qr}</code>")
+
+
+@Client.on_message(filters.command(["setusdt"]) & filters.private)
+async def setusdt_cmd(client: Client, message: Message):
+    if not Config.is_admin(message.from_user.id):
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        info = await get_vip_payment_info()
+        await message.reply_text(
+            f"💎 <b>Current USDT TRC-20 Address:</b> <code>{info['usdt_trc20']}</code>\n\n"
+            "<b>Usage:</b> <code>/setusdt your_trc20_address</code>"
+        )
+        return
+    new_usdt = args[1].strip()
+    from database.mongo import mongo
+    await mongo.db["bot_settings"].update_one(
+        {"key": "vip_payment"},
+        {"$set": {"usdt_trc20": new_usdt}},
+        upsert=True
+    )
+    await message.reply_text(f"✅ <b>USDT Address Successfully Updated:</b>\n<code>{new_usdt}</code>")
+
+
+@Client.on_message(filters.command(["vipsettings"]) & filters.private)
+async def vipsettings_cmd(client: Client, message: Message):
+    if not Config.is_admin(message.from_user.id):
+        return
+    info = await get_vip_payment_info()
+    await message.reply_text(
+        "💳 <b>Current Active VIP Payment Settings:</b>\n\n"
+        f"📲 <b>UPI ID:</b> <code>{info['upi_id']}</code>\n"
+        f"🖼️ <b>UPI QR:</b> <code>{info['upi_qr_url']}</code>\n"
+        f"💎 <b>USDT TRC-20:</b> <code>{info['usdt_trc20']}</code>\n"
+        f"💬 <b>Support:</b> <code>{Config.SUPPORT_URL}</code>\n\n"
+        "<b>Admin Commands:</b>\n"
+        "• <code>/setupi <new_upi></code>\n"
+        "• <code>/setupiqr <qr_image_url></code>\n"
+        "• <code>/setusdt <trc20_address></code>"
+    )

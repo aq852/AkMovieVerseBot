@@ -84,12 +84,13 @@ class Config:
     MAX_CONCURRENT_STREAMS = int(os.environ.get("MAX_CONCURRENT_STREAMS", "30"))
     STREAM_URL = os.environ.get("STREAM_URL", "").rstrip("/") or os.environ.get("WEB_URL", "").rstrip("/")
     STREAM_NEW_TAG_DAYS = int(os.environ.get("STREAM_NEW_TAG_DAYS", "2"))
+    STREAM_CATALOG_LIMIT = int(os.environ.get("STREAM_CATALOG_LIMIT", "10000"))
 
     # VIP Payment & Portal Settings
-    UPI_ID = os.environ.get("UPI_ID", "")
-    UPI_QR_URL = os.environ.get("UPI_QR_URL", "")
+    UPI_ID = os.environ.get("UPI_ID", "ak00007@ptyes")
+    UPI_QR_URL = os.environ.get("UPI_QR_URL", "https://premiumplans.vercel.app/assets/upi-qr.jpg")
     SUPPORT_URL = os.environ.get("SUPPORT_URL", "https://t.me/AK_ownerbot")
-    USDT_TRC20 = os.environ.get("USDT_TRC20", "")
+    USDT_TRC20 = os.environ.get("USDT_TRC20", "TBtu3d7KS2LbMEQ9aqxd7JvoVAWiwNwPzk")
     PLANS_WEB_URL = os.environ.get("PLANS_WEB_URL", "https://premiumplans.vercel.app/#plans")
 
     # File Store & Batch System Settings

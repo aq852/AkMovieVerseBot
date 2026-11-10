@@ -32,18 +32,31 @@ STATIC_PIRATE_SITES = [
 PIRATE_SITES_PATTERN = re.compile(r"\b(?:" + "|".join(STATIC_PIRATE_SITES) + r")\b", re.IGNORECASE)
 
 URL_AND_WWW_PATTERN = re.compile(
-    r"\bwww[\s\._-]*\S+?[\s\._-]*(?:style|com|net|org|in|vip|cc|to|cz|ms|tc|ws|me|lol|link|live|buzz|click|fun|icu|art|pw|space|top|club|site|app|is|pm|cx|wf|pro|info|biz|eu|asia|tv|guru|wiki|xyz|co|uk|us|ca|ru|io|yt|so|mobi|cam)\b|"
-    r"\b(?:https?://|www\.)\S+|"
-    r"\b[a-zA-Z0-9_\-]+\.(?:com|org|net|in|cz|top|club|vip|cc|xyz|to|ms|tc|site|app|link|buzz|icu|live|fun|info|pro|cx|wf|so|lol|me|is|pm|co|us|biz|tv|mx|cam)\b|"
+    r"\bwww[\s\._-]*[^\s\]\)]+?[\s\._-]*(?:style|com|net|org|in|vip|cc|to|cz|ms|tc|ws|me|lol|link|live|buzz|click|fun|icu|art|pw|space|top|club|site|app|is|pm|cx|wf|pro|info|biz|eu|asia|tv|guru|wiki|xyz|co|uk|us|ca|ru|io|yt|so|mobi|cam)\b|"
+    r"\b(?:https?://|www\.)[^\s\]\)]+|"
+    r"\b[a-zA-Z0-9_\-]+\.(?:com|org|net|xyz|vip|cc|top|club|site|app|link|buzz|icu|live|fun|info|pro|biz|lol|cx|wf|cam|online|store|website)\b|"
+    r"\b[a-zA-Z0-9_\-]+\.(?:in|cz|to|me|is|so|co|us|tv|mx|pm|ms)/(?:[^\s\]\)]+)?|"
+    r"\b(?:tamilmv|moviesmod|filmyzilla|bollyflix|vegamovies|pahe|cinevood|skymovieshd|hdhub4u|1tamilmv|worldfree4u|katmoviehd|cinemavilla|isaidub|kuttymovies|mallumv)\.(?:in|cz|to|me|is|so|co|us|tv|mx|pm|ms|org|net|com)\b|"
     r"@[a-zA-Z0-9_]+|"
-    r"\b(?:t\.me|telegram\.me|join[\s_]*telegram|join[\s_]*backup|join[\s_]*channel)[\s_:/@]*\S*",
+    r"\b(?:join[\s_:/@]+)?(?:t\.me|telegram\.me|join[\s_]*telegram|join[\s_]*backup|join[\s_]*channel)[\s_:/@]*[^\s\]\)]*",
     re.IGNORECASE
 )
 
 CLUTTER_WORDS_PATTERN = re.compile(
-    r"\b(?:style|clean[\s._-]*audio|line[\s._-]*audio|hq[\s._-]*mic|hq[\s._-]*rip|cleaned[\s._-]*audio|"
-    r"exclusive|unrated|v[1-4]|proper|repack|pre-?dvd|hdcam|hdts|telesync|dvdscr|camrip|"
-    r"x264|x265|hevc|10bit|ddp5\.1|5\.1|atmos|aac|mp3|ac3)\b",
+    r"\b(?:"
+    r"2160p|4k|uhd|1080p|1080i|720p|540p|480p|360p|"
+    r"web-?dl|web-?rip|web|bluray|blu-ray|brrip|bdrip|hdrip|hdtv|dvdrip|remux|"
+    r"extended(?:[\s._-]*(?:cut|edition))?|directors(?:[\s._-]*cut)?|theatrical(?:[\s._-]*cut)?|"
+    r"special(?:[\s._-]*edition)?|criterion|imax|open(?:[\s._-]*matte)?|remastered|unrated|"
+    r"dual(?:[\s._-]*audio)?|multi(?:[\s._-]*audio)?|hindi|english|tamil|telugu|malayalam|"
+    r"kannada|bengali|punjabi|marathi|korean|japanese|chinese|dubbed|esubs?|msubs?|subs?|"
+    r"x264|x265|hevc|10bit|av1|hdr10\+?|hdr|dovi|dolby(?:[\s._-]*vision)?|sdr|6ch|8ch|"
+    r"ddp?(?:[\s._-]*[25]\.[01])?|atmos|aac|mp3|ac3|60fps|"
+    r"style|clean[\s._-]*audio|line[\s._-]*audio|hq[\s._-]*mic|hq[\s._-]*rip|cleaned[\s._-]*audio|"
+    r"exclusive|v[1-4]|proper|repack|pre-?dvd|hdcam|hdts|telesync|dvdscr|camrip|"
+    r"pahe|moviesmod|telly|primefix|galaxyrg|galaxytv|psa|yts(?:\.ag|\.mx)?|immortal|tinymkv|hdhub4u|bollyflix|cinevood|skymovieshd|"
+    r"\d+(?:\.\d+)?\s*(?:gb|mb)"
+    r")\b",
     re.IGNORECASE
 )
 
@@ -122,6 +135,9 @@ def clean_movie_title(raw_name: str, keep_year: bool = True) -> str:
 
     # 1. Strip file extension (with dot or preceding whitespace)
     s = re.sub(r"[\s\.]+(?:mkv|mp4|avi|webm|flv|mov|zip|rar)$", "", s, flags=re.IGNORECASE)
+
+    # 1.b Strip emojis and decorative symbols
+    s = re.sub(r"[\U00010000-\U0010ffff\u2600-\u26ff\u2700-\u27bf\u2300-\u23ff\u2b50]", " ", s)
 
     # 2. Strip URLs, domain names, and www prefixes (e.g. 'www 1TamilMV style')
     s = URL_AND_WWW_PATTERN.sub(" ", s)

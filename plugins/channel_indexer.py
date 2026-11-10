@@ -43,24 +43,24 @@ def sanitize_file_name(raw_name: str) -> str:
     if not ext:
         ext = ".mp4"
 
-    # 1. Strip URLs, domains, and t.me invite links
-    name = URL_AND_WWW_PATTERN.sub('', name)
-    name = re.sub(r'https?://\S+', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'(?:t\.me|telegram\.me|tg://)\S*', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'@[\w_]+', '', name)
-
-    # 2. Strip domains with any TLD (.com, .nl, .lat, etc.) even with pirate site prefix: VegaMovies.nl, BollyFlix.org
-    name = re.sub(r'\b[\w\-]+\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
-
-    # 3. Strip comprehensive pirate sites and scene rippers (VegaMovies, 1TamilMV, BollyFlix, KatmovieHD, etc.)
-    name = PIRATE_SITES_PATTERN.sub('', name)
-
-    # 4. Strip standalone leftover TLD extensions like .nl, .lat, .xyz if left behind
-    name = re.sub(r'(?:^|[\s\._\-\[])\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
-
-    # 5. Strip promotional bracketed tags: [Join @...], [Uploaded by ...], [Team ...], [Exclusive ...], (Telegram: ...)
+    # 1. Strip promotional bracketed tags first so [Join t.me...] is not split: [Join @...], [Uploaded by ...], [Team ...], [Exclusive ...], (Telegram: ...)
     name = re.sub(r'\[\s*(?:join|team|uploaded|telegram|channel|exclusive|official|backup|promo|link|download|paid)[^\]]*\]', '', name, flags=re.IGNORECASE)
     name = re.sub(r'\(\s*(?:join|team|uploaded|telegram|channel|exclusive|official|backup|promo|link|download|paid)[^\)]*\)', '', name, flags=re.IGNORECASE)
+
+    # 2. Strip URLs, domains, and t.me invite links
+    name = URL_AND_WWW_PATTERN.sub('', name)
+    name = re.sub(r'https?://[^\s\]\)]+', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'(?:t\.me|telegram\.me|tg://)[^\s\]\)]*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'@[\w_]+', '', name)
+
+    # 3. Strip domains with any TLD (.com, .nl, .lat, etc.) even with pirate site prefix: VegaMovies.nl, BollyFlix.org
+    name = re.sub(r'\b[\w\-]+\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
+
+    # 4. Strip comprehensive pirate sites and scene rippers (VegaMovies, 1TamilMV, BollyFlix, KatmovieHD, etc.)
+    name = PIRATE_SITES_PATTERN.sub('', name)
+
+    # 5. Strip standalone leftover TLD extensions like .nl, .lat, .xyz if left behind
+    name = re.sub(r'(?:^|[\s\._\-\[])\.(?:com|in|org|net|me|site|xyz|top|live|info|to|tv|cc|pw|cz|co|nl|lat|baby|trade|vip|space|buzz|lol|fun|icu|app|is|pm|cx|wf|pro|biz|eu|asia|mobi|cam|style)\b', '', name, flags=re.IGNORECASE)
 
     # 6. Clean multiple dots, underscores, brackets, and extra spaces
     name = re.sub(r'[\[\]\(\)\{\}]', ' ', name)
