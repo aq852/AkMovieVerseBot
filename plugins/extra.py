@@ -1113,6 +1113,134 @@ async def list_stream_channels_cmd(client: Client, message: Message):
         await message.reply_text(f"📺 <b>Whitelisted Streaming Channels:</b>\n\n{c_lines}")
 
 
+@Client.on_message(filters.command(["addstream", "streamadd"]) & filters.private)
+async def add_stream_cmd(client: Client, message: Message):
+    """Publish a specific movie, series, or replied file to the Web Streaming Website."""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    from database.files import set_web_stream_status_by_query, set_web_stream_status_by_id
+    from utils.web_server import clear_catalog_cache
+    from utils.helpers import parse_media_metadata
+
+    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+
+    # Case 1: Reply to a file message
+    reply = message.reply_to_message
+    if reply and (reply.document or reply.video or reply.audio):
+        media = reply.document or reply.video or reply.audio
+        file_name = getattr(media, "file_name", "") or ""
+        meta = parse_media_metadata(file_name)
+        base_title = meta.get("base_title") if meta else ""
+
+        args = message.text.split(maxsplit=1)
+        target_title = args[1].strip() if len(args) > 1 else base_title
+
+        if target_title:
+            count = await set_web_stream_status_by_query(target_title, True)
+        else:
+            count = await set_web_stream_status_by_id(media.file_unique_id, True)
+
+        clear_catalog_cache()
+        display_name = target_title or file_name or "Selected File"
+        return await message.reply_text(
+            f"✅ <b>Added to Streaming Website!</b>\n\n"
+            f"🎬 <b>Title:</b> <code>{display_name}</code>\n"
+            f"📦 <b>Files Published:</b> <code>{count} file(s)</code>\n"
+            f"🌐 <b>Web Catalog:</b> <a href=\"{web_url}/browse\">{web_url}/browse</a>\n\n"
+            "<i>💡 Files remain 100% searchable in Telegram bot!</i>"
+        )
+
+    # Case 2: Title / Query provided: /addstream Inception
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await message.reply_text(
+            "⚠️ <b>Usage:</b>\n"
+            "• <code>/addstream [Movie or Series Name]</code> — Publish all matching files to streaming site\n"
+            "• Reply to any video/file with <code>/addstream</code> — Publish that file/series to site\n\n"
+            "<i>Example:</i> <code>/addstream Inception</code>"
+        )
+
+    query = args[1].strip()
+    count = await set_web_stream_status_by_query(query, True)
+    clear_catalog_cache()
+
+    if count == 0:
+        return await message.reply_text(
+            f"⚠️ <b>No files found matching:</b> <code>{query}</code>\n"
+            "Make sure the title is indexed in the bot first."
+        )
+
+    await message.reply_text(
+        f"✅ <b>Published to Streaming Website!</b>\n\n"
+        f"🎬 <b>Title/Query:</b> <code>{query}</code>\n"
+        f"📦 <b>Files Published:</b> <code>{count} file(s)</code>\n"
+        f"🌐 <b>Web Catalog:</b> <a href=\"{web_url}/browse\">{web_url}/browse</a>\n\n"
+        "<i>💡 Files remain 100% searchable in Telegram bot!</i>"
+    )
+
+
+@Client.on_message(filters.command(["delstream", "streamdel", "removestream"]) & filters.private)
+async def del_stream_cmd(client: Client, message: Message):
+    """Hide a specific movie, series, or replied file from the Web Streaming Website."""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    from database.files import set_web_stream_status_by_query, set_web_stream_status_by_id
+    from utils.web_server import clear_catalog_cache
+    from utils.helpers import parse_media_metadata
+
+    # Case 1: Reply to a file message
+    reply = message.reply_to_message
+    if reply and (reply.document or reply.video or reply.audio):
+        media = reply.document or reply.video or reply.audio
+        file_name = getattr(media, "file_name", "") or ""
+        meta = parse_media_metadata(file_name)
+        base_title = meta.get("base_title") if meta else ""
+
+        args = message.text.split(maxsplit=1)
+        target_title = args[1].strip() if len(args) > 1 else base_title
+
+        if target_title:
+            count = await set_web_stream_status_by_query(target_title, False)
+        else:
+            count = await set_web_stream_status_by_id(media.file_unique_id, False)
+
+        clear_catalog_cache()
+        display_name = target_title or file_name or "Selected File"
+        return await message.reply_text(
+            f"🚫 <b>Hidden from Streaming Website!</b>\n\n"
+            f"🎬 <b>Title:</b> <code>{display_name}</code>\n"
+            f"📦 <b>Files Removed from Web:</b> <code>{count} file(s)</code>\n\n"
+            "<i>💡 Files remain 100% indexed and searchable in Telegram bot!</i>"
+        )
+
+    # Case 2: Title / Query provided: /delstream Inception
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await message.reply_text(
+            "⚠️ <b>Usage:</b>\n"
+            "• <code>/delstream [Movie or Series Name]</code> — Hide all matching files from streaming site\n"
+            "• Reply to any video/file with <code>/delstream</code> — Hide that file/series from site\n\n"
+            "<i>Example:</i> <code>/delstream Inception</code>"
+        )
+
+    query = args[1].strip()
+    count = await set_web_stream_status_by_query(query, False)
+    clear_catalog_cache()
+
+    if count == 0:
+        return await message.reply_text(f"⚠️ <b>No files found matching:</b> <code>{query}</code>")
+
+    await message.reply_text(
+        f"🚫 <b>Hidden from Streaming Website!</b>\n\n"
+        f"🎬 <b>Title/Query:</b> <code>{query}</code>\n"
+        f"📦 <b>Files Removed from Web:</b> <code>{count} file(s)</code>\n\n"
+        "<i>💡 Files remain 100% indexed and searchable in Telegram bot!</i>"
+    )
+
+
+
 @Client.on_message(filters.command(["streamsettings", "catalogsettings"]) & filters.private)
 async def stream_settings_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
@@ -1153,10 +1281,13 @@ async def stream_settings_cmd(client: Client, message: Message):
         "📊 <b>Database Stats:</b>\n"
         f"• <b>Total Files in Bot Index:</b> <code>{total_bot_files:,} files</code> (100% searchable in TG)\n\n"
         "⚡ <b>Commands:</b>\n"
+        "• <code>/addstream [movie name]</code> — Publish movie/series to website\n"
+        "• <code>/delstream [movie name]</code> — Hide movie/series from website\n"
         "• <code>/streamcutoff now</code> — Wipe all past clutter from website!\n"
         "• <code>/streamcutoff reset</code> — Restore all files to website\n"
         "• <code>/streammode [auto|all|channels]</code> — Change mode\n"
         "• <code>/addstreamchannel [id]</code> — Whitelist channel\n"
+        "• <code>/index @channel -stream</code> — Index channel directly to site\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         reply_markup=keyboard
     )
@@ -1237,10 +1368,13 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
             "📊 <b>Database Stats:</b>\n"
             f"• <b>Total Files in Bot Index:</b> <code>{total_bot_files:,} files</code> (100% searchable in TG)\n\n"
             "⚡ <b>Commands:</b>\n"
+            "• <code>/addstream [movie name]</code> — Publish movie/series to website\n"
+            "• <code>/delstream [movie name]</code> — Hide movie/series from website\n"
             "• <code>/streamcutoff now</code> — Wipe all past clutter from website!\n"
             "• <code>/streamcutoff reset</code> — Restore all files to website\n"
             "• <code>/streammode [auto|all|channels]</code> — Change mode\n"
             "• <code>/addstreamchannel [id]</code> — Whitelist channel\n"
+            "• <code>/index @channel -stream</code> — Index channel directly to site\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             reply_markup=keyboard
         )

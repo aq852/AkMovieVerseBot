@@ -2366,6 +2366,13 @@ class TestAutoFilterEngine(unittest.TestCase):
                     await set_bot_setting("stream_catalog_mode", orig_mode)
             clear_catalog_cache()
 
+            # 4. Verify set_web_stream_status helper functions exist and handle non-existent gracefully
+            from database.files import set_web_stream_status_by_query, set_web_stream_status_by_id
+            m1 = await set_web_stream_status_by_query("non_existent_movie_xyz_12345", True)
+            self.assertEqual(m1, 0)
+            m2 = await set_web_stream_status_by_id("non_existent_unique_id_99999", True)
+            self.assertEqual(m2, 0)
+
         asyncio.run(_test_settings())
 
 

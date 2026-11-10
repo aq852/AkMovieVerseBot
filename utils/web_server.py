@@ -5083,29 +5083,38 @@ async def get_grouped_catalog() -> list:
     mode = settings.get("mode", "auto")
     channels = settings.get("channels", [])
 
-    base_query = {}
-    if cutoff_id:
-        try:
-            base_query["_id"] = {"$gte": ObjectId(cutoff_id)}
-        except Exception:
-            pass
+    or_conditions = []
 
+    # 1. Any file explicitly approved for web stream is ALWAYS included (even if older than cutoff)
+    or_conditions.append({"is_web_stream": True})
+
+    # 2. Whitelisted stream channels are ALWAYS included
+    if channels:
+        or_conditions.append({"channel_id": {"$in": channels}})
+
+    # 3. Dynamic filter modes
     if mode == "auto":
-        # In auto mode, only files marked as web stream or auto_index appear
-        # If cutoff_id is set, also allow files uploaded after cutoff unless specifically bulk_index
         if cutoff_id:
-            base_query["$or"] = [
-                {"is_web_stream": True},
-                {"source": "auto_index"},
-                {"source": {"$ne": "bulk_index"}}
-            ]
+            try:
+                or_conditions.append({
+                    "_id": {"$gte": ObjectId(cutoff_id)},
+                    "source": {"$ne": "bulk_index"}
+                })
+            except Exception:
+                or_conditions.append({"source": "auto_index"})
         else:
-            base_query["$or"] = [
-                {"is_web_stream": True},
-                {"source": "auto_index"}
-            ]
-    elif mode == "channels" and channels:
-        base_query["channel_id"] = {"$in": channels}
+            or_conditions.append({"source": "auto_index"})
+    elif mode == "all":
+        if cutoff_id:
+            try:
+                or_conditions.append({"_id": {"$gte": ObjectId(cutoff_id)}})
+            except Exception:
+                pass
+        else:
+            # All mode with no cutoff means entire database
+            or_conditions = []
+
+    base_query = {"$or": or_conditions} if or_conditions else {}
 
     try:
         anime_regex = (

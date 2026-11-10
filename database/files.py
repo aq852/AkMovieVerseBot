@@ -880,3 +880,58 @@ async def get_sample_titles(limit: int = 3000) -> list[str]:
     except Exception as e:
         logger.error(f"Error retrieving titles for spellcheck: {e}")
         return []
+
+
+async def set_web_stream_status_by_query(query: str, is_web_stream: bool = True) -> int:
+    """Toggle is_web_stream and source status for all files matching a title/query."""
+    try:
+        filter_q = _build_search_filter(query)
+        if not filter_q:
+            return 0
+        update_doc = {
+            "$set": {
+                "is_web_stream": is_web_stream,
+                "source": "auto_index" if is_web_stream else "bulk_index"
+            }
+        }
+        modified = 0
+        r1 = await mongo.files.update_many(filter_q, update_doc)
+        modified += r1.modified_count
+        if mongo.has_secondary:
+            r2 = await mongo.files_secondary.update_many(filter_q, update_doc)
+            modified += r2.modified_count
+        return modified
+    except Exception as e:
+        logger.error(f"Error in set_web_stream_status_by_query: {e}")
+        return 0
+
+
+async def set_web_stream_status_by_id(file_unique_id: str, is_web_stream: bool = True) -> int:
+    """Toggle is_web_stream and source status for a specific file by unique_id or ObjectId."""
+    try:
+        or_clauses = [{"file_unique_id": file_unique_id}]
+        try:
+            from bson import ObjectId
+            if ObjectId.is_valid(file_unique_id):
+                or_clauses.append({"_id": ObjectId(file_unique_id)})
+        except Exception:
+            pass
+
+        filter_q = {"$or": or_clauses}
+        update_doc = {
+            "$set": {
+                "is_web_stream": is_web_stream,
+                "source": "auto_index" if is_web_stream else "bulk_index"
+            }
+        }
+        modified = 0
+        r1 = await mongo.files.update_many(filter_q, update_doc)
+        modified += r1.modified_count
+        if mongo.has_secondary:
+            r2 = await mongo.files_secondary.update_many(filter_q, update_doc)
+            modified += r2.modified_count
+        return modified
+    except Exception as e:
+        logger.error(f"Error in set_web_stream_status_by_id: {e}")
+        return 0
+

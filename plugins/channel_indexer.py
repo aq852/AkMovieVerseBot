@@ -274,7 +274,8 @@ async def run_channel_crawl(
     duplicate_count: int = 0,
     error_count: int = 0,
     junk_count: int = 0,
-    channel_title: str = "Storage Channel"
+    channel_title: str = "Storage Channel",
+    is_web_stream: bool = False
 ):
     """Ultra-fast batch crawling engine with MongoDB checkpoints and live interactive controls."""
     ACTIVE_INDEXES.add(chat_id)
@@ -286,6 +287,16 @@ async def run_channel_crawl(
         "progress_msg": progress_msg,
         "channel_title": channel_title
     }
+
+    # Automatically enable web streaming if this channel is in stream_catalog_channels
+    if not is_web_stream:
+        try:
+            from database.mongo import get_bot_setting
+            stream_chans = await get_bot_setting("stream_catalog_channels", [])
+            if chat_id in stream_chans:
+                is_web_stream = True
+        except Exception:
+            pass
 
     BATCH_SIZE = 200
     total_scanned = 0
@@ -386,8 +397,12 @@ async def run_channel_crawl(
                     junk_count += 1
                     continue
 
-                media_info["source"] = "bulk_index"
-                media_info["is_web_stream"] = False
+                if is_web_stream:
+                    media_info["source"] = "auto_index"
+                    media_info["is_web_stream"] = True
+                else:
+                    media_info["source"] = "bulk_index"
+                    media_info["is_web_stream"] = False
                 batch_media.append(media_info)
 
             # High-performance 50x bulk save into MongoDB
@@ -396,6 +411,13 @@ async def run_channel_crawl(
                 saved_count += bulk_res["saved"]
                 duplicate_count += bulk_res["duplicate"]
                 error_count += bulk_res["errors"]
+
+                if is_web_stream:
+                    try:
+                        from utils.web_server import clear_catalog_cache
+                        clear_catalog_cache()
+                    except Exception:
+                        pass
 
                 # Notify movie requesters for newly indexed files
                 for sm in bulk_res.get("saved_media", []):
@@ -534,7 +556,9 @@ async def batch_index_command(client: Client, message: Message):
 
     chat_id = None
     last_msg_id = None
-    args = message.text.split()
+    raw_args = message.text.split()
+    is_stream_index = any(a.lower() in ("-stream", "--stream", "-web", "--web") for a in raw_args)
+    args = [a for a in raw_args if a.lower() not in ("-stream", "--stream", "-web", "--web")]
 
     is_resumed = False
     saved_count = 0
@@ -659,11 +683,12 @@ async def batch_index_command(client: Client, message: Message):
             start_id = skip_count + 1
             end_id = last_msg_id or 1000
 
+    stream_badge = "\n🌐 <b>Web Streaming Catalog:</b> 🟢 AUTO-PUBLISH ENABLED" if is_stream_index else ""
     heading_title = "🔄 <b>Resuming Indexing from Checkpoint:</b>" if is_resumed else "🔄 <b>Starting Batch Indexing for:</b>"
     progress_msg = await message.reply_text(
         f"{heading_title} <code>{channel_title}</code>\n"
         f"📊 <b>Target Range:</b> Message <code>{start_id}</code> to <code>{end_id}</code>\n"
-        f"🚀 <b>Batch Size:</b> 200 messages / request\n"
+        f"🚀 <b>Batch Size:</b> 200 messages / request{stream_badge}\n"
         f"<i>💡 Progress bookmark is auto-saved every 200 msgs. Control below:</i>",
         reply_markup=get_indexer_keyboard(chat_id, status="running")
     )
@@ -680,7 +705,8 @@ async def batch_index_command(client: Client, message: Message):
             duplicate_count=duplicate_count,
             error_count=error_count,
             junk_count=junk_count,
-            channel_title=channel_title
+            channel_title=channel_title,
+            is_web_stream=is_stream_index
         )
     )
 
@@ -695,10 +721,13 @@ async def index_all_channels_command(client: Client, message: Message):
     if not Config.CHANNELS:
         return await message.reply_text("⚠️ No storage channels configured in <code>Config.CHANNELS</code>!")
 
+    is_stream_all = any(a.lower() in ("-stream", "--stream", "-web", "--web") for a in message.text.split())
+
     status_msg = await message.reply_text(
         f"🌐 <b>Multi-Channel Indexing Initializing...</b>\n"
         f"Found <code>{len(Config.CHANNELS)}</code> channels in configuration.\n"
         f"Starting sequential crawl with 50x bulk engine..."
+        f"{' (Web Streaming Auto-Publish: ON)' if is_stream_all else ''}"
     )
 
     for i, cid in enumerate(Config.CHANNELS, 1):
@@ -743,7 +772,8 @@ async def index_all_channels_command(client: Client, message: Message):
             duplicate_count=chk.get("duplicate_count", 0) if chk else 0,
             error_count=chk.get("error_count", 0) if chk else 0,
             junk_count=chk.get("junk_count", 0) if chk else 0,
-            channel_title=channel_title
+            channel_title=channel_title,
+            is_web_stream=is_stream_all
         )
 
     await status_msg.edit_text("🎉 <b>All configured storage channels have been indexed successfully!</b>")
