@@ -1388,18 +1388,54 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
 
 @Client.on_message(filters.command(["restart", "reboot"]) & filters.private)
 async def restart_bot_cmd(client: Client, message: Message):
-    """Seamlessly restart the bot process in-place with zero downtime."""
+    """Seamlessly restart the bot process with detached launcher and zero port/socket conflicts."""
     if not Config.is_admin(message.from_user.id):
         return
     msg = await message.reply_text("♻️ <b>Restarting AutoFilterBot...</b>\nPlease wait 5-10 seconds.")
-    try:
-        from database.mongo import set_bot_setting
-        await set_bot_setting("restart_notification", {"chat_id": message.chat.id, "message_id": msg.id})
-    except Exception:
-        pass
     import os
     import sys
-    os.execv(sys.executable, [sys.executable, "bot.py"])
+    import json
+    import subprocess
+
+    # 1. Save restart notification locally and in MongoDB
+    restart_data = {"chat_id": message.chat.id, "message_id": msg.id}
+    try:
+        with open("/tmp/autofilterbot_restart.json", "w") as f:
+            json.dump(restart_data, f)
+    except Exception:
+        pass
+
+    try:
+        from database.mongo import set_bot_setting
+        await set_bot_setting("restart_notification", restart_data)
+    except Exception:
+        pass
+
+    # 2. Release and remove lock file so new process never conflicts
+    try:
+        if os.path.exists("/tmp/autofilterbot_master.lock"):
+            os.remove("/tmp/autofilterbot_master.lock")
+    except Exception:
+        pass
+
+    # 3. Locate root directory and python binary
+    plugins_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(plugins_dir)
+    bot_script = os.path.join(root_dir, "bot.py")
+    if not os.path.exists(bot_script):
+        bot_script = os.path.abspath("bot.py")
+    python_bin = sys.executable
+
+    # 4. Detached launcher with 2-second sleep to cleanly release port 8080 & SQLite locks
+    if sys.platform != "win32":
+        cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
+        subprocess.Popen(cmd, shell=True, start_new_session=True)
+    else:
+        cmd = f"timeout /t 2 /nobreak && cd /d \"{root_dir}\" && \"{python_bin}\" \"{bot_script}\""
+        subprocess.Popen(cmd, shell=True)
+
+    # 5. Cleanly exit current process
+    sys.exit(0)
 
 
 @Client.on_message(filters.command(["update", "gitpull"]) & filters.private)
@@ -1408,19 +1444,55 @@ async def update_bot_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
     msg = await message.reply_text("🔄 <b>Pulling latest updates from GitHub...</b>")
-    import subprocess
     import os
     import sys
+    import json
+    import subprocess
+
+    plugins_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(plugins_dir)
+    bot_script = os.path.join(root_dir, "bot.py")
+    if not os.path.exists(bot_script):
+        bot_script = os.path.abspath("bot.py")
+    python_bin = sys.executable
+
     try:
-        pull_out = subprocess.check_output(["git", "pull"], stderr=subprocess.STDOUT, text=True, timeout=30)
+        pull_out = subprocess.check_output(
+            ["git", "pull"], cwd=root_dir, stderr=subprocess.STDOUT, text=True, timeout=30
+        )
     except Exception as e:
         await msg.edit_text(f"❌ <b>Git pull failed:</b>\n<code>{e}</code>")
         return
 
-    await msg.edit_text(f"✅ <b>Git pull complete:</b>\n<code>{pull_out[:200]}</code>\n\n♻️ <i>Restarting bot now...</i>")
+    await msg.edit_text(
+        f"✅ <b>Git pull complete:</b>\n<code>{pull_out[:200]}</code>\n\n"
+        "♻️ <i>Restarting bot in 2 seconds...</i>"
+    )
+
+    restart_data = {"chat_id": message.chat.id, "message_id": msg.id}
     try:
-        from database.mongo import set_bot_setting
-        await set_bot_setting("restart_notification", {"chat_id": message.chat.id, "message_id": msg.id})
+        with open("/tmp/autofilterbot_restart.json", "w") as f:
+            json.dump(restart_data, f)
     except Exception:
         pass
-    os.execv(sys.executable, [sys.executable, "bot.py"])
+
+    try:
+        from database.mongo import set_bot_setting
+        await set_bot_setting("restart_notification", restart_data)
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists("/tmp/autofilterbot_master.lock"):
+            os.remove("/tmp/autofilterbot_master.lock")
+    except Exception:
+        pass
+
+    if sys.platform != "win32":
+        cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
+        subprocess.Popen(cmd, shell=True, start_new_session=True)
+    else:
+        cmd = f"timeout /t 2 /nobreak && cd /d \"{root_dir}\" && \"{python_bin}\" \"{bot_script}\""
+        subprocess.Popen(cmd, shell=True)
+
+    sys.exit(0)

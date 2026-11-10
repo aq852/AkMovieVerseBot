@@ -48,17 +48,34 @@ class Bot(Client):
 
         # Notify pending restart origin
         try:
-            from database.mongo import get_bot_setting, set_bot_setting
-            pending = await get_bot_setting("restart_notification", None)
-            if pending:
-                await set_bot_setting("restart_notification", None)
+            pending = None
+            restart_file = "/tmp/autofilterbot_restart.json"
+            if os.path.exists(restart_file):
+                try:
+                    import json
+                    with open(restart_file, "r") as f:
+                        pending = json.load(f)
+                    os.remove(restart_file)
+                except Exception:
+                    pass
+
+            if not pending:
+                from database.mongo import get_bot_setting
+                pending = await get_bot_setting("restart_notification", None)
+
+            if pending and "chat_id" in pending and "message_id" in pending:
+                try:
+                    from database.mongo import set_bot_setting
+                    await set_bot_setting("restart_notification", None)
+                except Exception:
+                    pass
                 await self.edit_message_text(
                     chat_id=pending["chat_id"],
                     message_id=pending["message_id"],
                     text="🚀 <b>AutoFilterBot is successfully RESTARTED & ONLINE!</b>"
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error sending restart notification: {e}")
 
         # 2. Launch Background Web Server for Cloud Health Checks (Koyeb/Render)
         asyncio.create_task(run_web_server())
@@ -177,19 +194,42 @@ if __name__ == "__main__":
     # Single-Instance Lock to prevent duplicate broadcasts and port 8080 conflicts
     _lock_handle = None
     if sys.platform != "win32":
+        lock_path = "/tmp/autofilterbot_master.lock"
         try:
             import fcntl
-            lock_path = "/tmp/autofilterbot_master.lock"
             _lock_handle = open(lock_path, "w")
             fcntl.flock(_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             _lock_handle.write(str(os.getpid()))
             _lock_handle.flush()
         except (IOError, BlockingIOError):
-            logger.error(
-                "❌ CRITICAL CONFLICT DETECTED: Another instance of AutoFilterBot is already running in the background! "
-                "Exiting immediately to prevent duplicate broadcasts and port 8080 conflicts."
-            )
-            sys.exit(0)
+            old_pid = None
+            is_alive = False
+            try:
+                if os.path.exists(lock_path):
+                    with open(lock_path, "r") as f:
+                        old_pid = int(f.read().strip())
+                    if old_pid and old_pid != os.getpid():
+                        os.kill(old_pid, 0)
+                        is_alive = True
+            except Exception:
+                is_alive = False
+
+            if not is_alive:
+                try:
+                    if os.path.exists(lock_path):
+                        os.remove(lock_path)
+                    _lock_handle = open(lock_path, "w")
+                    fcntl.flock(_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    _lock_handle.write(str(os.getpid()))
+                    _lock_handle.flush()
+                except Exception:
+                    pass
+            else:
+                logger.error(
+                    f"❌ CRITICAL CONFLICT DETECTED: Another instance of AutoFilterBot (PID {old_pid}) is already running! "
+                    f"To fix, run 'kill -9 {old_pid}' or 'pkill -9 -f bot.py' in VPS terminal."
+                )
+                sys.exit(0)
 
     bot = Bot()
     bot.run()
