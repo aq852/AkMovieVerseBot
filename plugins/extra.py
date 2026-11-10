@@ -866,11 +866,13 @@ async def share_file_command(client: Client, message: Message):
 async def setupi_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
+    import html
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         info = await get_vip_payment_info()
+        u = html.escape(str(info.get('upi_id', '')))
         await message.reply_text(
-            f"📲 <b>Current UPI ID:</b> <code>{info['upi_id']}</code>\n\n"
+            f"📲 <b>Current UPI ID:</b> <code>{u}</code>\n\n"
             "<b>Usage:</b> <code>/setupi your_upi@id</code>"
         )
         return
@@ -881,18 +883,20 @@ async def setupi_cmd(client: Client, message: Message):
         {"$set": {"upi_id": new_upi}},
         upsert=True
     )
-    await message.reply_text(f"✅ <b>UPI ID Successfully Updated:</b>\n<code>{new_upi}</code>")
+    await message.reply_text(f"✅ <b>UPI ID Successfully Updated:</b>\n<code>{html.escape(new_upi)}</code>")
 
 
 @Client.on_message(filters.command(["setupiqr"]) & filters.private)
 async def setupiqr_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
+    import html
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         info = await get_vip_payment_info()
+        q = html.escape(str(info.get('upi_qr_url', '')))
         await message.reply_text(
-            f"🖼️ <b>Current UPI QR URL:</b> <code>{info['upi_qr_url']}</code>\n\n"
+            f"🖼️ <b>Current UPI QR URL:</b> <code>{q}</code>\n\n"
             "<b>Usage:</b> <code>/setupiqr https://example.com/qr.jpg</code>"
         )
         return
@@ -903,18 +907,20 @@ async def setupiqr_cmd(client: Client, message: Message):
         {"$set": {"upi_qr_url": new_qr}},
         upsert=True
     )
-    await message.reply_text(f"✅ <b>UPI QR URL Successfully Updated:</b>\n<code>{new_qr}</code>")
+    await message.reply_text(f"✅ <b>UPI QR URL Successfully Updated:</b>\n<code>{html.escape(new_qr)}</code>")
 
 
 @Client.on_message(filters.command(["setusdt"]) & filters.private)
 async def setusdt_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
+    import html
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         info = await get_vip_payment_info()
+        t = html.escape(str(info.get('usdt_trc20', '')))
         await message.reply_text(
-            f"💎 <b>Current USDT TRC-20 Address:</b> <code>{info['usdt_trc20']}</code>\n\n"
+            f"💎 <b>Current USDT TRC-20 Address:</b> <code>{t}</code>\n\n"
             "<b>Usage:</b> <code>/setusdt your_trc20_address</code>"
         )
         return
@@ -925,24 +931,30 @@ async def setusdt_cmd(client: Client, message: Message):
         {"$set": {"usdt_trc20": new_usdt}},
         upsert=True
     )
-    await message.reply_text(f"✅ <b>USDT Address Successfully Updated:</b>\n<code>{new_usdt}</code>")
+    await message.reply_text(f"✅ <b>USDT Address Successfully Updated:</b>\n<code>{html.escape(new_usdt)}</code>")
 
 
 @Client.on_message(filters.command(["vipsettings"]) & filters.private)
 async def vipsettings_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
+    import html
     info = await get_vip_payment_info()
+    u_id = html.escape(str(info.get('upi_id', '')))
+    u_qr = html.escape(str(info.get('upi_qr_url', '')))
+    u_trc = html.escape(str(info.get('usdt_trc20', '')))
+    u_sup = html.escape(str(getattr(Config, "SUPPORT_URL", "") or ""))
+
     await message.reply_text(
         "💳 <b>Current Active VIP Payment Settings:</b>\n\n"
-        f"📲 <b>UPI ID:</b> <code>{info['upi_id']}</code>\n"
-        f"🖼️ <b>UPI QR:</b> <code>{info['upi_qr_url']}</code>\n"
-        f"💎 <b>USDT TRC-20:</b> <code>{info['usdt_trc20']}</code>\n"
-        f"💬 <b>Support:</b> <code>{Config.SUPPORT_URL}</code>\n\n"
+        f"📲 <b>UPI ID:</b> <code>{u_id}</code>\n"
+        f"🖼️ <b>UPI QR:</b> <code>{u_qr}</code>\n"
+        f"💎 <b>USDT TRC-20:</b> <code>{u_trc}</code>\n"
+        f"💬 <b>Support:</b> <code>{u_sup}</code>\n\n"
         "<b>Admin Commands:</b>\n"
-        "• <code>/setupi <new_upi></code>\n"
-        "• <code>/setupiqr <qr_image_url></code>\n"
-        "• <code>/setusdt <trc20_address></code>"
+        "• <code>/setupi [new_upi]</code>\n"
+        "• <code>/setupiqr [qr_image_url]</code>\n"
+        "• <code>/setusdt [trc20_address]</code>"
     )
 
 
