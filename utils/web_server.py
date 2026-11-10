@@ -5121,15 +5121,21 @@ async def post_handler(request: web.Request):
         if target_item:
             break
 
-    # Smart slug prefix or clean name fallback
+    # 3. Smart slug prefix or clean name fallback (guarded against short-name false positives like 'do' in 'doraemon')
     if not target_item and catalog:
         norm_s = re.sub(r"[^\w]", "", slug_or_id.lower())
         for item in catalog:
             item_clean = re.sub(r"[^\w]", "", item.get("clean_name", "").lower())
             item_slug_clean = re.sub(r"[^\w]", "", item.get("slug", "").lower())
-            if norm_s and (norm_s == item_clean or norm_s in item_slug_clean or item_clean in norm_s):
+            # Exact match (normalized)
+            if norm_s and (norm_s == item_clean or norm_s == item_slug_clean):
                 target_item = item
                 break
+            # Prefix match ONLY if both strings are substantial (>= 6 chars) and one strictly starts with the other
+            if len(norm_s) >= 6 and len(item_clean) >= 6:
+                if norm_s.startswith(item_clean) or item_clean.startswith(norm_s) or norm_s.startswith(item_slug_clean) or item_slug_clean.startswith(norm_s):
+                    target_item = item
+                    break
 
     # If still not found in grouped catalog, try direct mongo file lookup
     if not target_item:
@@ -5177,9 +5183,13 @@ async def post_handler(request: web.Request):
                         for gm in grouped_matches:
                             gm_norm = re.sub(r"[^\w]", "", gm.get("slug", "").lower())
                             gm_clean = re.sub(r"[^\w]", "", gm.get("clean_name", "").lower())
-                            if norm_slug in gm_norm or gm_norm in norm_slug or norm_slug in gm_clean or gm_clean in norm_slug:
+                            if norm_slug == gm_norm or norm_slug == gm_clean:
                                 best_match = gm
                                 break
+                            if len(norm_slug) >= 6 and len(gm_clean) >= 6:
+                                if norm_slug.startswith(gm_clean) or gm_clean.startswith(norm_slug):
+                                    best_match = gm
+                                    break
                         target_item = best_match or grouped_matches[0]
                         if _GROUPED_CATALOG_CACHE.get("groups"):
                             _GROUPED_CATALOG_CACHE["groups"].append(target_item)

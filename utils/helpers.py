@@ -310,9 +310,11 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
         if not trail_ep_m:
             lead_match = re.match(r'^\s*0*([1-9]\d{0,2})\s*[-_–\s]+(.*?)$', norm, re.IGNORECASE)
             if lead_match:
-                cand_lead = int(lead_match.group(1))
-                if cand_lead <= 999:
-                    lead_ep_m = lead_match
+                cand_lead_title = lead_match.group(2)
+                if not re.search(r'\b(?:the[\s._-]*movie|movie)\b', cand_lead_title, re.IGNORECASE):
+                    cand_lead = int(lead_match.group(1))
+                    if cand_lead <= 999:
+                        lead_ep_m = lead_match
 
     is_series = bool(season_m or single_ep_m or range_m or has_combined_word or trail_ep_m or lead_ep_m)
     s_num = int(season_m.group(1)) if season_m else (1 if is_series else None)
@@ -402,9 +404,10 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
     from utils.title_cleaner import clean_movie_title
 
     base_title = ""
-    # 6.a Leading episode number format (e.g. "04 - Suicide Squad Isekai")
-    if lead_ep_m:
-        cand_lead = lead_ep_m.group(2)
+    # 6.a Leading number format (e.g. "04 - Suicide Squad Isekai" or "15 - Doraemon The Movie")
+    lead_raw_m = re.match(r'^\s*0*([1-9]\d{0,2})\s*[-_–\s]+(.*?)$', norm, re.IGNORECASE)
+    if lead_raw_m:
+        cand_lead = lead_raw_m.group(2)
         clean_lead = clean_movie_title(cand_lead, keep_year=False) if cand_lead else ""
         if clean_lead and clean_lead.lower() not in ["untitled", "movie video", "video", "none"]:
             base_title = clean_lead
