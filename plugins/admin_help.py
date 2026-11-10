@@ -475,7 +475,7 @@ CHEAT_SHEET_TEXT = (
     "\n"
     "<b>⚙️ GROUP TOOLS &amp; UTILITIES:</b>\n"
     "• <code>/settings | /connect | /disconnect | /shortlink | /filter | /filters | /stop | /stopall | /maintenance</code>\n"
-    "• <code>/id | /info | /imdb | /request | /myrequests | /myalerts | /start | /help | /commands | /adminhelp</code>\n"
+    "• <code>/id | /info | /imdb | /request | /myrequests | /myalerts | /start | /help | /commands | /adminhelp | /restart | /update</code>\n"
     "</blockquote>\n"
     "\n"
     "💡 <i>Tap category below for usage &amp; examples!</i>"

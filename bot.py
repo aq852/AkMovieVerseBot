@@ -46,6 +46,20 @@ class Bot(Client):
         except Exception as e:
             logger.warning(f"Could not load dynamic settings: {e}")
 
+        # Notify pending restart origin
+        try:
+            from database.mongo import get_bot_setting, set_bot_setting
+            pending = await get_bot_setting("restart_notification", None)
+            if pending:
+                await set_bot_setting("restart_notification", None)
+                await self.edit_message_text(
+                    chat_id=pending["chat_id"],
+                    message_id=pending["message_id"],
+                    text="🚀 <b>AutoFilterBot is successfully RESTARTED & ONLINE!</b>"
+                )
+        except Exception:
+            pass
+
         # 2. Launch Background Web Server for Cloud Health Checks (Koyeb/Render)
         asyncio.create_task(run_web_server())
 

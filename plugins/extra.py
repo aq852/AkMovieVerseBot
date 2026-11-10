@@ -1234,3 +1234,47 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         )
     except Exception:
         pass
+
+
+# -------------------------------------------------------------
+# 1-Click Telegram Admin Bot Restart & Auto-Update Engine
+# -------------------------------------------------------------
+
+@Client.on_message(filters.command(["restart", "reboot"]) & filters.private)
+async def restart_bot_cmd(client: Client, message: Message):
+    """Seamlessly restart the bot process in-place with zero downtime."""
+    if not Config.is_admin(message.from_user.id):
+        return
+    msg = await message.reply_text("♻️ <b>Restarting AutoFilterBot...</b>\nPlease wait 5-10 seconds.")
+    try:
+        from database.mongo import set_bot_setting
+        await set_bot_setting("restart_notification", {"chat_id": message.chat.id, "message_id": msg.id})
+    except Exception:
+        pass
+    import os
+    import sys
+    os.execv(sys.executable, [sys.executable, "bot.py"])
+
+
+@Client.on_message(filters.command(["update", "gitpull"]) & filters.private)
+async def update_bot_cmd(client: Client, message: Message):
+    """Pull latest GitHub commits and seamlessly restart bot without touching SSH terminal."""
+    if not Config.is_admin(message.from_user.id):
+        return
+    msg = await message.reply_text("🔄 <b>Pulling latest updates from GitHub...</b>")
+    import subprocess
+    import os
+    import sys
+    try:
+        pull_out = subprocess.check_output(["git", "pull"], stderr=subprocess.STDOUT, text=True, timeout=30)
+    except Exception as e:
+        await msg.edit_text(f"❌ <b>Git pull failed:</b>\n<code>{e}</code>")
+        return
+
+    await msg.edit_text(f"✅ <b>Git pull complete:</b>\n<code>{pull_out[:200]}</code>\n\n♻️ <i>Restarting bot now...</i>")
+    try:
+        from database.mongo import set_bot_setting
+        await set_bot_setting("restart_notification", {"chat_id": message.chat.id, "message_id": msg.id})
+    except Exception:
+        pass
+    os.execv(sys.executable, [sys.executable, "bot.py"])
