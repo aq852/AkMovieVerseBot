@@ -973,7 +973,7 @@ async def stream_start_cmd(client: Client, message: Message):
     from bson import ObjectId
     import datetime
 
-    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+    web_url = (getattr(Config, "STREAM_URL", "") or getattr(Config, "WEB_URL", "") or "http://localhost:8080").rstrip("/")
 
     if len(args) < 2:
         curr = await get_bot_setting("stream_catalog_cutoff_id", None)
@@ -1128,7 +1128,7 @@ async def stream_resume_cmd(client: Client, message: Message):
     if mode == "cleared":
         await set_bot_setting("stream_catalog_mode", "all")
     clear_catalog_cache()
-    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+    web_url = (getattr(Config, "STREAM_URL", "") or getattr(Config, "WEB_URL", "") or "http://localhost:8080").rstrip("/")
     await message.reply_text(
         "▶️ <b>Streaming Website Catalog RESUMED!</b>\n\n"
         "• Website showroom is now <b>LIVE</b> again!\n"
@@ -1241,7 +1241,7 @@ async def add_stream_cmd(client: Client, message: Message):
     from utils.web_server import clear_catalog_cache
     from utils.helpers import parse_media_metadata
 
-    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+    web_url = (getattr(Config, "STREAM_URL", "") or getattr(Config, "WEB_URL", "") or "http://localhost:8080").rstrip("/")
 
     # Case 1: Reply to a file message
     reply = message.reply_to_message
