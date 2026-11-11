@@ -1601,6 +1601,15 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         if message.chat.username and f"@{message.chat.username}".lower() != str(db_ch).lower():
             return
 
+    # Safety Guard: Never trigger auto-gift in main movie storage channels!
+    try:
+        from database.channels import is_storage_channel
+        if await is_storage_channel(chat_id):
+            logger.warning(f"Channel {chat_id} is registered as a Main Movie Storage channel! Skipping auto-gift to prevent mixing.")
+            return
+    except Exception:
+        pass
+
     media = message.video or message.document
     if not media:
         return

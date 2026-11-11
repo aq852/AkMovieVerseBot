@@ -174,11 +174,20 @@ async def load_dynamic_settings():
                 except Exception as cast_err:
                     logger.warning(f"Failed to cast dynamic setting '{key}' = {val}: {cast_err}")
 
+        # Hydrate dynamic storage channels from MongoDB into Config.CHANNELS
+        try:
+            from database.channels import get_storage_channels
+            active_channels = await get_storage_channels(force_refresh=True)
+            Config.CHANNELS = active_channels
+        except Exception as ch_err:
+            logger.debug(f"Could not hydrate dynamic storage channels: {ch_err}")
+
         logger.info(
             f"⚡ Persistent settings loaded from MongoDB: "
             f"SHORTENER_ENABLED={Config.SHORTENER_ENABLED}, "
             f"ENABLE_STREAMING={Config.ENABLE_STREAMING}, "
             f"ENABLE_WEB_DOWNLOAD={getattr(Config, 'ENABLE_WEB_DOWNLOAD', False)}, "
+            f"STORAGE_CHANNELS={len(getattr(Config, 'CHANNELS', []) or [])}, "
             f"WEB_URL={Config.WEB_URL or 'None'}"
         )
     except Exception as e:

@@ -171,7 +171,8 @@ def extract_media_info(message: Message, sanitize: bool = True) -> dict | None:
 @Client.on_message(filters.channel & (filters.document | filters.video | filters.audio))
 async def auto_channel_listener(client: Client, message: Message):
     """Automatically index media uploaded to configured storage channels."""
-    if not Config.CHANNELS or message.chat.id not in Config.CHANNELS:
+    from database.channels import is_storage_channel
+    if not await is_storage_channel(message.chat.id):
         return
 
     # Security Guard: Never auto-index from LOG_CHANNEL, UPDATES_CHANNEL, or DUMP_CHANNEL
@@ -723,23 +724,25 @@ async def batch_index_command(client: Client, message: Message):
 # 6. Multi-Channel Batch Indexer: /indexall
 @Client.on_message(filters.command(["indexall", "crawlall"]) & filters.private)
 async def index_all_channels_command(client: Client, message: Message):
-    """Sequentially crawl and index all configured storage channels in Config.CHANNELS."""
+    """Sequentially crawl and index all configured storage channels."""
     if not Config.is_admin(message.from_user.id):
         return
 
-    if not Config.CHANNELS:
-        return await message.reply_text("⚠️ No storage channels configured in <code>Config.CHANNELS</code>!")
+    from database.channels import get_storage_channels
+    storage_channels = await get_storage_channels()
+    if not storage_channels:
+        return await message.reply_text("⚠️ No storage channels configured! Use <code>/addchannel &lt;channel_id&gt;</code> to add one.")
 
     is_stream_all = any(a.lower() in ("-stream", "--stream", "-web", "--web") for a in message.text.split())
 
     status_msg = await message.reply_text(
         f"🌐 <b>Multi-Channel Indexing Initializing...</b>\n"
-        f"Found <code>{len(Config.CHANNELS)}</code> channels in configuration.\n"
+        f"Found <code>{len(storage_channels)}</code> channels in configuration.\n"
         f"Starting sequential crawl with 50x bulk engine..."
         f"{' (Web Streaming Auto-Publish: ON)' if is_stream_all else ''}"
     )
 
-    for i, cid in enumerate(Config.CHANNELS, 1):
+    for i, cid in enumerate(storage_channels, 1):
         try:
             chat_info = await client.get_chat(cid)
             channel_title = chat_info.title
@@ -981,3 +984,101 @@ async def check_and_notify_interrupted_checkpoints(client: Client):
                         await client.send_message(Config.LOG_CHANNEL, alert_text, reply_markup=kb)
     except Exception as e:
         logger.warning(f"Error checking interrupted checkpoints on startup: {e}")
+
+
+# ==============================================================================
+# 🚀 Dynamic Storage & DB Channel Management Commands (/addchannel, /delchannel, /channels)
+# ==============================================================================
+
+@Client.on_message(filters.command(["addchannel", "adddb", "setdb", "addstorage"]) & filters.private)
+async def add_storage_channel_cmd(client: Client, message: Message):
+    """Add a channel to active movie storage channels for real-time auto-indexing."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text(
+            "ℹ️ <b>Usage:</b> <code>/addchannel &lt;channel_id or @username&gt;</code>\n\n"
+            "• <i>Example:</i> <code>/addchannel -1002370960281</code>\n"
+            "• <i>Example:</i> <code>/addchannel @MyMovieStorage</code>"
+        )
+
+    arg = parts[1].strip()
+    target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
+    title = str(target)
+    try:
+        chat = await client.get_chat(target)
+        if chat:
+            title = chat.title or str(target)
+            target = chat.id
+    except Exception as e:
+        logger.debug(f"Could not fetch chat info for {target}: {e}")
+
+    from database.channels import add_storage_channel
+    ok = await add_storage_channel(target)
+    if ok:
+        await message.reply_text(
+            f"✅ <b>STORAGE CHANNEL ADDED & ACTIVATED!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📁 <b>Channel:</b> <code>{title}</code>\n"
+            f"🆔 <b>Channel ID:</b> <code>{target}</code>\n"
+            f"⚡ <b>Status:</b> 🟢 <b>Real-time Auto-Indexing ACTIVE</b>\n\n"
+            f"<i>Any video/media uploaded to this channel will now be automatically indexed, saved to MongoDB, and made instantly searchable!</i>"
+        )
+    else:
+        await message.reply_text(f"❌ Failed to add channel <code>{target}</code>. Check bot logs.")
+
+
+@Client.on_message(filters.command(["delchannel", "deldb", "remchannel", "removestorage"]) & filters.private)
+async def del_storage_channel_cmd(client: Client, message: Message):
+    """Remove a channel from active storage channels."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    parts = message.text.split(None, 1)
+    if len(parts) < 2:
+        return await message.reply_text("ℹ️ <b>Usage:</b> <code>/delchannel &lt;channel_id&gt;</code>")
+
+    arg = parts[1].strip()
+    target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
+    from database.channels import remove_storage_channel
+    ok = await remove_storage_channel(target)
+    if ok:
+        await message.reply_text(
+            f"🗑️ <b>STORAGE CHANNEL REMOVED!</b>\n\n"
+            f"Channel <code>{target}</code> unlinked. Bot will no longer auto-index from it."
+        )
+    else:
+        await message.reply_text(f"❌ Failed to remove channel <code>{target}</code>.")
+
+
+@Client.on_message(filters.command(["channels", "dbchannels", "storagechannels", "listchannels"]) & filters.private)
+async def list_storage_channels_cmd(client: Client, message: Message):
+    """List all configured movie storage/DB channels."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    from database.channels import get_storage_channels
+    channels = await get_storage_channels(force_refresh=True)
+    if not channels:
+        return await message.reply_text(
+            "⚠️ <b>No Storage Channels Configured!</b>\n\n"
+            "Use <code>/addchannel &lt;channel_id&gt;</code> to link your movie storage channels."
+        )
+
+    lines = [f"📁 <b>CONFIGURED MOVIE STORAGE CHANNELS ({len(channels)}):</b>\n"]
+    for i, cid in enumerate(channels, 1):
+        try:
+            chat = await client.get_chat(cid)
+            name = chat.title or "Private DB"
+            lines.append(f"{i}. <b>{name}</b>: <code>{cid}</code> 🟢")
+        except Exception:
+            lines.append(f"{i}. <code>{cid}</code> 🟢")
+
+    lines.append(
+        "\n💡 <i>All files uploaded to these channels are automatically indexed, added to MongoDB, and streamed on website.</i>\n"
+        "• Add channel: <code>/addchannel &lt;id&gt;</code>\n"
+        "• Remove channel: <code>/delchannel &lt;id&gt;</code>"
+    )
+    await message.reply_text("\n".join(lines))
