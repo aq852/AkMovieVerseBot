@@ -82,7 +82,12 @@ def is_junk_file(media_info: dict) -> tuple[bool, str]:
     file_size = int(media_info.get("file_size") or 0)
 
     _, ext = os.path.splitext(file_name)
-    if ext.lower() in JUNK_EXTENSIONS:
+    archive_exts = {".zip", ".rar", ".7z", ".tar", ".gz", ".iso", ".001", ".002", ".003"}
+    if ext.lower() in archive_exts:
+        # If archive is large (> 50MB), it's a real movie/series archive or split video (.mkv.zip), so preserve it!
+        if file_size < 50 * 1024 * 1024:
+            return True, f"Small non-video archive: {ext}"
+    elif ext.lower() in JUNK_EXTENSIONS:
         return True, f"Junk extension: {ext}"
 
     # Sample video filtering: files < 20MB with sample/trailer in name

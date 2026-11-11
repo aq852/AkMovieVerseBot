@@ -89,5 +89,9 @@ async def remove_storage_channel(channel_id: int) -> bool:
 
 async def is_storage_channel(channel_id: int) -> bool:
     """Check if given chat ID is an active storage channel."""
-    channels = await get_storage_channels()
-    return int(channel_id) in channels
+    try:
+        cid = int(channel_id)
+        channels = await get_storage_channels()
+        return cid in channels
+    except (ValueError, TypeError):
+        return False
