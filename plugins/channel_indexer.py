@@ -888,22 +888,20 @@ async def indexer_callback_handler(client: Client, query: CallbackQuery):
             ctrl["status"] = "stopped"
             ctrl["pause_event"].set()
         try:
-            await mongo.db["indexer_checkpoints"].update_one(
-                {"channel_id": cid},
-                {"$set": {"status": "interrupted", "updated_at": time.time()}}
-            )
+            # Permanently delete checkpoint so it is dismissed and never alerts on restart
+            await mongo.db["indexer_checkpoints"].delete_one({"channel_id": cid})
         except Exception:
             pass
         ACTIVE_INDEXES.discard(cid)
         INDEXING_CONTROLS.pop(cid, None)
         try:
             await query.message.edit_text(
-                "⏹️ <b>Indexing Cancelled by Admin!</b>\n\n"
-                "💡 <i>Progress bookmark has been saved to MongoDB. You can resume anytime using:</i> <code>/index resume</code>"
+                "⏹️ <b>Indexing Cancelled & Dismissed!</b>\n\n"
+                "Checkpoint has been cleared. It will not alert on bot restarts."
             )
         except Exception:
             pass
-        return await query.answer("⏹️ Indexing cancelled!", show_alert=False)
+        return await query.answer("⏹️ Indexing cancelled and dismissed!", show_alert=False)
 
 
 # 8. View/Clear Saved Checkpoints: /checkpoints
@@ -945,10 +943,26 @@ async def list_checkpoints_command(client: Client, message: Message):
 
 # 9. Startup Checkpoint Notifier (Alerts admin if an indexing job was active before restart)
 async def check_and_notify_interrupted_checkpoints(client: Client):
-    """Detect interrupted indexing jobs on bot startup and alert admin with 1-click resume button."""
+    """Detect interrupted indexing jobs on bot startup and alert admin with 1-click resume button.
+    Auto-purges stale checkpoints older than 24 hours (1 day).
+    """
     try:
         await asyncio.sleep(8)  # Allow client to fully initialize
-        cursor = mongo.db["indexer_checkpoints"].find({"status": {"$in": ["running", "paused", "interrupted"]}})
+        
+        # Auto-clean checkpoints older than 24 hours (1 day)
+        one_day_ago = time.time() - 86400
+        try:
+            await mongo.db["indexer_checkpoints"].delete_many({
+                "updated_at": {"$lt": one_day_ago}
+            })
+        except Exception:
+            pass
+
+        # Query only active, recent checkpoints from the last 24 hours
+        cursor = mongo.db["indexer_checkpoints"].find({
+            "status": {"$in": ["running", "paused"]},
+            "updated_at": {"$gte": one_day_ago}
+        })
         items = await cursor.to_list(length=10)
         if not items:
             return
