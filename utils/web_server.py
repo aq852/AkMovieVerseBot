@@ -5043,15 +5043,17 @@ async def get_stream_catalog_settings() -> dict:
         mode = await get_bot_setting("stream_catalog_mode", "auto")
         channels = await get_bot_setting("stream_catalog_channels", [])
         hide_bare = await get_bot_setting("stream_hide_bare_codes", True)
+        is_paused = await get_bot_setting("stream_catalog_paused", False)
         return {
             "cutoff_id": cutoff_id,
             "mode": mode,
             "channels": channels,
-            "hide_bare_codes": hide_bare
+            "hide_bare_codes": hide_bare,
+            "is_paused": is_paused
         }
     except Exception as e:
         logger.debug(f"Error fetching stream catalog settings: {e}")
-        return {"cutoff_id": None, "mode": "auto", "channels": [], "hide_bare_codes": True}
+        return {"cutoff_id": None, "mode": "auto", "channels": [], "hide_bare_codes": True, "is_paused": False}
 
 
 def clear_catalog_cache():
@@ -5082,6 +5084,9 @@ async def get_grouped_catalog() -> list:
     cutoff_id = settings.get("cutoff_id")
     mode = settings.get("mode", "auto")
     channels = settings.get("channels", [])
+
+    if mode == "cleared":
+        return []
 
     or_conditions = []
 

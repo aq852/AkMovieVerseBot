@@ -2373,6 +2373,17 @@ class TestAutoFilterEngine(unittest.TestCase):
             m2 = await set_web_stream_status_by_id("non_existent_unique_id_99999", True)
             self.assertEqual(m2, 0)
 
+            # 5. Verify _build_stream_settings_panel dashboard
+            from plugins.extra import _build_stream_settings_panel
+            dash_text, dash_markup = await _build_stream_settings_panel()
+            self.assertIn("STREAMING WEBSITE CONTROL PANEL", dash_text)
+            self.assertIsNotNone(dash_markup)
+            dash_cbs = [btn.callback_data for row in dash_markup.inline_keyboard for btn in row]
+            self.assertIn("stream_set_now", dash_cbs)
+            self.assertIn("stream_pause", dash_cbs)
+            self.assertIn("stream_resume", dash_cbs)
+            self.assertIn("stream_clear_all", dash_cbs)
+
         asyncio.run(_test_settings())
 
 

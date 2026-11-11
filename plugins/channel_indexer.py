@@ -189,7 +189,12 @@ async def auto_channel_listener(client: Client, message: Message):
         return
 
     media_info["source"] = "auto_index"
-    media_info["is_web_stream"] = True
+    try:
+        from utils.web_server import get_stream_catalog_settings
+        st_settings = await get_stream_catalog_settings()
+        media_info["is_web_stream"] = not st_settings.get("is_paused", False) and st_settings.get("mode") != "cleared"
+    except Exception:
+        media_info["is_web_stream"] = True
 
     success, status = await save_file(media_info)
     if success:
@@ -288,13 +293,17 @@ async def run_channel_crawl(
         "channel_title": channel_title
     }
 
-    # Automatically enable web streaming if this channel is in stream_catalog_channels
+    # Automatically enable web streaming if channel is whitelisted or mode is "all" (when not paused)
     if not is_web_stream:
         try:
-            from database.mongo import get_bot_setting
-            stream_chans = await get_bot_setting("stream_catalog_channels", [])
-            if chat_id in stream_chans:
-                is_web_stream = True
+            from utils.web_server import get_stream_catalog_settings
+            st_settings = await get_stream_catalog_settings()
+            stream_chans = st_settings.get("channels", [])
+            stream_mode = st_settings.get("mode", "auto")
+            is_paused = st_settings.get("is_paused", False)
+            if not is_paused and stream_mode != "cleared":
+                if chat_id in stream_chans or stream_mode == "all":
+                    is_web_stream = True
         except Exception:
             pass
 

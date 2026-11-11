@@ -962,8 +962,9 @@ async def vipsettings_cmd(client: Client, message: Message):
 # Streaming Website Catalog Management & Backlog Filter System
 # -------------------------------------------------------------
 
-@Client.on_message(filters.command(["streamcutoff", "cutoff"]) & filters.private)
-async def stream_cutoff_cmd(client: Client, message: Message):
+@Client.on_message(filters.command(["streamstart", "startstream", "streamcutoff", "cutoff", "streamon"]) & filters.private)
+async def stream_start_cmd(client: Client, message: Message):
+    """Start or adjust the streaming website showroom timeline start point and ingestion."""
     if not Config.is_admin(message.from_user.id):
         return
     args = message.text.split()
@@ -972,38 +973,117 @@ async def stream_cutoff_cmd(client: Client, message: Message):
     from bson import ObjectId
     import datetime
 
+    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+
     if len(args) < 2:
         curr = await get_bot_setting("stream_catalog_cutoff_id", None)
-        curr_str = f"<code>{curr}</code>" if curr else "<i>None (Showing all indexed files)</i>"
+        mode = await get_bot_setting("stream_catalog_mode", "auto")
+        is_paused = await get_bot_setting("stream_catalog_paused", False)
+        status = "⏸️ PAUSED" if is_paused else ("🧹 CLEARED" if mode == "cleared" else "🟢 ACTIVE")
+        curr_str = f"<code>{curr}</code>" if curr else "<i>Beginning (All indexed files)</i>"
         await message.reply_text(
-            f"🎬 <b>Current Stream Cutoff ID:</b> {curr_str}\n\n"
+            f"🎬 <b>STREAM CATALOG START CONTROLLER</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Status:</b> {status}\n"
+            f"• <b>Current Start Point:</b> {curr_str}\n"
+            f"• <b>Ingestion Mode:</b> <code>{mode.upper()}</code>\n\n"
             "<b>Usage:</b>\n"
-            "• <code>/streamcutoff now</code> — Hide all past 588k backlog clutter! Only new uploads will show on website.\n"
-            "• <code>/streamcutoff reset</code> — Restore all files to website catalog.\n"
-            "• <code>/streamcutoff YYYY-MM-DD</code> — Set cutoff to a specific date (e.g. <code>/streamcutoff 2026-11-01</code>)."
+            "• <code>/streamstart now</code> — Start stream live from NOW! All new files (from /index, auto-index, anyhow) automatically go to website showroom.\n"
+            "• <code>/streamstart all</code> — Restore all 588k library files to website showroom.\n"
+            "• <code>/streamstart auto</code> — Start stream in auto-only mode (live uploads only).\n"
+            "• <code>/streamstart YYYY-MM-DD</code> — Start stream showroom from a specific date."
         )
         return
 
     sub = args[1].lower().strip()
-    if sub == "reset":
+    if sub in ("all", "reset"):
         await set_bot_setting("stream_catalog_cutoff_id", None)
+        await set_bot_setting("stream_catalog_mode", "all")
+        await set_bot_setting("stream_catalog_paused", False)
         clear_catalog_cache()
-        await message.reply_text("✅ <b>Stream Cutoff Reset:</b> All indexed files will now appear on website catalog again.")
+        await message.reply_text(
+            "✅ <b>Full Stream Catalog Live!</b>\n\n"
+            "• All 588k+ indexed files are now visible on the website catalog.\n"
+            f"• <b>Web Catalog:</b> <a href=\"{web_url}/browse\">{web_url}/browse</a>"
+        )
+    elif sub == "auto":
+        await set_bot_setting("stream_catalog_mode", "auto")
+        await set_bot_setting("stream_catalog_paused", False)
+        clear_catalog_cache()
+        await message.reply_text(
+            "✅ <b>Stream Mode: AUTO!</b>\n\n"
+            "• Only live storage channel uploads will appear on the website.\n"
+            "• Bulk /index history crawls remain bot-only."
+        )
     elif sub == "now":
         latest = await mongo.files.find_one({}, {"_id": 1}, sort=[("_id", -1)])
         if not latest:
-            await message.reply_text("⚠️ No files found in database to set cutoff.")
+            await message.reply_text("⚠️ No files found in database to set start point.")
             return
         cutoff_id = str(latest["_id"])
         await set_bot_setting("stream_catalog_cutoff_id", cutoff_id)
+        await set_bot_setting("stream_catalog_mode", "all")
+        await set_bot_setting("stream_catalog_paused", False)
         clear_catalog_cache()
         await message.reply_text(
-            f"✅ <b>Stream Cutoff Activated (NOW)!</b>\n\n"
-            f"• <b>Cutoff ID:</b> <code>{cutoff_id}</code>\n"
-            f"• <b>Website Status:</b> All old backlog files are now <b>hidden from the website catalog</b>.\n"
+            f"✅ <b>Stream Showroom Started from NOW!</b>\n\n"
+            f"• <b>Showroom Start Point:</b> Right now (Past backlog hidden from website)\n"
+            f"• <b>Ingestion Mode:</b> 🔵 ALL (Whatever files come in from /index, auto-index, anyhow — ALL go to website!)\n"
             f"• <b>Bot Status:</b> All 588k+ files remain <b>100% indexed & searchable in Telegram</b>!\n"
-            f"• Only fresh releases indexed from now on will appear on the website catalog."
+            f"• <b>Catalog Link:</b> <a href=\"{web_url}/browse\">{web_url}/browse</a>"
         )
+    else:
+        try:
+            dt = datetime.datetime.strptime(sub, "%Y-%m-%d")
+            cutoff_id = str(ObjectId.from_datetime(dt))
+            await set_bot_setting("stream_catalog_cutoff_id", cutoff_id)
+            await set_bot_setting("stream_catalog_mode", "all")
+            await set_bot_setting("stream_catalog_paused", False)
+            clear_catalog_cache()
+            await message.reply_text(
+                f"✅ <b>Stream Started from Date:</b> <code>{sub}</code>\n\n"
+                f"• Cutoff ObjectId: <code>{cutoff_id}</code>\n"
+                f"• Content indexed on or after {sub} is now live on the website showroom."
+            )
+        except Exception:
+            await message.reply_text("⚠️ Invalid parameter. Use <code>now</code>, <code>all</code>, <code>auto</code>, or <code>YYYY-MM-DD</code>.")
+
+
+@Client.on_message(filters.command(["streamclear", "clearstream", "streamwipe"]) & filters.private)
+async def stream_clear_cmd(client: Client, message: Message):
+    """Clear the streaming website showroom completely or up to a specific date."""
+    if not Config.is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    from database.mongo import set_bot_setting, mongo
+    from utils.web_server import clear_catalog_cache
+    from bson import ObjectId
+    import datetime
+
+    sub = args[1].lower().strip() if len(args) > 1 else "all"
+
+    if sub == "all":
+        await set_bot_setting("stream_catalog_mode", "cleared")
+        await set_bot_setting("stream_catalog_cutoff_id", None)
+        clear_catalog_cache()
+        await message.reply_text(
+            "🧹 <b>Streaming Website Catalog Cleared!</b>\n\n"
+            "• <b>Website Status:</b> 0 titles showing on website showroom (Clean Slate).\n"
+            "• <b>Bot Status:</b> All 588k+ files remain <b>100% safe & searchable in Telegram</b>!\n\n"
+            "💡 <i>To start publishing again anytime, use</i> <code>/streamstart now</code> <i>or click [Start From NOW] in /streamsettings</i>."
+        )
+    elif sub == "now":
+        latest = await mongo.files.find_one({}, {"_id": 1}, sort=[("_id", -1)])
+        if latest:
+            cutoff_id = str(latest["_id"])
+            await set_bot_setting("stream_catalog_cutoff_id", cutoff_id)
+            clear_catalog_cache()
+            await message.reply_text(
+                "🧹 <b>Past Backlog Cleared from Website!</b>\n\n"
+                "• All past files up to right now are hidden from the website catalog showroom.\n"
+                "• Only fresh releases indexed from now on will appear on the website showroom.\n"
+                "• <i>Files remain 100% searchable in Telegram bot!</i>"
+            )
     else:
         try:
             dt = datetime.datetime.strptime(sub, "%Y-%m-%d")
@@ -1011,12 +1091,50 @@ async def stream_cutoff_cmd(client: Client, message: Message):
             await set_bot_setting("stream_catalog_cutoff_id", cutoff_id)
             clear_catalog_cache()
             await message.reply_text(
-                f"✅ <b>Stream Cutoff Set to Date:</b> <code>{sub}</code>\n"
-                f"• Cutoff ObjectId: <code>{cutoff_id}</code>\n"
-                f"• Files indexed before this date are hidden from the website catalog."
+                f"🧹 <b>Files Before {sub} Cleared from Website!</b>\n\n"
+                f"• All files indexed before <code>{sub}</code> are now hidden from the website catalog showroom."
             )
         except Exception:
-            await message.reply_text("⚠️ Invalid date format. Use <code>YYYY-MM-DD</code> (e.g. <code>2026-11-01</code>) or <code>now</code> or <code>reset</code>.")
+            await message.reply_text("⚠️ Use <code>/streamclear all</code>, <code>/streamclear now</code>, or <code>/streamclear YYYY-MM-DD</code>.")
+
+
+@Client.on_message(filters.command(["streampause", "pause_stream", "pausecatalog"]) & filters.private)
+async def stream_pause_cmd(client: Client, message: Message):
+    """Freeze website streaming catalog updates temporarily."""
+    if not Config.is_admin(message.from_user.id):
+        return
+    from database.mongo import set_bot_setting
+    from utils.web_server import clear_catalog_cache
+    await set_bot_setting("stream_catalog_paused", True)
+    clear_catalog_cache()
+    await message.reply_text(
+        "⏸️ <b>Streaming Website Catalog PAUSED!</b>\n\n"
+        "• Website showroom updates are now <b>frozen</b>.\n"
+        "• New channel uploads and indexing will stay in Telegram bot only (100% searchable).\n"
+        "• No new titles will enter the website showroom until resumed.\n\n"
+        "💡 <i>Resume anytime using</i> <code>/streamresume</code> <i>or via /streamsettings</i>."
+    )
+
+
+@Client.on_message(filters.command(["streamresume", "resume_stream", "resumecatalog"]) & filters.private)
+async def stream_resume_cmd(client: Client, message: Message):
+    """Unfreeze and resume website streaming catalog updates."""
+    if not Config.is_admin(message.from_user.id):
+        return
+    from database.mongo import set_bot_setting, get_bot_setting
+    from utils.web_server import clear_catalog_cache
+    await set_bot_setting("stream_catalog_paused", False)
+    mode = await get_bot_setting("stream_catalog_mode", "auto")
+    if mode == "cleared":
+        await set_bot_setting("stream_catalog_mode", "all")
+    clear_catalog_cache()
+    web_url = getattr(Config, "STREAM_BASE_URL", "http://localhost:8080").rstrip("/")
+    await message.reply_text(
+        "▶️ <b>Streaming Website Catalog RESUMED!</b>\n\n"
+        "• Website showroom is now <b>LIVE</b> again!\n"
+        "• New uploads and indexing will automatically publish to the website.\n"
+        f"• <b>Web Catalog:</b> <a href=\"{web_url}/browse\">{web_url}/browse</a>"
+    )
 
 
 @Client.on_message(filters.command(["streammode"]) & filters.private)
@@ -1113,7 +1231,7 @@ async def list_stream_channels_cmd(client: Client, message: Message):
         await message.reply_text(f"📺 <b>Whitelisted Streaming Channels:</b>\n\n{c_lines}")
 
 
-@Client.on_message(filters.command(["addstream", "streamadd"]) & filters.private)
+@Client.on_message(filters.command(["streamadd", "addstream"]) & filters.private)
 async def add_stream_cmd(client: Client, message: Message):
     """Publish a specific movie, series, or replied file to the Web Streaming Website."""
     if not Config.is_admin(message.from_user.id):
@@ -1156,9 +1274,9 @@ async def add_stream_cmd(client: Client, message: Message):
     if len(args) < 2:
         return await message.reply_text(
             "⚠️ <b>Usage:</b>\n"
-            "• <code>/addstream [Movie or Series Name]</code> — Publish all matching files to streaming site\n"
-            "• Reply to any video/file with <code>/addstream</code> — Publish that file/series to site\n\n"
-            "<i>Example:</i> <code>/addstream Inception</code>"
+            "• <code>/streamadd [Movie or Series Name]</code> — Publish all matching files to streaming site\n"
+            "• Reply to any video/file with <code>/streamadd</code> — Publish that file/series to site\n\n"
+            "<i>Example:</i> <code>/streamadd Inception</code>"
         )
 
     query = args[1].strip()
@@ -1180,7 +1298,7 @@ async def add_stream_cmd(client: Client, message: Message):
     )
 
 
-@Client.on_message(filters.command(["delstream", "streamdel", "removestream"]) & filters.private)
+@Client.on_message(filters.command(["streamremove", "removestream", "delstream", "streamdel"]) & filters.private)
 async def del_stream_cmd(client: Client, message: Message):
     """Hide a specific movie, series, or replied file from the Web Streaming Website."""
     if not Config.is_admin(message.from_user.id):
@@ -1220,9 +1338,9 @@ async def del_stream_cmd(client: Client, message: Message):
     if len(args) < 2:
         return await message.reply_text(
             "⚠️ <b>Usage:</b>\n"
-            "• <code>/delstream [Movie or Series Name]</code> — Hide all matching files from streaming site\n"
-            "• Reply to any video/file with <code>/delstream</code> — Hide that file/series from site\n\n"
-            "<i>Example:</i> <code>/delstream Inception</code>"
+            "• <code>/streamremove [Movie or Series Name]</code> — Hide all matching files from streaming site\n"
+            "• Reply to any video/file with <code>/streamremove</code> — Hide that file/series from site\n\n"
+            "<i>Example:</i> <code>/streamremove Inception</code>"
         )
 
     query = args[1].strip()
@@ -1240,57 +1358,88 @@ async def del_stream_cmd(client: Client, message: Message):
     )
 
 
+async def _build_stream_settings_panel():
+    """Construct unified dashboard text and inline buttons for stream control center."""
+    from database.mongo import get_bot_setting, mongo
+    cutoff = await get_bot_setting("stream_catalog_cutoff_id", None)
+    mode = await get_bot_setting("stream_catalog_mode", "auto")
+    chans = await get_bot_setting("stream_catalog_channels", [])
+    is_paused = await get_bot_setting("stream_catalog_paused", False)
+
+    total_bot_files = 0
+    try:
+        total_bot_files = await mongo.files.count_documents({})
+        if mongo.has_secondary:
+            total_bot_files += await mongo.files_secondary.count_documents({})
+    except Exception:
+        pass
+
+    if is_paused:
+        status_desc = "⏸️ PAUSED (Updates frozen)"
+    elif mode == "cleared":
+        status_desc = "🧹 CLEARED (Showroom empty)"
+    else:
+        status_desc = "🟢 LIVE & ACTIVE"
+
+    if cutoff:
+        start_desc = f"Fresh from now (ID: <code>{cutoff[:10]}...</code>)"
+    else:
+        start_desc = "Beginning (Full 588k library)"
+
+    mode_labels = {
+        "all": "🔵 ALL (Every /index & upload goes to web)",
+        "auto": "🟢 AUTO (Live channel uploads only)",
+        "channels": f"🟣 CHANNELS ({len(chans)} whitelisted)",
+        "cleared": "⚪ CLEARED (Website wiped)"
+    }
+    mode_desc = mode_labels.get(mode, mode)
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("▶️ Start From NOW", callback_data="stream_set_now"),
+            InlineKeyboardButton("♻️ Restore All", callback_data="stream_set_reset")
+        ],
+        [
+            InlineKeyboardButton("⏸️ Pause Stream", callback_data="stream_pause"),
+            InlineKeyboardButton("▶️ Resume Stream", callback_data="stream_resume")
+        ],
+        [
+            InlineKeyboardButton("🧹 Clear Website", callback_data="stream_clear_all"),
+            InlineKeyboardButton(f"🔀 Mode: {mode.upper()}", callback_data="stream_toggle_mode")
+        ],
+        [
+            InlineKeyboardButton(f"📺 Channels ({len(chans)})", callback_data="stream_channels_list"),
+            InlineKeyboardButton("🔄 Refresh", callback_data="stream_refresh")
+        ]
+    ])
+
+    text = (
+        "🎬 <b>STREAMING WEBSITE CONTROL PANEL</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Website Status:</b> {status_desc}\n"
+        f"• <b>Showroom Start:</b> {start_desc}\n"
+        f"• <b>Publishing Mode:</b> {mode_desc}\n"
+        f"• <b>Whitelisted Channels:</b> <code>{len(chans)} Channels</code>\n"
+        f"• <b>Bare-Code Junk Guard:</b> 🟢 Active (e.g. S02E33 hidden)\n\n"
+        "📊 <b>Database Overview:</b>\n"
+        f"• <b>Bot Master Index:</b> <code>{total_bot_files:,} files</code> (100% in TG)\n\n"
+        "⚡ <b>Commands:</b>\n"
+        "• <code>/streamstart now</code> — Live start from now (All files to web)\n"
+        "• <code>/streamclear all</code> — Wipe website (Files safe in Bot)\n"
+        "• <code>/streampause</code> | <code>/streamresume</code> — Freeze / Unfreeze site\n"
+        "• <code>/streamadd [name]</code> | <code>/streamremove [name]</code>\n"
+        "• <code>/addstreamchannel [id]</code> — Whitelist channel\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    return text, keyboard
+
 
 @Client.on_message(filters.command(["streamsettings", "catalogsettings"]) & filters.private)
 async def stream_settings_cmd(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return
-    from database.mongo import get_bot_setting, mongo
-    cutoff = await get_bot_setting("stream_catalog_cutoff_id", None)
-    mode = await get_bot_setting("stream_catalog_mode", "auto")
-    chans = await get_bot_setting("stream_catalog_channels", [])
-
-    total_bot_files = await mongo.files.count_documents({})
-    if mongo.has_secondary:
-        total_bot_files += await mongo.files_secondary.count_documents({})
-
-    cutoff_desc = f"🟢 Active (ID: <code>{cutoff}</code>)" if cutoff else "⚪ Disabled (Showing all files)"
-    mode_desc = {
-        "auto": "🟢 Auto-Index Only (bulk /index hidden)",
-        "all": "🔵 All Files (subject to cutoff)",
-        "channels": f"🟣 Channel Whitelist ({len(chans)} channels)"
-    }.get(mode, mode)
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🔄 Set Cutoff: NOW", callback_data="stream_set_now"),
-            InlineKeyboardButton("♻️ Reset Cutoff", callback_data="stream_set_reset")
-        ],
-        [
-            InlineKeyboardButton("🔀 Toggle Mode", callback_data="stream_toggle_mode"),
-            InlineKeyboardButton("🧹 Clear Cache", callback_data="stream_clear_cache")
-        ]
-    ])
-
-    await message.reply_text(
-        "🎬 <b>STREAMING WEBSITE CATALOG SETTINGS</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• <b>Filter Mode:</b> {mode_desc}\n"
-        f"• <b>Catalog Cutoff:</b> {cutoff_desc}\n"
-        f"• <b>Bare-Code Junk Filter:</b> 🟢 Enabled (e.g. S02E33 hidden)\n\n"
-        "📊 <b>Database Stats:</b>\n"
-        f"• <b>Total Files in Bot Index:</b> <code>{total_bot_files:,} files</code> (100% searchable in TG)\n\n"
-        "⚡ <b>Commands:</b>\n"
-        "• <code>/addstream [movie name]</code> — Publish movie/series to website\n"
-        "• <code>/delstream [movie name]</code> — Hide movie/series from website\n"
-        "• <code>/streamcutoff now</code> — Wipe all past clutter from website!\n"
-        "• <code>/streamcutoff reset</code> — Restore all files to website\n"
-        "• <code>/streammode [auto|all|channels]</code> — Change mode\n"
-        "• <code>/addstreamchannel [id]</code> — Whitelist channel\n"
-        "• <code>/index @channel -stream</code> — Index channel directly to site\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        reply_markup=keyboard
-    )
+    text, keyboard = await _build_stream_settings_panel()
+    await message.reply_text(text, reply_markup=keyboard)
 
 
 @Client.on_callback_query(filters.regex(r"^stream_"))
@@ -1308,76 +1457,66 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         if latest:
             cutoff_id = str(latest["_id"])
             await set_bot_setting("stream_catalog_cutoff_id", cutoff_id)
+            await set_bot_setting("stream_catalog_mode", "all")
+            await set_bot_setting("stream_catalog_paused", False)
             clear_catalog_cache()
-            await query.answer("✅ Website catalog wiped clean! All old backlog hidden.", show_alert=True)
+            await query.answer("✅ Stream started from NOW! All new files will go to site.", show_alert=True)
         else:
             await query.answer("⚠️ No files found.", show_alert=True)
 
     elif data == "stream_set_reset":
         await set_bot_setting("stream_catalog_cutoff_id", None)
+        await set_bot_setting("stream_catalog_mode", "all")
+        await set_bot_setting("stream_catalog_paused", False)
         clear_catalog_cache()
-        await query.answer("✅ Cutoff removed! All files restored to website.", show_alert=True)
+        await query.answer("✅ Entire database restored to website showroom!", show_alert=True)
+
+    elif data == "stream_pause":
+        await set_bot_setting("stream_catalog_paused", True)
+        clear_catalog_cache()
+        await query.answer("⏸️ Website catalog paused! New files stay in Bot only.", show_alert=True)
+
+    elif data == "stream_resume":
+        await set_bot_setting("stream_catalog_paused", False)
+        mode = await get_bot_setting("stream_catalog_mode", "auto")
+        if mode == "cleared":
+            await set_bot_setting("stream_catalog_mode", "all")
+        clear_catalog_cache()
+        await query.answer("▶️ Website catalog resumed! Live publishing is ON.", show_alert=True)
+
+    elif data == "stream_clear_all":
+        await set_bot_setting("stream_catalog_mode", "cleared")
+        await set_bot_setting("stream_catalog_cutoff_id", None)
+        clear_catalog_cache()
+        await query.answer("🧹 Website catalog cleared! (All files safe in Bot).", show_alert=True)
 
     elif data == "stream_toggle_mode":
-        curr = await get_bot_setting("stream_catalog_mode", "auto")
-        modes = ["auto", "all", "channels"]
-        next_mode = modes[(modes.index(curr) + 1) % len(modes)]
+        curr = await get_bot_setting("stream_catalog_mode", "all")
+        modes = ["all", "auto", "channels"]
+        next_mode = modes[(modes.index(curr) + 1) % len(modes)] if curr in modes else "all"
         await set_bot_setting("stream_catalog_mode", next_mode)
         clear_catalog_cache()
         await query.answer(f"✅ Mode changed to: {next_mode.upper()}", show_alert=True)
+
+    elif data == "stream_channels_list":
+        chans = await get_bot_setting("stream_catalog_channels", [])
+        if chans:
+            c_text = "\n".join([f"• {c}" for c in chans])
+            await query.answer(f"📺 Whitelisted Channels:\n{c_text}", show_alert=True)
+        else:
+            await query.answer("ℹ️ No specific streaming channels whitelisted. Use /addstreamchannel <id>", show_alert=True)
+
+    elif data == "stream_refresh":
+        await query.answer("🔄 Dashboard refreshed!", show_alert=False)
 
     elif data == "stream_clear_cache":
         clear_catalog_cache()
         await query.answer("🧹 Stream catalog cache cleared!", show_alert=True)
 
-    # Refresh message if possible
+    # Refresh message view
     try:
-        from database.mongo import get_bot_setting, mongo
-        cutoff = await get_bot_setting("stream_catalog_cutoff_id", None)
-        mode = await get_bot_setting("stream_catalog_mode", "auto")
-        chans = await get_bot_setting("stream_catalog_channels", [])
-
-        total_bot_files = await mongo.files.count_documents({})
-        if mongo.has_secondary:
-            total_bot_files += await mongo.files_secondary.count_documents({})
-
-        cutoff_desc = f"🟢 Active (ID: <code>{cutoff}</code>)" if cutoff else "⚪ Disabled (Showing all files)"
-        mode_desc = {
-            "auto": "🟢 Auto-Index Only (bulk /index hidden)",
-            "all": "🔵 All Files (subject to cutoff)",
-            "channels": f"🟣 Channel Whitelist ({len(chans)} channels)"
-        }.get(mode, mode)
-
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🔄 Set Cutoff: NOW", callback_data="stream_set_now"),
-                InlineKeyboardButton("♻️ Reset Cutoff", callback_data="stream_set_reset")
-            ],
-            [
-                InlineKeyboardButton("🔀 Toggle Mode", callback_data="stream_toggle_mode"),
-                InlineKeyboardButton("🧹 Clear Cache", callback_data="stream_clear_cache")
-            ]
-        ])
-
-        await query.message.edit_text(
-            "🎬 <b>STREAMING WEBSITE CATALOG SETTINGS</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Filter Mode:</b> {mode_desc}\n"
-            f"• <b>Catalog Cutoff:</b> {cutoff_desc}\n"
-            f"• <b>Bare-Code Junk Filter:</b> 🟢 Enabled (e.g. S02E33 hidden)\n\n"
-            "📊 <b>Database Stats:</b>\n"
-            f"• <b>Total Files in Bot Index:</b> <code>{total_bot_files:,} files</code> (100% searchable in TG)\n\n"
-            "⚡ <b>Commands:</b>\n"
-            "• <code>/addstream [movie name]</code> — Publish movie/series to website\n"
-            "• <code>/delstream [movie name]</code> — Hide movie/series from website\n"
-            "• <code>/streamcutoff now</code> — Wipe all past clutter from website!\n"
-            "• <code>/streamcutoff reset</code> — Restore all files to website\n"
-            "• <code>/streammode [auto|all|channels]</code> — Change mode\n"
-            "• <code>/addstreamchannel [id]</code> — Whitelist channel\n"
-            "• <code>/index @channel -stream</code> — Index channel directly to site\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            reply_markup=keyboard
-        )
+        text, keyboard = await _build_stream_settings_panel()
+        await query.message.edit_text(text, reply_markup=keyboard)
     except Exception:
         pass
 
