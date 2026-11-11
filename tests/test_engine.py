@@ -2083,7 +2083,7 @@ class TestAutoFilterEngine(unittest.TestCase):
     def test_web_player_audio_switcher(self):
         """Verify Web Cinema Player multi-audio switching, language tabs, and dual audio detection."""
         from utils.web_server import WEB_PLAYER_HTML, watch_handler, resolve_file_from_param
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
         import asyncio
 
         # Check WEB_PLAYER_HTML template has audio switcher assets
@@ -2260,6 +2260,10 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertIn("agift_wait", callback_data_list)
                 self.assertIn("agift_shield", callback_data_list)
                 self.assertIn("agift_autodel", callback_data_list)
+                self.assertIn("agift_interval", callback_data_list)
+                self.assertIn("agift_view_q", callback_data_list)
+                self.assertIn("agift_quiet", callback_data_list)
+                self.assertIn("agift_clean_prev", callback_data_list)
                 self.assertIn("agift_refresh", callback_data_list)
 
                 # 4. Test sample clip extractor function safe fallback on non-existent video
@@ -2394,6 +2398,105 @@ class TestAutoFilterEngine(unittest.TestCase):
             self.assertIn("stream_panel_clear_all", dash_cbs)
 
         asyncio.run(_test_settings())
+
+    def test_auto_gift_drip_feed_queue_and_commands(self):
+        """Test auto-gift drip-feed pacing queue, dashboard formatters, and dispatch logic."""
+        import asyncio
+        import time
+        from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+        from database.mongo import mongo
+        from plugins.gifts import (
+            format_gift_queue_dashboard,
+            _dispatch_queued_gift
+        )
+
+        async def _test():
+            fake_queue = [
+                {
+                    "_id": "id_1",
+                    "gift_id": "test_q_1",
+                    "title": "Stree 2 (2024)",
+                    "quality": "1080p",
+                    "file_size": 1500000000,
+                    "post_ch": -10099887766,
+                    "poster_photo": "test_photo_id",
+                    "sample_video_path": None,
+                    "caption_text": "🔥 EXCLUSIVE DROP 🔥\nStree 2",
+                    "claim_url": "https://t.me/Bot?start=gift_test_q_1",
+                    "post_btn": "⚡ Get Full Video ➔",
+                    "status": "queued",
+                    "queued_at": time.time() - 100,
+                    "attempts": 0
+                },
+                {
+                    "_id": "id_2",
+                    "gift_id": "test_q_2",
+                    "title": "Deadpool & Wolverine (2024)",
+                    "quality": "720p",
+                    "file_size": 900000000,
+                    "post_ch": -10099887766,
+                    "poster_photo": "test_photo_id_2",
+                    "sample_video_path": None,
+                    "caption_text": "🔥 EXCLUSIVE DROP 🔥\nDeadpool",
+                    "claim_url": "https://t.me/Bot?start=gift_test_q_2",
+                    "post_btn": "⚡ Get Full Video ➔",
+                    "status": "queued",
+                    "queued_at": time.time() - 50,
+                    "attempts": 0
+                }
+            ]
+
+            mock_col = MagicMock()
+            mock_cursor = MagicMock()
+            mock_cursor.sort = MagicMock(return_value=mock_cursor)
+            mock_cursor.to_list = AsyncMock(return_value=fake_queue)
+            mock_col.find = MagicMock(return_value=mock_cursor)
+            mock_col.count_documents = AsyncMock(return_value=len(fake_queue))
+            mock_col.delete_one = AsyncMock()
+            mock_col.delete_many = AsyncMock(return_value=MagicMock(deleted_count=len(fake_queue)))
+            mock_col.update_one = AsyncMock()
+
+            cfg = {
+                "enabled": True,
+                "interval_seconds": 900,
+                "queue_paused": False,
+                "quiet_hours_enabled": True,
+                "clean_previous_post": True,
+                "last_posted_msg_id": 12345
+            }
+
+            mock_db = MagicMock()
+            mock_db.__getitem__.return_value = mock_col
+
+            with patch.object(type(mongo), "db", new_callable=PropertyMock, return_value=mock_db):
+                # 1. Test queue dashboard formatter
+                text, markup = await format_gift_queue_dashboard(cfg)
+                self.assertIn("AUTO-GIFT DRIP-FEED QUEUE DASHBOARD", text)
+                self.assertIn("15 Minutes", text)
+                self.assertIn("Stree 2", text)
+                self.assertIn("Deadpool", text)
+                self.assertIn("2 posts", text)
+
+                callbacks = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+                self.assertIn("agift_q_next", callbacks)
+                self.assertIn("agift_q_pause", callbacks)
+                self.assertIn("agift_q_clear", callbacks)
+                self.assertIn("agift_q_refresh", callbacks)
+                self.assertIn("agift_back_settings", callbacks)
+
+                # 2. Test mock dispatch of queued item
+                mock_client = MagicMock()
+                sent_msg = MagicMock()
+                sent_msg.id = 998877
+                mock_client.send_photo = AsyncMock(return_value=sent_msg)
+                mock_client.delete_messages = AsyncMock()
+
+                ok = await _dispatch_queued_gift(mock_client, fake_queue[0], cfg)
+                self.assertTrue(ok)
+                mock_client.send_photo.assert_called_once()
+                mock_client.delete_messages.assert_called_once_with(chat_id=-10099887766, message_ids=[12345])
+
+        asyncio.run(_test())
 
 
 if __name__ == "__main__":

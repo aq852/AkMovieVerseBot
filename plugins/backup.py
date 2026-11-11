@@ -33,7 +33,8 @@ BACKUP_COLLECTIONS = [
     "channel_posts",
     "search_demand",
     "upload_alerts",
-    "storage_channels"
+    "storage_channels",
+    "gift_post_queue"
 ]
 
 async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "Manual Backup", include_files: bool = False) -> tuple[bool, str]:

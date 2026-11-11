@@ -177,6 +177,14 @@ class Bot(Client):
         except Exception as e:
             logger.warning(f"Could not launch indexer checkpoint checker: {e}")
 
+        # 11. Start Auto-Gift Scheduled Drip Feed Queue Worker
+        try:
+            from plugins.gifts import start_gift_queue_worker
+            start_gift_queue_worker(self)
+            logger.info("Launched Auto-Gift Scheduled Drip Feed Queue Worker.")
+        except Exception as e:
+            logger.warning(f"Could not launch gift queue worker: {e}")
+
     async def stop(self, *args):
         try:
             from utils.downloader import purge_stale_temp_downloads

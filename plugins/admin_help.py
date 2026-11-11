@@ -90,7 +90,15 @@ CATEGORY_CONTENT = {
         "• <code>/giftban &lt;user_id&gt; [reason]</code>\n"
         "<b>Usage:</b> Globally blacklists a user from claiming any gifts (e.g. for leaving sponsor channels).\n\n"
         "• <code>/giftunban &lt;user_id&gt;</code>\n"
-        "<b>Usage:</b> Removes user from gift blacklist."
+        "<b>Usage:</b> Removes user from gift blacklist.\n\n"
+        "• <code>/giftqueue</code> (alias: <code>/agiftq</code>)\n"
+        "<b>Usage:</b> Visual dashboard for scheduled drip-feed gift queue with interactive controls (Post Next, Pause, Clear).\n\n"
+        "• <code>/setgiftinterval &lt;15m|30m|1h|off&gt;</code>\n"
+        "<b>Usage:</b> Set pacing delay between gift posts so dumping 500 videos posts smoothly over time.\n\n"
+        "• <code>/setgiftquiet &lt;on|off&gt;</code>\n"
+        "<b>Usage:</b> Toggle night sleep mode (12 AM - 8 AM IST) so users are not disturbed while sleeping.\n\n"
+        "• <code>/setgiftclean &lt;on|off&gt;</code>\n"
+        "<b>Usage:</b> Toggle channel clean mode (auto-deletes previous gift post when new one drops)."
     ),
 
     "ads": (

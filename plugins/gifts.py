@@ -1,4 +1,5 @@
 import os
+import time
 import shutil
 import tempfile
 import asyncio
@@ -919,8 +920,19 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "ad_link": None,
     "ad_links": [],
     "ad_wait_seconds": 3,
-    "ad_button_text": "🌐 View Sponsored Offer ↗️"
+    "ad_button_text": "🌐 View Sponsored Offer ↗️",
+    "interval_seconds": 0,
+    "queue_paused": False,
+    "quiet_hours_enabled": False,
+    "quiet_start_hour": 0,
+    "quiet_end_hour": 8,
+    "jitter_enabled": True,
+    "clean_previous_post": False,
+    "last_posted_msg_id": None
 }
+
+_GIFT_QUEUE_WORKER_TASK: asyncio.Task | None = None
+_LAST_GIFT_POST_TIMESTAMP: float = 0.0
 
 # Pending queue of videos waiting for custom poster in GIFT_DB_CHANNEL
 # key: message_id -> dict: {"event": asyncio.Event, "photo_id": Optional[str], "chat_id": int, "file_name": str, "status_msg": Optional[Message]}
@@ -981,7 +993,7 @@ async def extract_sample_clip_ffmpeg(video_path: str, start_sec: float, duration
     return False
 
 
-def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup]:
+def format_gift_settings_dashboard(cfg: dict, q_count: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     """Format stylish interactive dashboard and control keyboard for Auto-Gift publisher."""
     status_str = "🟢 ENABLED (Active)" if cfg.get("enabled") else "🔴 DISABLED (Paused)"
     db_val = cfg.get("db_channel")
@@ -1013,6 +1025,17 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
     wait_val = cfg.get("photo_wait_seconds", 60)
     wait_str = "OFF (Instant Drop)" if wait_val == 0 else f"{wait_val}s Wait"
 
+    int_val = cfg.get("interval_seconds", 0)
+    if int_val == 0:
+        int_str = "OFF (Instant Drops)"
+    elif int_val >= 3600:
+        int_str = f"{int_val // 3600} Hour(s)"
+    else:
+        int_str = f"{int_val // 60} Minutes"
+
+    quiet_str = "🌙 ON (12 AM - 8 AM Pause)" if cfg.get("quiet_hours_enabled") else "☀️ OFF (24/7 Drip)"
+    clean_str = "🧹 ON (Single Active Post)" if cfg.get("clean_previous_post") else "📜 OFF (Keep All)"
+
     mode_val = cfg.get("poster_mode", "ss")
     if mode_val == "sample":
         mode_str = "🎬 2-4s Sample Video"
@@ -1043,6 +1066,10 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         f"• <b>Auto-Delete Timer:</b> <code>{del_str}</code>",
         f"• <b>Photo Wait Window:</b> <code>{wait_str}</code>",
         f"• <b>Poster Engine Mode:</b> <code>{mode_str}</code>",
+        f"• <b>Pacing Interval:</b> <code>{int_str}</code>",
+        f"• <b>Drip-Feed Queue:</b> <code>{q_count:,} Pending</code>",
+        f"• <b>Night Sleep Mode:</b> {quiet_str}",
+        f"• <b>Channel Clean Mode:</b> {clean_str}",
         f"• <b>Post Header:</b> <code>{html.escape(cfg.get('post_header', '🔥 EXCLUSIVE DROP 🔥'))}</code>",
         f"• <b>Post Button:</b> <code>{html.escape(cfg.get('post_button', '⚡ Get Full Video ➔'))}</code>",
         "• <b>Fallback Chain:</b> Photo ➔ SS / Sample ➔ Thumb ➔ TMDB ➔ 3D Box",
@@ -1057,6 +1084,10 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
         "• <code>/setgiftdel <5m|10m|30m|off></code> — Set auto-delete timer",
         "• <code>/setgiftclaims <0|number></code> — 0 for unlimited",
         "• <code>/setgiftshortener <on|off></code> — Shortener task toggle",
+        "• <code>/setgiftinterval <15m|30m|1h|off></code> — Drip-feed pacing delay",
+        "• <code>/setgiftquiet <on|off></code> — 12 AM - 8 AM night sleep mode",
+        "• <code>/setgiftclean <on|off></code> — Single active drop clean mode",
+        "• <code>/giftqueue</code> — View scheduled queue & controls",
         "• <code>/setgiftheader <text></code> — Customize drop post header",
         "• <code>/setgiftbutton <text></code> — Customize drop claim button",
         "• <code>/setgiftad <url|off></code> — Set Adsterra / sponsor direct link",
@@ -1084,11 +1115,253 @@ def format_gift_settings_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup
             InlineKeyboardButton(f"⏳ Delete: {del_str}", callback_data="agift_autodel")
         ],
         [
+            InlineKeyboardButton(f"⏱️ Pace: {int_str}", callback_data="agift_interval"),
+            InlineKeyboardButton(f"📋 Queue ({q_count})", callback_data="agift_view_q")
+        ],
+        [
+            InlineKeyboardButton(f"🌙 Night: {'ON' if cfg.get('quiet_hours_enabled') else 'OFF'}", callback_data="agift_quiet"),
+            InlineKeyboardButton(f"🧹 Clean: {'ON' if cfg.get('clean_previous_post') else 'OFF'}", callback_data="agift_clean_prev")
+        ],
+        [
             InlineKeyboardButton("🔄 Refresh Dashboard", callback_data="agift_refresh")
         ]
     ]
 
     return text, InlineKeyboardMarkup(keyboard)
+
+
+async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Build detailed visual status of queued drip-feed gift drops."""
+    try:
+        queued_cursor = mongo.db["gift_post_queue"].find({"status": "queued"}).sort("queued_at", 1)
+        queued_items = await queued_cursor.to_list(length=10)
+        total_count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+    except Exception:
+        queued_items = []
+        total_count = 0
+
+    int_sec = cfg.get("interval_seconds", 0)
+    if int_sec == 0:
+        int_str = "OFF (Instant Posting)"
+    elif int_sec >= 3600:
+        int_str = f"{int_sec // 3600} Hour(s)"
+    else:
+        int_str = f"{int_sec // 60} Minutes"
+
+    is_paused = cfg.get("queue_paused", False)
+    status_emoji = "⏸️ PAUSED" if is_paused else ("🟢 DRIP-FEED ACTIVE" if int_sec > 0 else "⚡ INSTANT MODE")
+
+    quiet_on = cfg.get("quiet_hours_enabled", False)
+    quiet_str = "🌙 Active (12 AM - 8 AM Pause)" if quiet_on else "☀️ 24/7 Drip Feed"
+
+    clean_on = cfg.get("clean_previous_post", False)
+    clean_str = "🧹 Clean (Single active post)" if clean_on else "📜 Archive (Keep all)"
+
+    now = time.time()
+    time_since_last = now - _LAST_GIFT_POST_TIMESTAMP
+    if _LAST_GIFT_POST_TIMESTAMP <= 0:
+        next_in_str = "Immediately on trigger"
+    elif time_since_last >= int_sec:
+        next_in_str = "⚡ Ready now (on next tick)"
+    else:
+        rem_sec = int(int_sec - time_since_last)
+        next_in_str = f"~{rem_sec // 60}m {rem_sec % 60}s"
+
+    est_total_mins = (total_count * int_sec) // 60 if int_sec > 0 else 0
+    est_str = f"~{est_total_mins // 60}h {est_total_mins % 60}m" if est_total_mins >= 60 else f"~{est_total_mins} mins"
+
+    lines = [
+        "📦 <b>AUTO-GIFT DRIP-FEED QUEUE DASHBOARD</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"• <b>Queue Status:</b> {status_emoji}",
+        f"• <b>Pending in Queue:</b> <code>{total_count:,} posts</code>",
+        f"• <b>Pacing Interval:</b> <code>{int_str}</code>",
+        f"• <b>Next Drop In:</b> <code>{next_in_str}</code>",
+        f"• <b>Est. Completion:</b> <code>{est_str}</code>",
+        f"• <b>Night Mode:</b> {quiet_str}",
+        f"• <b>Channel Mode:</b> {clean_str}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ]
+
+    if queued_items:
+        lines.append("📋 <b>Upcoming Next In Line:</b>")
+        for idx, itm in enumerate(queued_items[:5], 1):
+            title = itm.get("title", "Untitled Video")
+            lines.append(f"<b>#{idx}.</b> <code>{html.escape(title[:40])}</code>")
+        if total_count > 5:
+            lines.append(f"<i>... and {total_count - 5} more posts waiting in queue</i>")
+    else:
+        lines.append("ℹ️ <i>Queue is currently empty. Drop videos in DB channel to queue them up!</i>")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("💡 <i>Tip: Use /setgiftinterval &lt;15m|30m|1h&gt; to customize pacing!</i>")
+
+    pause_btn_text = "▶️ Resume Queue" if is_paused else "⏸️ Pause Queue"
+    pause_cb = "agift_q_resume" if is_paused else "agift_q_pause"
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⚡ Post Next Now", callback_data="agift_q_next"),
+            InlineKeyboardButton(pause_btn_text, callback_data=pause_cb)
+        ],
+        [
+            InlineKeyboardButton("🧹 Clear All Queue", callback_data="agift_q_clear"),
+            InlineKeyboardButton("🔄 Refresh Queue", callback_data="agift_q_refresh")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Back to Gift Settings", callback_data="agift_back_settings")
+        ]
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+async def _dispatch_queued_gift(client: Client, item: dict, cfg: dict) -> bool:
+    """Publish a single queued gift drop to the public channel."""
+    try:
+        post_ch = item["post_ch"]
+        caption_text = item["caption_text"]
+        claim_url = item["claim_url"]
+        post_btn = item.get("post_btn", "⚡ Get Full Video ➔")
+        poster_photo = item.get("poster_photo")
+        sample_video_path = item.get("sample_video_path")
+        gift_id = item.get("gift_id")
+
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(post_btn, url=claim_url)]
+        ])
+
+        sent_pub_msg = None
+        if sample_video_path and os.path.exists(sample_video_path):
+            try:
+                sent_pub_msg = await client.send_video(
+                    chat_id=post_ch,
+                    video=sample_video_path,
+                    caption=caption_text,
+                    reply_markup=markup,
+                    supports_streaming=True
+                )
+            except Exception as e_vid:
+                logger.warning(f"Sending queued sample video failed: {e_vid}, falling back to photo")
+                sent_pub_msg = await client.send_photo(
+                    chat_id=post_ch,
+                    photo=poster_photo or DEFAULT_GIFT_POSTER,
+                    caption=caption_text,
+                    reply_markup=markup
+                )
+        else:
+            sent_pub_msg = await client.send_photo(
+                chat_id=post_ch,
+                photo=poster_photo or DEFAULT_GIFT_POSTER,
+                caption=caption_text,
+                reply_markup=markup
+            )
+
+        if sent_pub_msg:
+            try:
+                await mongo.db["gift_rewards"].update_one(
+                    {"gift_id": gift_id},
+                    {"$set": {"post_chat_id": post_ch, "post_msg_id": sent_pub_msg.id}}
+                )
+            except Exception:
+                pass
+
+            # Channel Clean Mode: Auto-delete previous active gift post
+            if cfg.get("clean_previous_post", False):
+                prev_id = cfg.get("last_posted_msg_id")
+                if prev_id and prev_id != sent_pub_msg.id:
+                    try:
+                        await client.delete_messages(chat_id=post_ch, message_ids=[prev_id])
+                        logger.info(f"Cleaned previous gift post msg {prev_id} from {post_ch}")
+                    except Exception as e_del:
+                        logger.debug(f"Could not delete previous gift post {prev_id}: {e_del}")
+
+            await save_auto_gift_config({"last_posted_msg_id": sent_pub_msg.id})
+            logger.info(f"Successfully dispatched queued gift '{item.get('title')}' (ID: {gift_id}) to {post_ch}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to dispatch queued gift: {e}")
+        return False
+    return False
+
+
+async def _gift_queue_worker(client: Client):
+    """Background engine that continuously pops scheduled gifts and drops them at the set interval."""
+    global _LAST_GIFT_POST_TIMESTAMP
+    logger.info("Auto-Gift Scheduled Drip Feed Queue Worker started.")
+    import random
+    while True:
+        try:
+            await asyncio.sleep(10)
+            cfg = await get_auto_gift_config()
+            if not cfg.get("enabled"):
+                continue
+            if cfg.get("queue_paused", False):
+                continue
+
+            count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+            if count == 0:
+                continue
+
+            interval_sec = int(cfg.get("interval_seconds", 0))
+
+            # Quiet Hours check (e.g. 12 AM to 8 AM IST)
+            if cfg.get("quiet_hours_enabled", False):
+                now_utc = datetime.datetime.utcnow()
+                ist_hour = (now_utc.hour + 5 + (now_utc.minute + 30) // 60) % 24
+                q_start = int(cfg.get("quiet_start_hour", 0))
+                q_end = int(cfg.get("quiet_end_hour", 8))
+                if q_start <= ist_hour < q_end:
+                    continue
+
+            # Pacing interval check
+            now = time.time()
+            if interval_sec > 0:
+                jitter = 0
+                if cfg.get("jitter_enabled", True) and interval_sec >= 120:
+                    jitter = random.randint(-min(60, interval_sec // 10), min(60, interval_sec // 10))
+                effective_interval = max(30, interval_sec + jitter)
+
+                if _LAST_GIFT_POST_TIMESTAMP > 0 and (now - _LAST_GIFT_POST_TIMESTAMP < effective_interval):
+                    continue
+
+            # Pop the oldest queued item
+            next_item = await mongo.db["gift_post_queue"].find_one(
+                {"status": "queued"},
+                sort=[("queued_at", 1)]
+            )
+            if not next_item:
+                continue
+
+            success = await _dispatch_queued_gift(client, next_item, cfg)
+            if success:
+                _LAST_GIFT_POST_TIMESTAMP = time.time()
+                await mongo.db["gift_post_queue"].delete_one({"_id": next_item["_id"]})
+            else:
+                attempts = next_item.get("attempts", 0) + 1
+                if attempts >= 3:
+                    await mongo.db["gift_post_queue"].update_one(
+                        {"_id": next_item["_id"]},
+                        {"$set": {"status": "failed", "attempts": attempts}}
+                    )
+                else:
+                    await mongo.db["gift_post_queue"].update_one(
+                        {"_id": next_item["_id"]},
+                        {"$set": {"attempts": attempts}}
+                    )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in _gift_queue_worker: {e}", exc_info=True)
+            await asyncio.sleep(15)
+
+
+def start_gift_queue_worker(client: Client):
+    """Launch the background scheduled drip-feed queue dispatcher."""
+    global _GIFT_QUEUE_WORKER_TASK
+    if _GIFT_QUEUE_WORKER_TASK and not _GIFT_QUEUE_WORKER_TASK.done():
+        return _GIFT_QUEUE_WORKER_TASK
+    _GIFT_QUEUE_WORKER_TASK = asyncio.create_task(_gift_queue_worker(client))
+    return _GIFT_QUEUE_WORKER_TASK
 
 
 @Client.on_message(filters.command(["giftsettings", "autogift", "giftconfig"]) & filters.private)
@@ -1097,8 +1370,14 @@ async def gift_settings_command(client: Client, message: Message):
     if not Config.is_admin(message.from_user.id):
         return await message.reply_text("⛔ <b>Access Denied:</b> Admin only.")
 
+    start_gift_queue_worker(client)
     cfg = await get_auto_gift_config()
-    text, markup = format_gift_settings_dashboard(cfg)
+    q_count = 0
+    try:
+        q_count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+    except Exception:
+        pass
+    text, markup = format_gift_settings_dashboard(cfg, q_count=q_count)
     await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
 
 
@@ -1161,15 +1440,217 @@ async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
         del_label = "OFF" if new_val == 0 else f"{new_val // 60}m"
         await query.answer(f"Auto-Delete set to {del_label}!")
 
+    elif data == "agift_interval":
+        curr = cfg.get("interval_seconds", 0)
+        cycles = [0, 600, 900, 1800, 3600, 7200]
+        try:
+            next_idx = (cycles.index(curr) + 1) % len(cycles)
+        except ValueError:
+            next_idx = 0
+        new_sec = cycles[next_idx]
+        await save_auto_gift_config({"interval_seconds": new_sec})
+        lbl = "Instant (0s)" if new_sec == 0 else (f"{new_sec // 3600} Hour(s)" if new_sec >= 3600 else f"{new_sec // 60}m")
+        await query.answer(f"Pacing Interval set to {lbl}!")
+
+    elif data == "agift_quiet":
+        new_val = not cfg.get("quiet_hours_enabled", False)
+        await save_auto_gift_config({"quiet_hours_enabled": new_val})
+        await query.answer(f"Night Sleep Mode {'Enabled (12AM-8AM)' if new_val else 'Disabled (24/7)'}!")
+
+    elif data == "agift_clean_prev":
+        new_val = not cfg.get("clean_previous_post", False)
+        await save_auto_gift_config({"clean_previous_post": new_val})
+        await query.answer(f"Channel Clean Mode {'Enabled (Single Post)' if new_val else 'Disabled (Keep All)'}!")
+
+    elif data == "agift_view_q":
+        text, markup = await format_gift_queue_dashboard(cfg)
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_back_settings":
+        q_count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+        text, markup = format_gift_settings_dashboard(cfg, q_count=q_count)
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_next":
+        next_item = await mongo.db["gift_post_queue"].find_one({"status": "queued"}, sort=[("queued_at", 1)])
+        if next_item:
+            ok = await _dispatch_queued_gift(client, next_item, cfg)
+            if ok:
+                await mongo.db["gift_post_queue"].delete_one({"_id": next_item["_id"]})
+                _LAST_GIFT_POST_TIMESTAMP = time.time()
+                await query.answer(f"⚡ Dropped '{next_item.get('title')}' now!", show_alert=True)
+            else:
+                await query.answer("⚠️ Failed to post queued item.", show_alert=True)
+        else:
+            await query.answer("ℹ️ Queue is empty!", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_pause":
+        await save_auto_gift_config({"queue_paused": True})
+        await query.answer("⏸️ Queue Paused! Drip feed frozen.", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_resume":
+        await save_auto_gift_config({"queue_paused": False})
+        await query.answer("▶️ Queue Resumed! Drip feed active.", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_clear":
+        res = await mongo.db["gift_post_queue"].delete_many({"status": "queued"})
+        await query.answer(f"🧹 Cleared {res.deleted_count} queued posts!", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_refresh":
+        await query.answer("🔄 Queue Refreshed!")
+        text, markup = await format_gift_queue_dashboard(cfg)
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
     elif data == "agift_refresh":
         await query.answer("Dashboard Refreshed!")
 
     cfg = await get_auto_gift_config()
-    text, markup = format_gift_settings_dashboard(cfg)
+    q_count = 0
+    try:
+        q_count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+    except Exception:
+        pass
+    text, markup = format_gift_settings_dashboard(cfg, q_count=q_count)
     try:
         await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
     except Exception:
         pass
+
+
+@Client.on_message(filters.command(["giftqueue", "agiftq", "giftq"]) & filters.private)
+async def gift_queue_command(client: Client, message: Message):
+    """Admin command to inspect and control the scheduled drip-feed gift queue."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+    start_gift_queue_worker(client)
+    cfg = await get_auto_gift_config()
+    text, markup = await format_gift_queue_dashboard(cfg)
+    await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+
+@Client.on_message(filters.command(["setgiftinterval", "setgiftbreak", "setgiftpace"]) & filters.private)
+async def set_gift_interval_command(client: Client, message: Message):
+    """Admin command to set time pacing interval for auto-gift drops (e.g. 15m, 30m, 1h, 0/off)."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        cfg = await get_auto_gift_config()
+        sec = cfg.get("interval_seconds", 0)
+        cur = "OFF (Instant Drops)" if sec == 0 else (f"{sec // 3600} Hour(s)" if sec >= 3600 else f"{sec // 60} Minutes")
+        return await message.reply_text(
+            f"⏱️ <b>Auto-Gift Time Post / Interval Settings</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Current Interval:</b> <code>{cur}</code>\n\n"
+            f"<b>Usage:</b>\n"
+            f"• <code>/setgiftinterval 15m</code> — Post 1 gift every 15 minutes\n"
+            f"• <code>/setgiftinterval 30m</code> — Post 1 gift every 30 minutes\n"
+            f"• <code>/setgiftinterval 1h</code> — Post 1 gift every 1 hour\n"
+            f"• <code>/setgiftinterval 0</code> or <code>off</code> — Instant posting (no delay)\n\n"
+            f"💡 <i>When enabled, you can dump 500 videos into your DB channel. The bot will queue them and post one-by-one smoothly!</i>"
+        )
+
+    val = args[1].strip().lower()
+    if val in ["0", "off", "disable", "instant"]:
+        await save_auto_gift_config({"interval_seconds": 0})
+        return await message.reply_text("✅ <b>Interval Disabled!</b> Gifts will now be posted immediately upon upload.")
+
+    sec = 0
+    if val.endswith("h"):
+        h_str = val[:-1].strip()
+        if h_str.isdigit():
+            sec = int(h_str) * 3600
+    elif val.endswith("m"):
+        m_str = val[:-1].strip()
+        if m_str.isdigit():
+            sec = int(m_str) * 60
+    elif val.endswith("s"):
+        s_str = val[:-1].strip()
+        if s_str.isdigit():
+            sec = int(s_str)
+    elif val.isdigit():
+        v_num = int(val)
+        sec = v_num * 60 if v_num < 100 else v_num
+
+    if sec < 60:
+        return await message.reply_text("❌ Please enter a valid interval of at least 1 minute (e.g. <code>15m</code>, <code>30m</code>, <code>1h</code>, or <code>off</code>).")
+
+    await save_auto_gift_config({"interval_seconds": sec})
+    label = f"{sec // 3600} Hour(s)" if sec >= 3600 else f"{sec // 60} Minutes"
+    await message.reply_text(
+        f"✅ <b>Auto-Gift Pacing Interval Updated!</b>\n\n"
+        f"• <b>New Interval:</b> <code>{label}</code>\n"
+        f"• You can now dump bulk videos into your DB channel.\n"
+        f"• Bot will buffer them in queue and publish 1 drop every <b>{label}</b>.\n"
+        f"• Check queue status anytime with <code>/giftqueue</code>!"
+    )
+
+
+@Client.on_message(filters.command(["setgiftquiet", "setgiftnight"]) & filters.private)
+async def set_gift_quiet_command(client: Client, message: Message):
+    """Admin command to toggle night quiet hours (12 AM to 8 AM IST) for gift drops."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        cfg = await get_auto_gift_config()
+        cur = "ON (12 AM - 8 AM Pause)" if cfg.get("quiet_hours_enabled") else "OFF (24/7 Drip Feed)"
+        return await message.reply_text(
+            f"🌙 <b>Auto-Gift Night Sleep Mode</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Current Status:</b> <code>{cur}</code>\n\n"
+            f"<b>Usage:</b>\n"
+            f"• <code>/setgiftquiet on</code> — Pause posting between 12 AM and 8 AM IST\n"
+            f"• <code>/setgiftquiet off</code> — Allow posting 24/7\n\n"
+            f"💡 <i>Prevents disturbing sleeping subscribers at night. Posts queue up and resume in morning!</i>"
+        )
+
+    val = args[1].strip().lower()
+    enable = val in ["on", "enable", "true", "yes", "1"]
+    await save_auto_gift_config({"quiet_hours_enabled": enable})
+    await message.reply_text(
+        f"✅ <b>Night Sleep Mode {'Enabled' if enable else 'Disabled'}!</b>\n"
+        f"• Status: <code>{'🌙 ON (12 AM - 8 AM IST Pause)' if enable else '☀️ OFF (24/7 Drip Feed)'}</code>"
+    )
+
+
+@Client.on_message(filters.command(["setgiftclean", "setgiftcleanpost"]) & filters.private)
+async def set_gift_clean_command(client: Client, message: Message):
+    """Admin command to toggle channel clean mode (auto-deleting previous gift post in channel)."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        cfg = await get_auto_gift_config()
+        cur = "ON (Single active drop)" if cfg.get("clean_previous_post") else "OFF (Keep all posts)"
+        return await message.reply_text(
+            f"🧹 <b>Auto-Gift Clean Channel Mode</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Current Status:</b> <code>{cur}</code>\n\n"
+            f"<b>Usage:</b>\n"
+            f"• <code>/setgiftclean on</code> — Auto-delete previous gift post when new one drops\n"
+            f"• <code>/setgiftclean off</code> — Keep all gift posts in channel history\n\n"
+            f"💡 <i>Keep your channel clean so subscribers only see the latest active drops!</i>"
+        )
+
+    val = args[1].strip().lower()
+    enable = val in ["on", "enable", "true", "yes", "1"]
+    await save_auto_gift_config({"clean_previous_post": enable})
+    await message.reply_text(
+        f"✅ <b>Clean Channel Mode {'Enabled' if enable else 'Disabled'}!</b>\n"
+        f"• Status: <code>{'🧹 ON (Single active drop)' if enable else '📜 OFF (Keep all posts)'}</code>"
+    )
 
 
 @Client.on_message(filters.command("setgiftdb") & filters.private)
@@ -1800,7 +2281,85 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         [InlineKeyboardButton(post_btn, url=claim_url)]
     ])
 
-    # Step 5: Send Live Card to Public Drops Channel
+    # Step 5: Route to Drip-Feed Queue or Post Immediately
+    interval_sec = int(cfg.get("interval_seconds", 0))
+    q_pending = 0
+    try:
+        q_pending = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+    except Exception:
+        pass
+
+    if interval_sec > 0 or q_pending > 0:
+        queue_poster = poster_photo
+        queue_sample = sample_video_path
+        if isinstance(poster_photo, str) and os.path.exists(poster_photo):
+            queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
+            os.makedirs(queue_asset_dir, exist_ok=True)
+            new_p = os.path.join(queue_asset_dir, f"{gift_id}_poster.jpg")
+            try:
+                shutil.copy2(poster_photo, new_p)
+                queue_poster = new_p
+            except Exception:
+                pass
+
+        if sample_video_path and os.path.exists(sample_video_path):
+            queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
+            os.makedirs(queue_asset_dir, exist_ok=True)
+            new_v = os.path.join(queue_asset_dir, f"{gift_id}_sample.mp4")
+            try:
+                shutil.copy2(sample_video_path, new_v)
+                queue_sample = new_v
+            except Exception:
+                pass
+
+        queue_doc = {
+            "gift_id": gift_id,
+            "title": clean_title,
+            "quality": quality,
+            "file_size": file_size,
+            "post_ch": post_ch,
+            "poster_photo": queue_poster if queue_poster else DEFAULT_GIFT_POSTER,
+            "sample_video_path": queue_sample,
+            "caption_text": caption_text,
+            "claim_url": claim_url,
+            "post_btn": post_btn,
+            "status": "queued",
+            "queued_at": time.time(),
+            "attempts": 0
+        }
+        await mongo.db["gift_post_queue"].insert_one(queue_doc)
+        total_q = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+        est_mins = (total_q * interval_sec) // 60 if interval_sec > 0 else 0
+        est_str = f"~{est_mins // 60}h {est_mins % 60}m" if est_mins >= 60 else f"~{est_mins} mins"
+
+        int_lbl = f"{interval_sec // 3600}h" if interval_sec >= 3600 else f"{interval_sec // 60}m"
+        final_text = (
+            f"📥 <b>Added to Scheduled Auto-Gift Queue!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
+            f"📊 <b>Queue Position:</b> <code>#{total_q}</code>\n"
+            f"⏱️ <b>Post Interval:</b> <code>{int_lbl}</code>\n"
+            f"⏳ <b>Est. Drop Time:</b> <code>In {est_str}</code>\n"
+            f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+            f"🔗 <b>Claim Link:</b> {claim_url}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💡 <i>Will drop automatically to public channel in its turn!</i>"
+        )
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        try:
+            if pending_info.get("status_msg"):
+                await pending_info["status_msg"].edit_text(final_text)
+            else:
+                await message.reply_text(final_text, quote=True)
+        except Exception:
+            pass
+
+        start_gift_queue_worker(client)
+        return
+
+    # Instant Drop Execution (when interval is 0 and queue is empty)
     sent_pub_msg = None
     try:
         if sample_video_path and os.path.exists(sample_video_path):
@@ -1852,6 +2411,18 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
             )
         except Exception:
             pass
+
+        # Channel Clean Mode: Auto-delete previous active gift post
+        if cfg.get("clean_previous_post", False):
+            prev_id = cfg.get("last_posted_msg_id")
+            if prev_id and prev_id != sent_pub_msg.id:
+                try:
+                    await client.delete_messages(chat_id=post_ch, message_ids=[prev_id])
+                    logger.info(f"Cleaned previous gift post msg {prev_id} from {post_ch}")
+                except Exception as e_del:
+                    logger.debug(f"Could not delete previous gift post {prev_id}: {e_del}")
+
+        await save_auto_gift_config({"last_posted_msg_id": sent_pub_msg.id})
 
     # Step 6: Update status message or reply in DB channel
     final_text = (
