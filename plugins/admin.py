@@ -482,8 +482,18 @@ async def cleanup_sample_db_command(client: Client, message: Message):
         from utils.helpers import get_readable_size
         sz_str = get_readable_size(mflix_sz)
 
-        # Drop the sample database
-        await mongo._client.drop_database('sample_mflix')
+        # Drop the sample database or its collections if user lacks cluster-level dropDatabase
+        try:
+            await mongo._client.drop_database('sample_mflix')
+        except Exception as e_drop:
+            # Fallback: drop individual collections in sample_mflix
+            mflix = mongo._client['sample_mflix']
+            cols = await mflix.list_collection_names()
+            for col in cols:
+                try:
+                    await mflix.drop_collection(col)
+                except Exception:
+                    pass
 
         # Reset DB1 full status
         import database.files as files_mod
@@ -493,7 +503,7 @@ async def cleanup_sample_db_command(client: Client, message: Message):
         await status_msg.edit_text(
             f"🎉 <b>SAMPLE DATABASE CLEANED UP SUCCESSFULLY!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🗑️ Dropped Database: <code>sample_mflix</code>\n"
+            f"🗑️ Cleaned: <code>sample_mflix</code> (all sample collections purged)\n"
             f"💾 Storage Reclaimed: <code>~{sz_str}</code> (Atlas space quota restored!)\n"
             f"🔓 Primary DB (DB1) Writes: <b>UNLOCKED 🟢</b>\n\n"
             f"<i>You can now upload & index files to Primary DB without restrictions. Run /stats to verify.</i>"

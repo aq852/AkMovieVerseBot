@@ -19,6 +19,12 @@ _LAST_DB1_CHECK_TIME = 0
 _DB1_FULL_STATUS = False
 
 
+def is_db1_full() -> bool:
+    """Return True if Primary DB has exceeded quota or writes are blocked."""
+    global _DB1_FULL_STATUS
+    return _DB1_FULL_STATUS
+
+
 async def check_storage_alerts(storage_mb: float):
     """Trigger tiered notifications (400MB, 420MB, 440MB) to Admins and Log Channel."""
     try:
