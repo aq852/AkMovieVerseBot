@@ -188,8 +188,22 @@ async def save_file(media: dict) -> tuple[bool, str]:
         }
 
         target_col, _ = await get_active_target_collection()
-        await target_col.insert_one(file_doc)
-        return True, "saved"
+        try:
+            await target_col.insert_one(file_doc)
+            return True, "saved"
+        except Exception as e_insert:
+            err_str = str(e_insert).lower()
+            if ("space quota" in err_str or "writes are blocked" in err_str or "code': 8000" in err_str) and mongo.has_secondary and target_col != mongo.files_secondary:
+                logger.warning("Primary MongoDB space quota reached! Auto-routing write to Secondary DB...")
+                _DB1_FULL_STATUS = True
+                try:
+                    from database.mongo import set_bot_setting
+                    await set_bot_setting("target_write_db", "2")
+                except Exception:
+                    pass
+                await mongo.files_secondary.insert_one(file_doc)
+                return True, "saved_secondary"
+            raise e_insert
     except Exception as e:
         logger.error(f"Error saving file to MongoDB: {e}")
         return False, str(e)
@@ -303,6 +317,23 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
             res["saved_media"] = ready_to_save[:inserted]
         except Exception as e:
             logger.error(f"Error in bulk_write execution: {e}")
+            err_str = str(e).lower()
+            if ("space quota" in err_str or "writes are blocked" in err_str or "code': 8000" in err_str) and mongo.has_secondary and target_col != mongo.files_secondary:
+                logger.warning("Primary DB bulk write blocked by space quota! Auto-routing batch to Secondary DB...")
+                _DB1_FULL_STATUS = True
+                try:
+                    from database.mongo import set_bot_setting
+                    await set_bot_setting("target_write_db", "2")
+                except Exception:
+                    pass
+                try:
+                    bulk_res2 = await mongo.files_secondary.bulk_write(operations, ordered=False)
+                    inserted2 = bulk_res2.inserted_count
+                    res["saved"] = inserted2
+                    res["saved_media"] = ready_to_save[:inserted2]
+                    return res
+                except Exception as e2:
+                    logger.error(f"Secondary DB bulk_write execution failed: {e2}")
             for op in operations:
                 try:
                     await target_col.insert_one(op._doc)
