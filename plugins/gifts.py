@@ -1183,6 +1183,14 @@ async def set_gift_db_command(client: Client, message: Message):
         return await message.reply_text("Usage: <code>/setgiftdb <channel_id or @username></code>\nExample: <code>/setgiftdb -1001234567890</code>")
 
     arg = parts[1].strip()
+    if arg.lower() in ("off", "none", "disable", "clear", "0"):
+        await save_auto_gift_config({"db_channel": None})
+        return await message.reply_text(
+            "✅ <b>Auto-Gift DB Channel Cleared / Unlinked!</b>\n\n"
+            "• Bot will no longer intercept uploads in your movie DB channel.\n"
+            "• To re-link a separate gift channel anytime: <code>/setgiftdb &lt;channel_id&gt;</code>"
+        )
+
     target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
     title = str(target)
     try:
@@ -1213,6 +1221,13 @@ async def set_gift_post_command(client: Client, message: Message):
         return await message.reply_text("Usage: <code>/setgiftpost <channel_id or @username></code>\nExample: <code>/setgiftpost @AkMovieVerse_Gifts</code>")
 
     arg = parts[1].strip()
+    if arg.lower() in ("off", "none", "disable", "clear", "0"):
+        await save_auto_gift_config({"post_channel": None})
+        return await message.reply_text(
+            "✅ <b>Auto-Gift Public Drops Channel Cleared / Unlinked!</b>\n\n"
+            "• To re-link a gift drops channel anytime: <code>/setgiftpost &lt;channel_id&gt;</code>"
+        )
+
     target = int(arg) if (arg.startswith("-100") or arg.lstrip("-").isdigit()) else arg
     title = str(target)
     try:
