@@ -1396,20 +1396,20 @@ async def _build_stream_settings_panel():
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("▶️ Start From NOW", callback_data="stream_set_now"),
-            InlineKeyboardButton("♻️ Restore All", callback_data="stream_set_reset")
+            InlineKeyboardButton("▶️ Start From NOW", callback_data="stream_panel_set_now"),
+            InlineKeyboardButton("♻️ Restore All", callback_data="stream_panel_set_reset")
         ],
         [
-            InlineKeyboardButton("⏸️ Pause Stream", callback_data="stream_pause"),
-            InlineKeyboardButton("▶️ Resume Stream", callback_data="stream_resume")
+            InlineKeyboardButton("⏸️ Pause Stream", callback_data="stream_panel_pause"),
+            InlineKeyboardButton("▶️ Resume Stream", callback_data="stream_panel_resume")
         ],
         [
-            InlineKeyboardButton("🧹 Clear Website", callback_data="stream_clear_all"),
-            InlineKeyboardButton(f"🔀 Mode: {mode.upper()}", callback_data="stream_toggle_mode")
+            InlineKeyboardButton("🧹 Clear Website", callback_data="stream_panel_clear_all"),
+            InlineKeyboardButton(f"🔀 Mode: {mode.upper()}", callback_data="stream_panel_toggle_mode")
         ],
         [
-            InlineKeyboardButton(f"📺 Channels ({len(chans)})", callback_data="stream_channels_list"),
-            InlineKeyboardButton("🔄 Refresh", callback_data="stream_refresh")
+            InlineKeyboardButton(f"📺 Channels ({len(chans)})", callback_data="stream_panel_channels_list"),
+            InlineKeyboardButton("🔄 Refresh", callback_data="stream_panel_refresh")
         ]
     ])
 
@@ -1442,7 +1442,7 @@ async def stream_settings_cmd(client: Client, message: Message):
     await message.reply_text(text, reply_markup=keyboard)
 
 
-@Client.on_callback_query(filters.regex(r"^stream_"))
+@Client.on_callback_query(filters.regex(r"^stream_panel_"))
 async def stream_settings_callbacks(client: Client, query: CallbackQuery):
     if not Config.is_admin(query.from_user.id):
         await query.answer("⛔ Admin Only!", show_alert=True)
@@ -1452,7 +1452,7 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
     from database.mongo import set_bot_setting, get_bot_setting, mongo
     from utils.web_server import clear_catalog_cache
 
-    if data == "stream_set_now":
+    if data == "stream_panel_set_now":
         latest = await mongo.files.find_one({}, {"_id": 1}, sort=[("_id", -1)])
         if latest:
             cutoff_id = str(latest["_id"])
@@ -1464,19 +1464,19 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         else:
             await query.answer("⚠️ No files found.", show_alert=True)
 
-    elif data == "stream_set_reset":
+    elif data == "stream_panel_set_reset":
         await set_bot_setting("stream_catalog_cutoff_id", None)
         await set_bot_setting("stream_catalog_mode", "all")
         await set_bot_setting("stream_catalog_paused", False)
         clear_catalog_cache()
         await query.answer("✅ Entire database restored to website showroom!", show_alert=True)
 
-    elif data == "stream_pause":
+    elif data == "stream_panel_pause":
         await set_bot_setting("stream_catalog_paused", True)
         clear_catalog_cache()
         await query.answer("⏸️ Website catalog paused! New files stay in Bot only.", show_alert=True)
 
-    elif data == "stream_resume":
+    elif data == "stream_panel_resume":
         await set_bot_setting("stream_catalog_paused", False)
         mode = await get_bot_setting("stream_catalog_mode", "auto")
         if mode == "cleared":
@@ -1484,13 +1484,13 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         clear_catalog_cache()
         await query.answer("▶️ Website catalog resumed! Live publishing is ON.", show_alert=True)
 
-    elif data == "stream_clear_all":
+    elif data == "stream_panel_clear_all":
         await set_bot_setting("stream_catalog_mode", "cleared")
         await set_bot_setting("stream_catalog_cutoff_id", None)
         clear_catalog_cache()
         await query.answer("🧹 Website catalog cleared! (All files safe in Bot).", show_alert=True)
 
-    elif data == "stream_toggle_mode":
+    elif data == "stream_panel_toggle_mode":
         curr = await get_bot_setting("stream_catalog_mode", "all")
         modes = ["all", "auto", "channels"]
         next_mode = modes[(modes.index(curr) + 1) % len(modes)] if curr in modes else "all"
@@ -1498,7 +1498,7 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         clear_catalog_cache()
         await query.answer(f"✅ Mode changed to: {next_mode.upper()}", show_alert=True)
 
-    elif data == "stream_channels_list":
+    elif data == "stream_panel_channels_list":
         chans = await get_bot_setting("stream_catalog_channels", [])
         if chans:
             c_text = "\n".join([f"• {c}" for c in chans])
@@ -1506,10 +1506,10 @@ async def stream_settings_callbacks(client: Client, query: CallbackQuery):
         else:
             await query.answer("ℹ️ No specific streaming channels whitelisted. Use /addstreamchannel <id>", show_alert=True)
 
-    elif data == "stream_refresh":
+    elif data == "stream_panel_refresh":
         await query.answer("🔄 Dashboard refreshed!", show_alert=False)
 
-    elif data == "stream_clear_cache":
+    elif data == "stream_panel_clear_cache":
         clear_catalog_cache()
         await query.answer("🧹 Stream catalog cache cleared!", show_alert=True)
 

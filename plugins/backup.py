@@ -19,7 +19,6 @@ from utils.helpers import get_readable_size
 logger = logging.getLogger(__name__)
 
 BACKUP_COLLECTIONS = [
-    Config.COLLECTION_NAME,  # e.g. telegram_files
     "users",
     "chats",
     "verifications",
@@ -33,11 +32,15 @@ BACKUP_COLLECTIONS = [
     "bot_settings",
     "channel_posts",
     "search_demand",
-    "upload_alerts"
+    "upload_alerts",
+    "storage_channels"
 ]
 
-async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "Manual Backup") -> tuple[bool, str]:
-    """Generate compressed JSON backup of all MongoDB collections and dispatch to chat_id and LOG_CHANNEL."""
+async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "Manual Backup", include_files: bool = False) -> tuple[bool, str]:
+    """Generate compressed JSON backup of MongoDB collections and dispatch to chat_id and LOG_CHANNEL.
+    By default, backs up users, VIPs, channels, and configs instantly without loading millions of file docs into RAM.
+    If include_files=True, streams indexed files with O(1) memory safely.
+    """
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"autofilterbot_backup_{timestamp}.zip"
     temp_dir = os.path.join(os.getcwd(), "temp_backup")
@@ -49,11 +52,12 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
         stats_lines = []
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            # 1. Backup all administrative & user data collections (Fast & Lightweight)
             for coll_name in BACKUP_COLLECTIONS:
                 try:
                     coll = mongo.db[coll_name]
                     cursor = coll.find({})
-                    docs = await cursor.to_list(length=None)
+                    docs = await cursor.to_list(length=50000)
                     count = len(docs)
                     total_docs += count
                     stats_lines.append(f"• <code>{coll_name}</code>: <b>{count}</b> records")
@@ -64,17 +68,29 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
                     logger.error(f"Error backing up collection {coll_name}: {coll_err}")
                     stats_lines.append(f"• <code>{coll_name}</code>: ⚠️ Error ({coll_err})")
 
-            # Backup secondary cluster files if connected
-            if mongo.has_secondary:
-                try:
-                    sec_docs = await mongo.files_secondary.find({}).to_list(length=None)
-                    sec_count = len(sec_docs)
-                    total_docs += sec_count
-                    stats_lines.append(f"• <code>{Config.COLLECTION_NAME}_secondary</code>: <b>{sec_count}</b> records")
-                    json_data2 = json_util.dumps(sec_docs, indent=2)
-                    zf.writestr(f"{Config.COLLECTION_NAME}_secondary.json", json_data2)
-                except Exception as sec_err:
-                    logger.error(f"Error backing up secondary files: {sec_err}")
+            # 2. If files requested, stream them with minimal RAM to avoid OOM
+            if include_files:
+                file_targets = [(mongo.files, f"{Config.COLLECTION_NAME}.json")]
+                if mongo.has_secondary:
+                    file_targets.append((mongo.files_secondary, f"{Config.COLLECTION_NAME}_secondary.json"))
+
+                for f_coll, f_fname in file_targets:
+                    try:
+                        f_count = await f_coll.count_documents({})
+                        total_docs += f_count
+                        stats_lines.append(f"• <code>{f_fname}</code>: <b>{f_count:,}</b> records")
+                        with zf.open(f_fname, "w") as f_out:
+                            f_out.write(b"[\n")
+                            first = True
+                            async for doc in f_coll.find({}):
+                                if not first:
+                                    f_out.write(b",\n")
+                                f_out.write(json_util.dumps(doc).encode("utf-8"))
+                                first = False
+                            f_out.write(b"\n]")
+                    except Exception as f_err:
+                        logger.error(f"Error backing up files {f_fname}: {f_err}")
+                        stats_lines.append(f"• <code>{f_fname}</code>: ⚠️ Error ({f_err})")
 
         zip_size = os.path.getsize(zip_path)
         readable_size = get_readable_size(zip_size)
@@ -128,12 +144,22 @@ async def generate_and_send_backup(client: Client, chat_id: int, reason: str = "
 
 @Client.on_message(filters.command(["backup", "dbbackup"]) & filters.private)
 async def backup_database(client: Client, message: Message):
-    """Admin command: Dump MongoDB collections to a compressed ZIP and send to Admin & Log Channel."""
+    """Admin command: Dump MongoDB collections to a compressed ZIP and send to Admin & Log Channel.
+    Usage:
+    - /backup : Instant backup of all users, chats, channels, VIPs & configs (< 1 sec)
+    - /backup all : Streamed backup including all media files
+    """
     if not Config.is_admin(message.from_user.id):
         return await message.reply_text("⛔ <b>Access Denied</b>: Only bot administrators can execute database backups.")
 
-    status_msg = await message.reply_text("⏳ <b>Generating Database Backup...</b>\n<i>Reading MongoDB collections and serializing documents...</i>")
-    success, result_str = await generate_and_send_backup(client, message.chat.id, reason="Manual Admin Request (/backup)")
+    args = message.text.split()
+    include_files = len(args) > 1 and args[1].lower() in ["files", "all", "full"]
+    mode_text = "including all media files (streamed)" if include_files else "users, chats, VIPs, channels & configs"
+
+    status_msg = await message.reply_text(f"⏳ <b>Generating Database Backup...</b>\n<i>Exporting {mode_text}...</i>")
+    success, result_str = await generate_and_send_backup(
+        client, message.chat.id, reason=f"Manual Admin Request ({message.text})", include_files=include_files
+    )
     if success:
         await status_msg.delete()
     else:

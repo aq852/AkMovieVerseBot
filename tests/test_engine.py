@@ -917,6 +917,7 @@ class TestAutoFilterEngine(unittest.TestCase):
         mock_batches.find_one = AsyncMock(return_value=mock_batch)
 
         with patch.object(type(mongo), "files", new_callable=PropertyMock, return_value=mock_files), \
+             patch.object(type(mongo), "has_secondary", new_callable=PropertyMock, return_value=False), \
              patch.object(type(mongo), "batches", new_callable=PropertyMock, return_value=mock_batches):
             res = asyncio.run(get_file_by_id("uniq_123"))
             self.assertIsNotNone(res)
@@ -2387,10 +2388,10 @@ class TestAutoFilterEngine(unittest.TestCase):
             self.assertIn("STREAMING WEBSITE CONTROL PANEL", dash_text)
             self.assertIsNotNone(dash_markup)
             dash_cbs = [btn.callback_data for row in dash_markup.inline_keyboard for btn in row]
-            self.assertIn("stream_set_now", dash_cbs)
-            self.assertIn("stream_pause", dash_cbs)
-            self.assertIn("stream_resume", dash_cbs)
-            self.assertIn("stream_clear_all", dash_cbs)
+            self.assertIn("stream_panel_set_now", dash_cbs)
+            self.assertIn("stream_panel_pause", dash_cbs)
+            self.assertIn("stream_panel_resume", dash_cbs)
+            self.assertIn("stream_panel_clear_all", dash_cbs)
 
         asyncio.run(_test_settings())
 

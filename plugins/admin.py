@@ -953,11 +953,11 @@ async def delete_all_files_command(client: Client, message: Message):
     if len(args) >= 2 and args[1].lower() in ["confirm", "yes", "force"]:
         status_msg = await message.reply_text(
             "🛡️ <b>Step 1/2: Generating Safety Net Backup...</b>\n"
-            "<i>Creating offsite compressed .zip archive of all MongoDB collections...</i>"
+            "<i>Backing up users, VIPs, channels & configs to offsite ZIP...</i>"
         )
         from plugins.backup import generate_and_send_backup
         success, backup_info = await generate_and_send_backup(
-            client, message.chat.id, reason="Pre-Wipe Safety Net (/deleteall confirm)"
+            client, message.chat.id, reason="Pre-Wipe Safety Net (/deleteall confirm)", include_files=False
         )
 
         await status_msg.edit_text(
@@ -1043,10 +1043,10 @@ async def wipe_database_callback(client: Client, query: CallbackQuery):
     if action == "files":
         await query.message.edit_text(
             "⏳ <b>Step 1/2: Generating Safety Backup...</b>\n"
-            "<i>Exporting all MongoDB collections to compressed offsite ZIP...</i>"
+            "<i>Backing up users, VIPs, channels & configs to offsite ZIP...</i>"
         )
         success, backup_info = await generate_and_send_backup(
-            client, query.message.chat.id, reason="Safety Net Before Files & Cache Purge"
+            client, query.message.chat.id, reason="Safety Net Before Files & Cache Purge", include_files=False
         )
 
         await query.message.edit_text(
@@ -1077,10 +1077,10 @@ async def wipe_database_callback(client: Client, query: CallbackQuery):
     elif action == "factory":
         await query.message.edit_text(
             "⏳ <b>Step 1/2: Generating Full Safety Backup...</b>\n"
-            "<i>Exporting all MongoDB collections to compressed offsite ZIP...</i>"
+            "<i>Backing up users, VIPs, channels & configs to offsite ZIP...</i>"
         )
         success, backup_info = await generate_and_send_backup(
-            client, query.message.chat.id, reason="Safety Net Before Full Factory Reset"
+            client, query.message.chat.id, reason="Safety Net Before Full Factory Reset", include_files=False
         )
 
         await query.message.edit_text(

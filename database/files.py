@@ -5,6 +5,7 @@ import datetime
 import logging
 from bson.objectid import ObjectId
 from pymongo import InsertOne
+from pymongo.errors import BulkWriteError
 from config import Config
 from database.mongo import mongo
 
@@ -228,7 +229,7 @@ async def save_file(media: dict) -> tuple[bool, str]:
 
 
 async def save_files_bulk(media_list: list[dict]) -> dict:
-    """High-performance batch saver for channel indexer with duplicate prevention.
+    """High-performance batch saver for channel indexer with duplicate prevention across all MongoDB clusters.
     Returns: {'saved': int, 'duplicate': int, 'errors': int, 'saved_media': list[dict]}
     """
     res = {"saved": 0, "duplicate": 0, "errors": 0, "saved_media": []}
@@ -239,7 +240,7 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
     seen_name_sizes = set()
     valid_batch = []
     batch_uids = []
-    name_size_queries = []
+    batch_names = []
 
     for m in media_list:
         uid = m.get("file_unique_id")
@@ -261,7 +262,7 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
         seen_uids.add(uid)
         if fsize > 0 and fname and fname != "Untitled":
             seen_name_sizes.add((fname, fsize))
-            name_size_queries.append({"file_name": fname, "file_size": fsize})
+            batch_names.append(fname)
 
         valid_batch.append(m)
         batch_uids.append(uid)
@@ -272,24 +273,30 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
     existing_uids = set()
     existing_name_sizes = set()
 
-    # Query existing duplicates in MongoDB
-    query_conditions = [{"file_unique_id": {"$in": batch_uids}}]
-    if name_size_queries:
-        query_conditions.append({"$or": name_size_queries[:100]})
-
+    # Fast indexed scan of existing files across Primary and Secondary DBs
     async def scan_existing(col):
-        try:
-            cursor = col.find({"$or": query_conditions}, {"_id": 0, "file_unique_id": 1, "file_name": 1, "file_size": 1})
-            async for doc in cursor:
-                u = doc.get("file_unique_id")
-                if u:
-                    existing_uids.add(u)
-                fn = doc.get("file_name")
-                fs = doc.get("file_size")
-                if fn and fs:
-                    existing_name_sizes.add((fn, fs))
-        except Exception as err:
-            logger.debug(f"Error querying existing files: {err}")
+        # 1. Exact UID match using unique index
+        if batch_uids:
+            try:
+                cursor = col.find({"file_unique_id": {"$in": batch_uids}}, {"_id": 0, "file_unique_id": 1})
+                async for doc in cursor:
+                    u = doc.get("file_unique_id")
+                    if u:
+                        existing_uids.add(u)
+            except Exception as err:
+                logger.warning(f"Error querying existing UIDs: {err}")
+
+        # 2. Match Name + Size using indexed file_name to catch identical uploads
+        if batch_names:
+            try:
+                cursor = col.find({"file_name": {"$in": list(set(batch_names))}}, {"_id": 0, "file_name": 1, "file_size": 1})
+                async for doc in cursor:
+                    fn = doc.get("file_name")
+                    fs = doc.get("file_size")
+                    if fn and fs and (fn, fs) in seen_name_sizes:
+                        existing_name_sizes.add((fn, fs))
+            except Exception as err:
+                logger.warning(f"Error querying existing names: {err}")
 
     await scan_existing(mongo.files)
     if mongo.has_secondary:
@@ -333,6 +340,17 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
             inserted = bulk_res.inserted_count
             res["saved"] = inserted
             res["saved_media"] = ready_to_save[:inserted]
+        except BulkWriteError as bwe:
+            inserted = bwe.details.get("nInserted", 0)
+            res["saved"] += inserted
+            res["saved_media"] = ready_to_save[:inserted]
+            write_errors = bwe.details.get("writeErrors", [])
+            for we in write_errors:
+                if we.get("code") == 11000:
+                    res["duplicate"] += 1
+                else:
+                    res["errors"] += 1
+            logger.debug(f"bulk_write handled with duplicates: {inserted} inserted, {len(write_errors)} errors/dups")
         except Exception as e:
             logger.error(f"Error in bulk_write execution: {e}")
             err_str = str(e).lower()
@@ -349,6 +367,16 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
                     inserted2 = bulk_res2.inserted_count
                     res["saved"] = inserted2
                     res["saved_media"] = ready_to_save[:inserted2]
+                    return res
+                except BulkWriteError as bwe2:
+                    inserted2 = bwe2.details.get("nInserted", 0)
+                    res["saved"] += inserted2
+                    res["saved_media"] = ready_to_save[:inserted2]
+                    for we in bwe2.details.get("writeErrors", []):
+                        if we.get("code") == 11000:
+                            res["duplicate"] += 1
+                        else:
+                            res["errors"] += 1
                     return res
                 except Exception as e2:
                     logger.error(f"Secondary DB bulk_write execution failed: {e2}")
