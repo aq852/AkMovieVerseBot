@@ -43,6 +43,14 @@ class TestStorageChannels(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         self.assertFalse(await is_storage_channel(-1002370960281))
 
+    async def test_settings_resilience_and_memory_cache(self):
+        from database.mongo import get_bot_setting, set_bot_setting, _SETTINGS_CACHE
+        # Setting a key updates memory cache even if DB fails
+        await set_bot_setting("custom_test_key", "active_val")
+        self.assertEqual(_SETTINGS_CACHE.get("custom_test_key"), "active_val")
+        val = await get_bot_setting("custom_test_key")
+        self.assertEqual(val, "active_val")
+
 
 if __name__ == "__main__":
     unittest.main()

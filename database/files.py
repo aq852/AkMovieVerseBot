@@ -119,11 +119,23 @@ async def get_active_target_collection() -> tuple:
             max_mb = getattr(Config, "PRIMARY_DB_MAX_SIZE_MB", 440)
             db_stats = await mongo.db.command("dbStats")
             storage_mb = (db_stats.get("storageSize", 0) + db_stats.get("indexSize", 0)) / (1024 * 1024)
-            if storage_mb >= max_mb:
+            
+            # Check cluster-wide disk footprint on MongoDB Atlas
+            cluster_mb = storage_mb
+            try:
+                if mongo._client:
+                    cluster_res = await mongo._client.admin.command('listDatabases')
+                    cluster_mb = cluster_res.get('totalSize', 0) / (1024 * 1024)
+            except Exception:
+                pass
+            
+            effective_mb = max(storage_mb, cluster_mb)
+            if effective_mb >= max_mb:
                 _DB1_FULL_STATUS = True
-            else:
+            elif not _DB1_FULL_STATUS:
+                # Only reset to False if writes are not currently marked blocked
                 _DB1_FULL_STATUS = False
-            asyncio.create_task(check_storage_alerts(storage_mb))
+            asyncio.create_task(check_storage_alerts(effective_mb))
         except Exception as e:
             logger.debug(f"Error checking DB1 threshold: {e}")
 

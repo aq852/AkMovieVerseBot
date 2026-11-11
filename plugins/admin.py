@@ -45,9 +45,13 @@ async def stats_command(client: Client, message: Message):
         mongo.shorteners.count_documents({}),
         mongo.db.command("dbStats")
     ]
+    if mongo._client:
+        tasks.append(mongo._client.admin.command("listDatabases"))
     if mongo.has_secondary:
         tasks.append(mongo.files_secondary.count_documents({}))
         tasks.append(mongo.db2.command("dbStats"))
+        if mongo._client2:
+            tasks.append(mongo._client2.admin.command("listDatabases"))
 
     try:
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -64,23 +68,65 @@ async def stats_command(client: Client, message: Message):
     top_demand_doc = results[7] if isinstance(results[7], dict) else None
     shorteners_count = results[8] if isinstance(results[8], int) else 0
     db_stats = results[9] if len(results) > 9 and isinstance(results[9], dict) else {}
+    
+    idx = 10
+    cluster1_info = {}
+    if mongo._client and len(results) > idx:
+        cluster1_info = results[idx] if isinstance(results[idx], dict) else {}
+        idx += 1
 
     if mongo.has_secondary:
-        sec_files = results[10] if len(results) > 10 and isinstance(results[10], int) else 0
+        sec_files = results[idx] if len(results) > idx and isinstance(results[idx], int) else 0
         files_count += sec_files
-        db2_stats = results[11] if len(results) > 11 and isinstance(results[11], dict) else {}
+        idx += 1
+        db2_stats = results[idx] if len(results) > idx and isinstance(results[idx], dict) else {}
+        idx += 1
+        cluster2_info = results[idx] if len(results) > idx and isinstance(results[idx], dict) else {}
+        idx += 1
     else:
         db2_stats = {}
+        cluster2_info = {}
 
     from utils.helpers import get_readable_size
+    
+    # Check if DB1 has writes blocked or is flagged full
+    from database.files import is_db1_full, get_active_target_collection
+    db1_blocked = is_db1_full()
+    
+    # Quick probe if not already known blocked
+    if not db1_blocked:
+        try:
+            probe = await mongo.db["_write_probe"].insert_one({"t": time.time()})
+            await mongo.db["_write_probe"].delete_one({"_id": probe.inserted_id})
+        except Exception as e_probe:
+            probe_err = str(e_probe).lower()
+            if "quota" in probe_err or "writes are blocked" in probe_err or "code': 8000" in probe_err or "code 8000" in probe_err:
+                db1_blocked = True
+                import database.files as files_mod
+                files_mod._DB1_FULL_STATUS = True
+
+    cluster1_total = cluster1_info.get("totalSize", 0)
+    mflix_sz = 0
+    for d in cluster1_info.get("databases", []):
+        if d.get("name") == "sample_mflix":
+            mflix_sz = d.get("sizeOnDisk", 0)
+
     if db_stats:
         storage_sz = db_stats.get("storageSize", 0)
         index_sz = db_stats.get("indexSize", 0)
         total_mongo_bytes = storage_sz + index_sz
         mongo_used_str = get_readable_size(total_mongo_bytes)
         pct = (total_mongo_bytes / (512 * 1024 * 1024)) * 100
-        mongo_icon = "🟢" if pct < 70 else ("🟡" if pct < 90 else "🔴")
-        mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str} / 512 MB ({pct:.1f}%)</code> {mongo_icon}\n"
+        
+        if db1_blocked:
+            cluster_str = f" (Cluster: {get_readable_size(cluster1_total)} / 512 MB)" if cluster1_total else ""
+            mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str}</code>{cluster_str} ⛔ <b>WRITES BLOCKED!</b> 🔴\n"
+            if mflix_sz > 0:
+                mongo_storage_line += f"  ⚠️ <i>Atlas Space Quota Exceeded! Unused DB 'sample_mflix' is using {get_readable_size(mflix_sz)}! (Use /cleanupsampledb)</i>\n"
+        else:
+            mongo_icon = "🟢" if pct < 70 else ("🟡" if pct < 90 else "🔴")
+            mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str} / 512 MB ({pct:.1f}%)</code> {mongo_icon}\n"
+        
         mongo_details_line = f"• <b>DB1 Objects:</b> <code>{db_stats.get('objects', 0):,} docs ({get_readable_size(index_sz)} index)</code>\n"
     else:
         mongo_storage_line = "• <b>Primary DB (DB1):</b> <code>Online (Atlas Cloud)</code>\n"
@@ -97,7 +143,6 @@ async def stats_command(client: Client, message: Message):
         combined_used = (total_mongo_bytes if db_stats else 0) + total_bytes2
         comb_pct = (combined_used / (1024 * 1024 * 1024)) * 100
         mongo_storage_line += f"• <b>Total Dual Storage:</b> <code>{get_readable_size(combined_used)} / 1024 MB ({comb_pct:.1f}%)</code>\n"
-        from database.files import get_active_target_collection
         _, target_status = await get_active_target_collection()
         mongo_storage_line += f"• <b>Active Upload Target:</b> <code>{target_status.upper()}</code>\n"
     elif not mongo.has_secondary:
@@ -192,9 +237,13 @@ async def refresh_admin_stats_callback(client: Client, query: CallbackQuery):
         mongo.shorteners.count_documents({}),
         mongo.db.command("dbStats")
     ]
+    if mongo._client:
+        tasks.append(mongo._client.admin.command("listDatabases"))
     if mongo.has_secondary:
         tasks.append(mongo.files_secondary.count_documents({}))
         tasks.append(mongo.db2.command("dbStats"))
+        if mongo._client2:
+            tasks.append(mongo._client2.admin.command("listDatabases"))
 
     try:
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -211,23 +260,65 @@ async def refresh_admin_stats_callback(client: Client, query: CallbackQuery):
     top_demand_doc = results[7] if isinstance(results[7], dict) else None
     shorteners_count = results[8] if isinstance(results[8], int) else 0
     db_stats = results[9] if len(results) > 9 and isinstance(results[9], dict) else {}
+    
+    idx = 10
+    cluster1_info = {}
+    if mongo._client and len(results) > idx:
+        cluster1_info = results[idx] if isinstance(results[idx], dict) else {}
+        idx += 1
 
     if mongo.has_secondary:
-        sec_files = results[10] if len(results) > 10 and isinstance(results[10], int) else 0
+        sec_files = results[idx] if len(results) > idx and isinstance(results[idx], int) else 0
         files_count += sec_files
-        db2_stats = results[11] if len(results) > 11 and isinstance(results[11], dict) else {}
+        idx += 1
+        db2_stats = results[idx] if len(results) > idx and isinstance(results[idx], dict) else {}
+        idx += 1
+        cluster2_info = results[idx] if len(results) > idx and isinstance(results[idx], dict) else {}
+        idx += 1
     else:
         db2_stats = {}
+        cluster2_info = {}
 
     from utils.helpers import get_readable_size
+    
+    # Check if DB1 has writes blocked or is flagged full
+    from database.files import is_db1_full, get_active_target_collection
+    db1_blocked = is_db1_full()
+    
+    # Quick probe if not already known blocked
+    if not db1_blocked:
+        try:
+            probe = await mongo.db["_write_probe"].insert_one({"t": time.time()})
+            await mongo.db["_write_probe"].delete_one({"_id": probe.inserted_id})
+        except Exception as e_probe:
+            probe_err = str(e_probe).lower()
+            if "quota" in probe_err or "writes are blocked" in probe_err or "code': 8000" in probe_err or "code 8000" in probe_err:
+                db1_blocked = True
+                import database.files as files_mod
+                files_mod._DB1_FULL_STATUS = True
+
+    cluster1_total = cluster1_info.get("totalSize", 0)
+    mflix_sz = 0
+    for d in cluster1_info.get("databases", []):
+        if d.get("name") == "sample_mflix":
+            mflix_sz = d.get("sizeOnDisk", 0)
+
     if db_stats:
         storage_sz = db_stats.get("storageSize", 0)
         index_sz = db_stats.get("indexSize", 0)
         total_mongo_bytes = storage_sz + index_sz
         mongo_used_str = get_readable_size(total_mongo_bytes)
         pct = (total_mongo_bytes / (512 * 1024 * 1024)) * 100
-        mongo_icon = "🟢" if pct < 70 else ("🟡" if pct < 90 else "🔴")
-        mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str} / 512 MB ({pct:.1f}%)</code> {mongo_icon}\n"
+        
+        if db1_blocked:
+            cluster_str = f" (Cluster: {get_readable_size(cluster1_total)} / 512 MB)" if cluster1_total else ""
+            mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str}</code>{cluster_str} ⛔ <b>WRITES BLOCKED!</b> 🔴\n"
+            if mflix_sz > 0:
+                mongo_storage_line += f"  ⚠️ <i>Atlas Space Quota Exceeded! Unused DB 'sample_mflix' is using {get_readable_size(mflix_sz)}! (Use /cleanupsampledb)</i>\n"
+        else:
+            mongo_icon = "🟢" if pct < 70 else ("🟡" if pct < 90 else "🔴")
+            mongo_storage_line = f"• <b>Primary DB (DB1):</b> <code>{mongo_used_str} / 512 MB ({pct:.1f}%)</code> {mongo_icon}\n"
+        
         mongo_details_line = f"• <b>DB1 Objects:</b> <code>{db_stats.get('objects', 0):,} docs ({get_readable_size(index_sz)} index)</code>\n"
     else:
         mongo_storage_line = "• <b>Primary DB (DB1):</b> <code>Online (Atlas Cloud)</code>\n"
@@ -244,7 +335,6 @@ async def refresh_admin_stats_callback(client: Client, query: CallbackQuery):
         combined_used = (total_mongo_bytes if db_stats else 0) + total_bytes2
         comb_pct = (combined_used / (1024 * 1024 * 1024)) * 100
         mongo_storage_line += f"• <b>Total Dual Storage:</b> <code>{get_readable_size(combined_used)} / 1024 MB ({comb_pct:.1f}%)</code>\n"
-        from database.files import get_active_target_collection
         _, target_status = await get_active_target_collection()
         mongo_storage_line += f"• <b>Active Upload Target:</b> <code>{target_status.upper()}</code>\n"
     elif not mongo.has_secondary:
@@ -371,6 +461,46 @@ async def target_db_command(client: Client, message: Message):
 
     await set_bot_setting("target_write_db", val)
     await message.reply_text(f"✅ <b>MongoDB Write Target updated to:</b> <code>{val.upper()}</code>\nNew file uploads will now be routed according to this mode.")
+
+
+@Client.on_message(filters.command(["cleanupsampledb", "dropsampledb"]))
+async def cleanup_sample_db_command(client: Client, message: Message):
+    """Safely drop MongoDB Atlas default 'sample_mflix' database to free up 128MB+ space on Primary cluster."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied</b>: Admin privileges required.")
+
+    status_msg = await message.reply_text("⏳ <b>Inspecting MongoDB Primary Cluster for sample datasets...</b>")
+    try:
+        if not mongo._client:
+            mongo.connect()
+        dbs_res = await mongo._client.admin.command('listDatabases')
+        db_names = [d['name'] for d in dbs_res.get('databases', [])]
+        if 'sample_mflix' not in db_names:
+            return await status_msg.edit_text("ℹ️ <b>'sample_mflix' was not found on your Primary Cluster.</b>\nNo sample databases to clean up.")
+
+        mflix_sz = next((d['sizeOnDisk'] for d in dbs_res.get('databases', []) if d['name'] == 'sample_mflix'), 0)
+        from utils.helpers import get_readable_size
+        sz_str = get_readable_size(mflix_sz)
+
+        # Drop the sample database
+        await mongo._client.drop_database('sample_mflix')
+
+        # Reset DB1 full status
+        import database.files as files_mod
+        files_mod._DB1_FULL_STATUS = False
+        files_mod._LAST_DB1_CHECK_TIME = 0
+
+        await status_msg.edit_text(
+            f"🎉 <b>SAMPLE DATABASE CLEANED UP SUCCESSFULLY!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🗑️ Dropped Database: <code>sample_mflix</code>\n"
+            f"💾 Storage Reclaimed: <code>~{sz_str}</code> (Atlas space quota restored!)\n"
+            f"🔓 Primary DB (DB1) Writes: <b>UNLOCKED 🟢</b>\n\n"
+            f"<i>You can now upload & index files to Primary DB without restrictions. Run /stats to verify.</i>"
+        )
+    except Exception as e:
+        await status_msg.edit_text(f"❌ <b>Failed to drop sample database:</b> <code>{e}</code>")
+
 
 @Client.on_message(filters.command(["setfreelimit", "freelimit", "set_free_limit"]) & filters.private)
 async def set_free_limit_command(client: Client, message: Message):

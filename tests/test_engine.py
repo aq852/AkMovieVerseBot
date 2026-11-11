@@ -489,14 +489,22 @@ class TestAutoFilterEngine(unittest.TestCase):
 
     def test_secondary_db_optional_fallback(self):
         import asyncio
+        from unittest.mock import patch
+        from config import Config
         from database.mongo import mongo
         from database.files import get_active_target_collection
 
         # Without secondary DB, has_secondary should be False and primary files collection returned
-        self.assertFalse(mongo.has_secondary)
-        col, mode = asyncio.run(get_active_target_collection())
-        self.assertEqual(col, mongo.files)
-        self.assertEqual(mode, "primary")
+        with patch.object(Config, "SECONDARY_DATABASE_URI", ""):
+            old_db2 = mongo._db2
+            mongo._db2 = None
+            try:
+                self.assertFalse(mongo.has_secondary)
+                col, mode = asyncio.run(get_active_target_collection())
+                self.assertEqual(col, mongo.files)
+                self.assertEqual(mode, "primary")
+            finally:
+                mongo._db2 = old_db2
 
     def test_multi_db_search_and_routing(self):
         import asyncio

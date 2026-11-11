@@ -116,28 +116,59 @@ class MongoDB:
 
 mongo = MongoDB()
 
+_SETTINGS_CACHE = {}
+
 async def get_bot_setting(key: str, default=None):
-    """Retrieve global bot setting from MongoDB with fallback to default."""
+    """Retrieve global bot setting from cache or MongoDB with fallback to default and secondary cluster."""
+    if key in _SETTINGS_CACHE:
+        return _SETTINGS_CACHE[key]
     try:
         doc = await mongo.settings.find_one({"_id": key})
         if doc and "value" in doc:
+            _SETTINGS_CACHE[key] = doc["value"]
             return doc["value"]
     except Exception as e:
-        logger.debug(f"Error fetching bot setting {key}: {e}")
+        logger.debug(f"Error fetching bot setting {key} from primary: {e}")
+
+    # Fallback to secondary DB if configured
+    if mongo.has_secondary:
+        try:
+            doc2 = await mongo.db2["bot_settings"].find_one({"_id": key})
+            if doc2 and "value" in doc2:
+                _SETTINGS_CACHE[key] = doc2["value"]
+                return doc2["value"]
+        except Exception as e2:
+            logger.debug(f"Error fetching bot setting {key} from secondary: {e2}")
+
     return default
 
 async def set_bot_setting(key: str, value) -> bool:
-    """Store or update global bot setting in MongoDB."""
+    """Store or update global bot setting in MongoDB and memory cache with resilient secondary fallback."""
+    _SETTINGS_CACHE[key] = value
+    saved = False
     try:
         await mongo.settings.update_one(
             {"_id": key},
             {"$set": {"value": value}},
             upsert=True
         )
-        return True
+        saved = True
     except Exception as e:
-        logger.error(f"Error saving bot setting {key}: {e}")
-        return False
+        logger.warning(f"Failed to save bot setting '{key}' to primary DB (likely quota locked): {e}")
+
+    # If primary failed or secondary is connected, sync to secondary bot_settings
+    if mongo.has_secondary and (not saved or getattr(Config, "SECONDARY_DATABASE_URI", "")):
+        try:
+            await mongo.db2["bot_settings"].update_one(
+                {"_id": key},
+                {"$set": {"value": value}},
+                upsert=True
+            )
+            saved = True
+        except Exception as e2:
+            logger.debug(f"Error syncing bot setting '{key}' to secondary DB: {e2}")
+
+    return saved
 
 async def load_dynamic_settings():
     """Hydrate in-memory Config attributes from persistent MongoDB bot_settings on bot startup."""
