@@ -1,11 +1,12 @@
 """Flixify / AkMovieVerse 3D — Futuristic 3D Cinema Showcase & File Delivery Mini App.
 Features:
 1. Hero 3D Card Mode for single searched titles with interactive 3D parallax tilt & cosmic aura.
-2. Smooth 3D Carousel for multiple titles.
-3. Top Brand Header with centered full-width search bar below it (zero filter clutter).
+2. CineFlow 3D Horizontal Slider for multi-title browsing with zero card clipping / overlap.
+3. Top Brand Header with centered full-width search bar below it.
 4. Vertical optical centering of cards.
 5. Rich Full-Screen Cinema Post Modal on tap with complete episodes, season packs, and quality prints.
-6. 1-tap direct Telegram Bot file delivery with 100% shortener / VIP monetization.
+6. Pinned non-intrusive bottom delivery button that never blocks scrollable content.
+7. High-res graceful canvas fallback posters with zero missing images.
 """
 
 import json
@@ -36,7 +37,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #050811;
+            background: #04060c;
             color: #ffffff;
         }
 
@@ -54,7 +55,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             position: fixed;
             inset: 0;
             pointer-events: none;
-            background: radial-gradient(circle at center, transparent 30%, rgba(5, 8, 17, 0.7) 75%, #050811 100%);
+            background: radial-gradient(circle at 50% 45%, transparent 25%, rgba(4, 6, 12, 0.65) 70%, #04060c 100%);
             z-index: 2;
         }
 
@@ -65,11 +66,11 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             left: 0;
             right: 0;
             z-index: 20;
-            padding: 14px 16px 10px 16px;
+            padding: 14px 16px 12px 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: linear-gradient(180deg, rgba(5, 8, 17, 0.95) 0%, rgba(5, 8, 17, 0.6) 80%, rgba(5, 8, 17, 0) 100%);
+            background: linear-gradient(180deg, rgba(4, 6, 12, 0.96) 0%, rgba(4, 6, 12, 0.7) 75%, rgba(4, 6, 12, 0) 100%);
         }
 
         .brand-title {
@@ -77,7 +78,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             font-weight: 900;
             color: #f43f5e;
             letter-spacing: 0.8px;
-            text-shadow: 0 0 18px rgba(244, 63, 94, 0.6);
+            text-shadow: 0 0 20px rgba(244, 63, 94, 0.65);
             display: flex;
             align-items: center;
             gap: 7px;
@@ -93,7 +94,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         .search-input {
             width: 100%;
-            background: rgba(18, 24, 38, 0.85);
+            background: rgba(15, 20, 32, 0.88);
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(244, 63, 94, 0.35);
@@ -104,15 +105,15 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             font-weight: 600;
             outline: none;
             transition: all 0.25s ease;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
             user-select: auto;
             -webkit-user-select: auto;
         }
 
         .search-input:focus {
             border-color: #f43f5e;
-            box-shadow: 0 0 20px rgba(244, 63, 94, 0.45);
-            background: rgba(22, 30, 48, 0.95);
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.5);
+            background: rgba(18, 25, 42, 0.96);
         }
 
         .search-input::placeholder {
@@ -127,7 +128,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             transform: translateY(-50%);
             font-size: 13px;
             pointer-events: none;
-            opacity: 0.7;
+            opacity: 0.75;
         }
 
         .search-clear-btn {
@@ -169,62 +170,102 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         /* Bottom Floating Prompt Pill */
         .bottom-hint-bar {
             position: fixed;
-            bottom: 24px;
+            bottom: 22px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 20;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 7px;
+            width: 100%;
+            max-width: 360px;
+            padding: 0 16px;
             pointer-events: none;
-        }
-
-        .tap-prompt-badge {
-            background: linear-gradient(135deg, rgba(244, 63, 94, 0.25) 0%, rgba(225, 29, 72, 0.35) 100%);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(244, 63, 94, 0.5);
-            color: #ffffff;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 6px 16px;
-            border-radius: 20px;
-            box-shadow: 0 4px 18px rgba(244, 63, 94, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            animation: pulseTap 1.8s infinite;
-        }
-
-        @keyframes pulseTap {
-            0% { transform: scale(0.97); opacity: 0.85; }
-            50% { transform: scale(1.03); opacity: 1; }
-            100% { transform: scale(0.97); opacity: 0.85; }
+            transition: opacity 0.25s ease;
         }
 
         .movie-title-preview {
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 800;
             color: #ffffff;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
-            max-width: 290px;
+            text-shadow: 0 2px 14px rgba(0, 0, 0, 0.95);
+            max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             text-align: center;
         }
 
+        .hud-sub-badges {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .hud-pill {
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #94a3b8;
+        }
+
+        .hud-pill-gold {
+            color: #fbbf24;
+            border-color: rgba(245, 158, 11, 0.4);
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        .hud-pill-cyan {
+            color: #38bdf8;
+            border-color: rgba(56, 189, 248, 0.4);
+            background: rgba(56, 189, 248, 0.15);
+        }
+
+        .tap-prompt-badge {
+            background: linear-gradient(135deg, rgba(244, 63, 94, 0.3) 0%, rgba(225, 29, 72, 0.45) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(244, 63, 94, 0.55);
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 7px 18px;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(244, 63, 94, 0.35);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            animation: pulseTap 2s infinite ease-in-out;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        @keyframes pulseTap {
+            0% { transform: scale(0.98); opacity: 0.9; box-shadow: 0 0 10px rgba(244, 63, 94, 0.2); }
+            50% { transform: scale(1.02); opacity: 1; box-shadow: 0 0 24px rgba(244, 63, 94, 0.5); }
+            100% { transform: scale(0.98); opacity: 0.9; box-shadow: 0 0 10px rgba(244, 63, 94, 0.2); }
+        }
+
         /* ------------------------------------------------------------- */
-        /* FULL-SCREEN CINEMA POST MODAL (Styled like Website Post Page) */
+        /* FULL-SCREEN CINEMA POST MODAL (Rock-Solid Flex Viewport Shell) */
         /* ------------------------------------------------------------- */
         .cinema-post-modal {
             position: fixed;
             inset: 0;
             z-index: 100;
-            background: #07090e;
+            background: #060911;
             color: #f1f5f9;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
             opacity: 0;
             pointer-events: none;
             transform: translateY(100%);
@@ -237,22 +278,22 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             transform: translateY(0);
         }
 
+        /* 1. Pinned Top Bar */
         .modal-top-bar {
-            position: sticky;
-            top: 0;
+            flex-shrink: 0;
             z-index: 50;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 14px 18px;
-            background: rgba(7, 9, 14, 0.85);
+            padding: 13px 18px;
+            background: rgba(10, 14, 24, 0.95);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .modal-brand {
-            font-size: 14px;
+            font-size: 14.5px;
             font-weight: 800;
             color: #f43f5e;
             display: flex;
@@ -278,13 +319,21 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         .modal-close-btn:active {
             transform: scale(0.9);
-            background: rgba(244, 63, 94, 0.3);
+            background: rgba(244, 63, 94, 0.35);
+        }
+
+        /* 2. Scrollable Middle Area */
+        .modal-scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 24px;
         }
 
         /* Hero Backdrop & Poster Banner */
         .modal-hero {
             position: relative;
-            padding: 20px 16px 24px 16px;
+            padding: 22px 16px 20px 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -297,7 +346,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             width: 100%;
             height: 100%;
             object-fit: cover;
-            filter: blur(32px) brightness(0.28) saturate(1.4);
+            filter: blur(34px) brightness(0.25) saturate(1.4);
             transform: scale(1.2);
             z-index: 1;
         }
@@ -314,14 +363,14 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .modal-poster-wrap {
-            width: 175px;
+            width: 165px;
             aspect-ratio: 2/3;
-            border-radius: 16px;
+            border-radius: 14px;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(244, 63, 94, 0.25);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.85), 0 0 25px rgba(244, 63, 94, 0.25);
             background: #0f172a;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .modal-poster-img {
@@ -332,7 +381,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .modal-title {
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 900;
             color: #ffffff;
             line-height: 1.3;
@@ -390,7 +439,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             line-height: 1.5;
             color: #cbd5e1;
             font-style: italic;
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(15, 23, 42, 0.65);
             border-left: 3px solid #f43f5e;
             padding: 8px 12px;
             border-radius: 0 10px 10px 0;
@@ -401,7 +450,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         /* Content Section: Prints or Episodes */
         .modal-body {
-            padding: 16px 18px 90px 18px;
+            padding: 14px 18px 24px 18px;
             width: 100%;
             max-width: 600px;
             margin: 0 auto;
@@ -415,7 +464,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .section-title {
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 800;
             color: #fbbf24;
             display: flex;
@@ -440,7 +489,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .item-card {
-            background: rgba(22, 30, 48, 0.75);
+            background: rgba(20, 26, 42, 0.8);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 14px;
             padding: 12px 14px;
@@ -452,7 +501,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .item-card:active {
-            background: rgba(30, 42, 68, 0.95);
+            background: rgba(28, 38, 62, 0.95);
             border-color: rgba(56, 189, 248, 0.5);
             transform: scale(0.99);
         }
@@ -534,22 +583,21 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             transform: scale(0.95);
         }
 
-        /* Sticky Bottom Action Bar */
+        /* 3. Pinned Bottom Action Bar (Forever Anchored at Bottom, NEVER Floats in Middle) */
         .modal-bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 50;
-            padding: 12px 18px 16px 18px;
-            background: linear-gradient(180deg, rgba(7, 9, 14, 0.8) 0%, #07090e 100%);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 60;
+            padding: 12px 18px max(14px, env(safe-area-inset-bottom)) 18px;
+            background: rgba(10, 14, 24, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.92);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
         }
 
         .btn-all-in-bot {
@@ -567,8 +615,9 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             justify-content: center;
             gap: 8px;
             cursor: pointer;
-            box-shadow: 0 6px 20px rgba(225, 29, 72, 0.4);
+            box-shadow: 0 6px 22px rgba(225, 29, 72, 0.45);
             text-decoration: none;
+            transition: transform 0.15s ease;
         }
 
         .btn-all-in-bot:active {
@@ -605,16 +654,18 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
     <!-- Bottom Discrete Floating Title & Prompt Pill (Non-overlapping) -->
     <div class="bottom-hint-bar" id="bottomHintBar">
         <div class="movie-title-preview" id="movieTitlePreview">Loading Cosmos...</div>
-        <div class="tap-prompt-badge">
-            <span>👆</span>
+        <div class="hud-sub-badges" id="hudSubBadges"></div>
+        <div class="tap-prompt-badge" onclick="triggerActiveModal()">
+            <span>🍿</span>
             <span>Tap Poster to View Files &amp; Episodes</span>
         </div>
     </div>
 
     <!-- ------------------------------------------------------------- -->
-    <!-- FULL-SCREEN CINEMA POST MODAL (Styled like Website Post Page) -->
+    <!-- FULL-SCREEN CINEMA POST MODAL (Rock-Solid Flex Viewport Shell) -->
     <!-- ------------------------------------------------------------- -->
     <div class="cinema-post-modal" id="cinemaModal">
+        <!-- 1. Pinned Top Bar -->
         <div class="modal-top-bar">
             <div class="modal-brand">
                 <span>🍿</span> <span>AkMovieVerse Cinema</span>
@@ -622,27 +673,30 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             <button class="modal-close-btn" onclick="closeCinemaModal()">✕</button>
         </div>
 
-        <!-- Hero Banner with Blurred Backdrop -->
-        <div class="modal-hero">
-            <img id="modalBackdropImg" class="modal-backdrop-img" src="" alt="Backdrop" />
-            <div class="modal-hero-content">
-                <div class="modal-poster-wrap">
-                    <img id="modalPosterImg" class="modal-poster-img" src="" alt="Poster" />
+        <!-- 2. Smooth Scrollable Content Container -->
+        <div class="modal-scroll-area" id="modalScrollArea">
+            <!-- Hero Banner with Blurred Backdrop -->
+            <div class="modal-hero">
+                <img id="modalBackdropImg" class="modal-backdrop-img" src="" alt="Backdrop" />
+                <div class="modal-hero-content">
+                    <div class="modal-poster-wrap">
+                        <img id="modalPosterImg" class="modal-poster-img" src="" alt="Poster" />
+                    </div>
+                    <h1 class="modal-title" id="modalTitleText">Title</h1>
+                    <div class="modal-badges-row" id="modalBadgesContainer">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <p class="modal-storyline" id="modalStorylineText">Description</p>
                 </div>
-                <h1 class="modal-title" id="modalTitleText">Title</h1>
-                <div class="modal-badges-row" id="modalBadgesContainer">
-                    <!-- Populated dynamically -->
-                </div>
-                <p class="modal-storyline" id="modalStorylineText">Description</p>
+            </div>
+
+            <!-- Content Body: Prints or Episodes & Packs -->
+            <div class="modal-body" id="modalBodyContainer">
+                <!-- Populated dynamically -->
             </div>
         </div>
 
-        <!-- Content Body: Prints or Episodes & Packs -->
-        <div class="modal-body" id="modalBodyContainer">
-            <!-- Populated dynamically -->
-        </div>
-
-        <!-- Sticky Bottom Delivery Button -->
+        <!-- 3. Pinned Bottom Delivery Button (Locked at bottom, never overlaps) -->
         <div class="modal-bottom-bar">
             <button id="modalBotAllBtn" class="btn-all-in-bot">
                 <span>🤖</span> <span>Get All Files / Episodes in Bot ↗️</span>
@@ -659,8 +713,8 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             window.Telegram.WebApp.ready();
             window.Telegram.WebApp.expand();
             try {
-                window.Telegram.WebApp.setHeaderColor('#050811');
-                window.Telegram.WebApp.setBackgroundColor('#050811');
+                window.Telegram.WebApp.setHeaderColor('#04060c');
+                window.Telegram.WebApp.setBackgroundColor('#04060c');
             } catch (e) {}
         }
 
@@ -682,9 +736,9 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 const osc = actx.createOscillator();
                 const gain = actx.createGain();
                 osc.type = "sine";
-                osc.frequency.setValueAtTime(480, actx.currentTime);
+                osc.frequency.setValueAtTime(460, actx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(160, actx.currentTime + 0.04);
-                gain.gain.setValueAtTime(0.08, actx.currentTime);
+                gain.gain.setValueAtTime(0.06, actx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.04);
                 osc.connect(gain);
                 gain.connect(actx.destination);
@@ -699,22 +753,24 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 [659.25, 880].forEach((freq, idx) => {
                     const osc = actx.createOscillator();
                     const gain = actx.createGain();
-                    osc.type = "triangle";
-                    osc.frequency.value = freq;
-                    gain.gain.setValueAtTime(0.16, actx.currentTime + idx * 0.08);
-                    gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + idx * 0.08 + 0.22);
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(freq, actx.currentTime + idx * 0.07);
+                    gain.gain.setValueAtTime(0.08, actx.currentTime + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + idx * 0.07 + 0.2);
                     osc.connect(gain);
                     gain.connect(actx.destination);
-                    osc.start(actx.currentTime + idx * 0.08);
-                    osc.stop(actx.currentTime + idx * 0.08 + 0.22);
+                    osc.start(actx.currentTime + idx * 0.07);
+                    osc.stop(actx.currentTime + idx * 0.07 + 0.2);
                 });
             } catch (e) {}
         }
 
-        function triggerHaptic(type = "light") {
+        function triggerHaptic(style) {
             try {
                 if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
-                    window.Telegram.WebApp.HapticFeedback.impactOccurred(type);
+                    if (style === "light") window.Telegram.WebApp.HapticFeedback.impactOccurred("light");
+                    else if (style === "medium") window.Telegram.WebApp.HapticFeedback.impactOccurred("medium");
+                    else if (style === "heavy") window.Telegram.WebApp.HapticFeedback.impactOccurred("heavy");
                 }
             } catch (e) {}
         }
@@ -725,28 +781,39 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         // Three.js 3D Engine Setup
         const canvas = document.getElementById("webglCanvas");
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050811, 0.024);
+        scene.fog = new THREE.FogExp2(0x04060c, 0.022);
 
-        const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 1000);
         // Position camera to frame poster right in optical center (y = 0.4)
-        camera.position.set(0, 0.4, 14.5);
+        camera.position.set(0, 0.4, 13.5);
         camera.lookAt(0, 0.4, 0);
 
         const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        // Ambient & Cosmic Lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        // Ambient & Cosmic Studio Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
         scene.add(ambientLight);
 
-        const coreLight = new THREE.PointLight(0xf43f5e, 2.8, 50);
-        coreLight.position.set(0, 0.4, 0);
-        scene.add(coreLight);
+        // Left Cyan Rim Light
+        const cyanRimLight = new THREE.PointLight(0x38bdf8, 2.2, 45);
+        cyanRimLight.position.set(-6, 2.5, 4);
+        scene.add(cyanRimLight);
+
+        // Right Neon Rose Rim Light
+        const roseRimLight = new THREE.PointLight(0xf43f5e, 2.4, 45);
+        roseRimLight.position.set(6, 2, 4);
+        scene.add(roseRimLight);
+
+        // Front Soft Fill Light
+        const frontFillLight = new THREE.PointLight(0xffffff, 0.9, 35);
+        frontFillLight.position.set(0, 0.4, 9);
+        scene.add(frontFillLight);
 
         // 1. Particle Starfield
         const starGeo = new THREE.BufferGeometry();
-        const starCount = 2000;
+        const starCount = 2200;
         const starPos = new Float32Array(starCount * 3);
         for (let i = 0; i < starCount * 3; i += 3) {
             starPos[i] = (Math.random() - 0.5) * 160;
@@ -754,16 +821,50 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             starPos[i + 2] = (Math.random() - 0.5) * 160;
         }
         starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0x94a3b8, size: 0.65, transparent: true, opacity: 0.8 });
+        const starMat = new THREE.PointsMaterial({ color: 0x94a3b8, size: 0.65, transparent: true, opacity: 0.85 });
         const starField = new THREE.Points(starGeo, starMat);
         scene.add(starField);
 
-        // 2. Cosmic Pulsing Halo Aura for Hero Card
-        const haloGeo = new THREE.RingGeometry(3.6, 4.4, 48);
-        const haloMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e, side: THREE.DoubleSide, transparent: true, opacity: 0.35, wireframe: true });
+        // 2. Cosmic Glowing Ring Halo (Smooth Luminous Glow, Zero Jagged Lines)
+        const haloGeo = new THREE.TorusGeometry(3.6, 0.08, 16, 80);
+        const haloMat = new THREE.MeshBasicMaterial({
+            color: 0xf43f5e,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+        });
         const cosmicHalo = new THREE.Mesh(haloGeo, haloMat);
         cosmicHalo.position.set(0, 0.4, -0.6);
         scene.add(cosmicHalo);
+
+        // Second Cyan Outer Halo for Ethereal Glow
+        const haloOuterGeo = new THREE.TorusGeometry(3.85, 0.04, 16, 80);
+        const haloOuterMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.45,
+            blending: THREE.AdditiveBlending
+        });
+        const cosmicHaloOuter = new THREE.Mesh(haloOuterGeo, haloOuterMat);
+        cosmicHaloOuter.position.set(0, 0.4, -0.65);
+        scene.add(cosmicHaloOuter);
+
+        // Orbiting Stardust Particles
+        const dustCount = 140;
+        const dustGeo = new THREE.BufferGeometry();
+        const dustPos = new Float32Array(dustCount * 3);
+        for (let i = 0; i < dustCount * 3; i += 3) {
+            const rad = 3.4 + Math.random() * 0.9;
+            const theta = Math.random() * Math.PI * 2;
+            dustPos[i] = Math.cos(theta) * rad;
+            dustPos[i + 1] = Math.sin(theta) * rad;
+            dustPos[i + 2] = (Math.random() - 0.5) * 0.6;
+        }
+        dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+        const dustMat = new THREE.PointsMaterial({ color: 0xfbbf24, size: 0.12, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending });
+        const stardust = new THREE.Points(dustGeo, dustMat);
+        stardust.position.set(0, 0.4, -0.6);
+        scene.add(stardust);
 
         // Group holding 3D Card(s)
         const cardsGroup = new THREE.Group();
@@ -771,31 +872,160 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         scene.add(cardsGroup);
 
         const textureLoader = new THREE.TextureLoader();
+        textureLoader.crossOrigin = "anonymous";
         let cardMeshes = [];
         let isSingleHeroMode = true;
 
-        // Fallback texture canvas generator
-        function createPosterCanvas(titleText) {
+        // CineFlow Slider State
+        let currentScroll = 0;
+        let targetScroll = 0;
+
+        // High-Definition Studio Poster Canvas Generator (Zero Missing Posters, Gorgeous Styling)
+        function createPosterCanvas(titleText, isSeries, ratingText, qualText) {
             const c = document.createElement("canvas");
-            c.width = 400;
-            c.height = 600;
+            c.width = 600;
+            c.height = 900;
             const cx = c.getContext("2d");
-            const grad = cx.createLinearGradient(0, 0, 400, 600);
-            grad.addColorStop(0, "#1e293b");
-            grad.addColorStop(1, "#0f172a");
+
+            // Rich Cosmic Gradient Background
+            const grad = cx.createLinearGradient(0, 0, 600, 900);
+            grad.addColorStop(0, "#080c18");
+            grad.addColorStop(0.5, "#181f38");
+            grad.addColorStop(1, "#080c18");
             cx.fillStyle = grad;
-            cx.fillRect(0, 0, 400, 600);
+            cx.fillRect(0, 0, 600, 900);
+
+            // Ambient Starlight Sparkles on Canvas
+            cx.fillStyle = "rgba(255, 255, 255, 0.25)";
+            for (let i = 0; i < 35; i++) {
+                const sx = (i * 73) % 600;
+                const sy = (i * 127) % 900;
+                const sr = (i % 3) + 1;
+                cx.beginPath();
+                cx.arc(sx, sy, sr, 0, Math.PI * 2);
+                cx.fill();
+            }
+
+            // Top Header Brand Emblem
             cx.fillStyle = "#f43f5e";
-            cx.font = "bold 34px sans-serif";
+            cx.font = "900 24px sans-serif";
             cx.textAlign = "center";
-            cx.fillText("🪐 MovieVerse", 200, 260);
+            cx.fillText("🪐 AK MOVIEVERSE CINEMA", 300, 110);
+
+            // Center Big Cinema Emblem
+            cx.font = "80px sans-serif";
+            cx.fillText(isSeries ? "📺" : "🎬", 300, 340);
+
+            // Category Pill
+            cx.fillStyle = isSeries ? "rgba(168, 85, 247, 0.35)" : "rgba(56, 189, 248, 0.35)";
+            cx.strokeStyle = isSeries ? "#c084fc" : "#38bdf8";
+            cx.lineWidth = 2;
+            cx.beginPath();
+            cx.roundRect ? cx.roundRect(200, 380, 200, 42, 12) : cx.rect(200, 380, 200, 42);
+            cx.fill();
+            cx.stroke();
+
             cx.fillStyle = "#ffffff";
+            cx.font = "bold 18px sans-serif";
+            cx.fillText(isSeries ? "WEB SERIES" : "FEATURE FILM", 300, 407);
+
+            // Clean Wrapped Title
+            cx.fillStyle = "#ffffff";
+            cx.font = "900 36px sans-serif";
+            cx.shadowColor = "rgba(0, 0, 0, 0.9)";
+            cx.shadowBlur = 16;
+
+            const words = (titleText || "Cinema Feature").split(" ");
+            let line = "";
+            let y = 500;
+            const lineHeight = 46;
+
+            for (let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + " ";
+                const metrics = cx.measureText(testLine);
+                if (metrics.width > 500 && n > 0) {
+                    cx.fillText(line.trim(), 300, y);
+                    line = words[n] + " ";
+                    y += lineHeight;
+                    if (y > 670) {
+                        line += "...";
+                        break;
+                    }
+                } else {
+                    line = testLine;
+                }
+            }
+            cx.fillText(line.trim(), 300, y);
+            cx.shadowBlur = 0;
+
+            // Bottom Badges (Rating & HD)
+            cx.fillStyle = "#fbbf24";
             cx.font = "bold 22px sans-serif";
-            cx.fillText(titleText || "Movie", 200, 320);
-            return new THREE.CanvasTexture(c);
+            cx.fillText(`⭐ ${ratingText || '8.2'} IMDb  •  4K UHD`, 300, 780);
+
+            const texture = new THREE.CanvasTexture(c);
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            return texture;
         }
 
-        // Build 3D Cards Scene (Hero Mode for 1 result vs Smooth Arc Carousel for multiple)
+        // Texture Loader with Safe Error Fallback
+        function createCardMaterial(item) {
+            const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.25, metalness: 0.85 });
+            const backMat = new THREE.MeshStandardMaterial({ color: 0x060911, roughness: 0.4, metalness: 0.9 });
+
+            let frontTex;
+            if (item.poster_url) {
+                frontTex = textureLoader.load(
+                    item.poster_url,
+                    function(t) {
+                        t.minFilter = THREE.LinearFilter;
+                        t.magFilter = THREE.LinearFilter;
+                    },
+                    undefined,
+                    function(err) {
+                        // Safe fallback on network drop / CORS / 404: Never show black card!
+                        const fallback = createPosterCanvas(item.clean_name, item.is_series, item.rating, item.qualities);
+                        frontMat.map = fallback;
+                        frontMat.needsUpdate = true;
+                    }
+                );
+                frontTex.minFilter = THREE.LinearFilter;
+                frontTex.magFilter = THREE.LinearFilter;
+            } else {
+                frontTex = createPosterCanvas(item.clean_name, item.is_series, item.rating, item.qualities);
+            }
+
+            const frontMat = new THREE.MeshBasicMaterial({ map: frontTex });
+            // BoxGeometry face ordering: [+X, -X, +Y, -Y, +Z (Front), -Z (Back)]
+            return [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat];
+        }
+
+        function updateBottomHud(item) {
+            if (!item) return;
+            document.getElementById("movieTitlePreview").innerText = item.title || item.clean_name;
+            const hudBadges = document.getElementById("hudSubBadges");
+            hudBadges.innerHTML = "";
+
+            const b1 = document.createElement("span");
+            b1.className = "hud-pill hud-pill-gold";
+            b1.innerText = `⭐ ${item.rating || '8.2'}`;
+            hudBadges.appendChild(b1);
+
+            const b2 = document.createElement("span");
+            b2.className = "hud-pill hud-pill-cyan";
+            b2.innerText = item.is_series ? "Series" : "Movie";
+            hudBadges.appendChild(b2);
+
+            if (item.languages && item.languages.length > 0) {
+                const b3 = document.createElement("span");
+                b3.className = "hud-pill";
+                b3.innerText = item.languages[0];
+                hudBadges.appendChild(b3);
+            }
+        }
+
+        // Build 3D Cards Scene (Hero Mode for 1 result vs Smooth Non-Clipping CineFlow for multiple)
         function build3DScene() {
             while (cardsGroup.children.length > 0) {
                 cardsGroup.remove(cardsGroup.children[0]);
@@ -804,74 +1034,55 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
             if (!RAW_CATALOG || RAW_CATALOG.length === 0) {
                 document.getElementById("movieTitlePreview").innerText = "No Matching Files Found";
+                document.getElementById("hudSubBadges").innerHTML = "";
                 cosmicHalo.visible = false;
+                cosmicHaloOuter.visible = false;
+                stardust.visible = false;
                 return;
             }
 
             const total = RAW_CATALOG.length;
             isSingleHeroMode = (total === 1);
             cosmicHalo.visible = true;
+            cosmicHaloOuter.visible = true;
+            stardust.visible = true;
 
             const cardW = 3.6;
             const cardH = 5.4;
-            const cardD = 0.14;
+            const cardD = 0.12;
 
             if (isSingleHeroMode) {
                 // HERO MODE: 1 Single Card perfectly centered with floating oscillation and touch tilt
                 const item = RAW_CATALOG[0];
                 const cardBox = new THREE.BoxGeometry(cardW, cardH, cardD);
-
-                let frontMat;
-                if (item.poster_url) {
-                    const tex = textureLoader.load(item.poster_url);
-                    frontMat = new THREE.MeshBasicMaterial({ map: tex });
-                } else {
-                    frontMat = new THREE.MeshBasicMaterial({ map: createPosterCanvas(item.clean_name) });
-                }
-
-                const edgeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.8 });
-                const backMat = new THREE.MeshStandardMaterial({ color: 0x0a0f1d, roughness: 0.4, metalness: 0.9 });
-                const materials = [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat];
+                const materials = createCardMaterial(item);
 
                 const mesh = new THREE.Mesh(cardBox, materials);
                 mesh.position.set(0, 0, 0);
-                mesh.userData = { item: item, baseScale: 1.0 };
+                mesh.userData = { item: item, index: 0 };
 
                 cardsGroup.add(mesh);
                 cardMeshes.push(mesh);
                 cardsGroup.rotation.set(0, 0, 0);
-                document.getElementById("movieTitlePreview").innerText = item.title || item.clean_name;
+                updateBottomHud(item);
             } else {
-                // CAROUSEL MODE: Multiple cards arranged in a smooth circular arc
-                const count = Math.min(total, 24);
-                const radius = 10.5;
+                // CINEFLOW SLIDER MODE: Smooth horizontal arc slider with ZERO clipping / collision
+                currentScroll = 0;
+                targetScroll = 0;
 
-                for (let i = 0; i < count; i++) {
+                for (let i = 0; i < total; i++) {
                     const item = RAW_CATALOG[i];
-                    const angle = (i / count) * Math.PI * 2;
                     const cardBox = new THREE.BoxGeometry(cardW, cardH, cardD);
-
-                    let frontMat;
-                    if (item.poster_url) {
-                        const tex = textureLoader.load(item.poster_url);
-                        frontMat = new THREE.MeshBasicMaterial({ map: tex });
-                    } else {
-                        frontMat = new THREE.MeshBasicMaterial({ map: createPosterCanvas(item.clean_name) });
-                    }
-
-                    const edgeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.8 });
-                    const backMat = new THREE.MeshStandardMaterial({ color: 0x0a0f1d, roughness: 0.4, metalness: 0.9 });
-                    const materials = [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat];
+                    const materials = createCardMaterial(item);
 
                     const mesh = new THREE.Mesh(cardBox, materials);
-                    mesh.position.x = radius * Math.sin(angle);
-                    mesh.position.z = radius * Math.cos(angle);
-                    mesh.position.y = 0;
-                    mesh.rotation.y = angle;
-
-                    mesh.userData = { item: item, angle: angle, baseScale: 1.0 };
+                    mesh.userData = { item: item, index: i };
                     cardsGroup.add(mesh);
                     cardMeshes.push(mesh);
+                }
+
+                if (cardMeshes.length > 0) {
+                    updateBottomHud(cardMeshes[0].userData.item);
                 }
             }
         }
@@ -883,12 +1094,12 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         let startX = 0;
         let startY = 0;
         let previousMouseX = 0;
-        let rotationVelocity = 0;
+        let scrollVelocity = 0;
         let heroTiltX = 0;
         let heroTiltY = 0;
         let targetHeroTiltX = 0;
         let targetHeroTiltY = 0;
-        let lastTickIndex = -1;
+        let lastSnapIndex = 0;
 
         // Pointer Events
         window.addEventListener("mousedown", (e) => {
@@ -897,6 +1108,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             startX = e.clientX;
             startY = e.clientY;
             previousMouseX = e.clientX;
+            scrollVelocity = 0;
             getAudioContext();
         });
 
@@ -906,23 +1118,28 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             previousMouseX = e.clientX;
 
             if (isSingleHeroMode) {
-                // Interactive 3D Card Tilt
                 targetHeroTiltY = (e.clientX - window.innerWidth / 2) * 0.0016;
                 targetHeroTiltX = -(e.clientY - window.innerHeight / 2) * 0.0016;
             } else {
-                // Rotate Carousel Orbit
-                rotationVelocity = deltaX * 0.0045;
-                cardsGroup.rotation.y += rotationVelocity;
+                scrollVelocity = -deltaX * 0.0055;
+                targetScroll += scrollVelocity;
+                targetScroll = Math.max(-0.2, Math.min(cardMeshes.length - 0.8, targetScroll));
             }
         });
 
         window.addEventListener("mouseup", () => {
-            isDragging = false;
-            targetHeroTiltX = 0;
-            targetHeroTiltY = 0;
+            if (isDragging) {
+                isDragging = false;
+                if (!isSingleHeroMode) {
+                    targetScroll = Math.round(targetScroll);
+                    targetScroll = Math.max(0, Math.min(cardMeshes.length - 1, targetScroll));
+                }
+                targetHeroTiltX = 0;
+                targetHeroTiltY = 0;
+            }
         });
 
-        // Touch Listeners for Mobile
+        // Touch Listeners for Mobile Devices
         window.addEventListener("touchstart", (e) => {
             if (e.target.closest(".top-nav") || e.target.closest(".cinema-post-modal")) return;
             if (e.touches.length === 1) {
@@ -930,6 +1147,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 startX = e.touches[0].clientX;
                 startY = e.touches[0].clientY;
                 previousMouseX = e.touches[0].clientX;
+                scrollVelocity = 0;
                 getAudioContext();
             }
         }, { passive: true });
@@ -943,15 +1161,22 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 targetHeroTiltY = (e.touches[0].clientX - window.innerWidth / 2) * 0.002;
                 targetHeroTiltX = -(e.touches[0].clientY - window.innerHeight / 2) * 0.002;
             } else {
-                rotationVelocity = deltaX * 0.0055;
-                cardsGroup.rotation.y += rotationVelocity;
+                scrollVelocity = -deltaX * 0.0065;
+                targetScroll += scrollVelocity;
+                targetScroll = Math.max(-0.2, Math.min(cardMeshes.length - 0.8, targetScroll));
             }
         }, { passive: true });
 
         window.addEventListener("touchend", () => {
-            isDragging = false;
-            targetHeroTiltX = 0;
-            targetHeroTiltY = 0;
+            if (isDragging) {
+                isDragging = false;
+                if (!isSingleHeroMode) {
+                    targetScroll = Math.round(targetScroll);
+                    targetScroll = Math.max(0, Math.min(cardMeshes.length - 1, targetScroll));
+                }
+                targetHeroTiltX = 0;
+                targetHeroTiltY = 0;
+            }
         });
 
         // Raycasting for Card Click Selection
@@ -963,23 +1188,50 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             mouseVec.y = -(clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouseVec, camera);
 
-            const intersects = raycaster.intersectObjects(cardMeshes);
+            const visibleMeshes = cardMeshes.filter(m => m.visible);
+            const intersects = raycaster.intersectObjects(visibleMeshes);
+
             if (intersects.length > 0) {
                 const clickedMesh = intersects[0].object;
-                const item = clickedMesh.userData.item;
-                if (item) {
+                const clickedIndex = clickedMesh.userData.index;
+
+                if (isSingleHeroMode) {
                     playChime();
                     triggerHaptic("medium");
-                    openCinemaModal(item);
+                    openCinemaModal(clickedMesh.userData.item);
+                } else {
+                    const activeIdx = Math.round(currentScroll);
+                    if (clickedIndex === activeIdx) {
+                        playChime();
+                        triggerHaptic("medium");
+                        openCinemaModal(clickedMesh.userData.item);
+                    } else {
+                        // Snap clicked card to center
+                        targetScroll = clickedIndex;
+                        playOrbTick();
+                        triggerHaptic("light");
+                    }
                 }
             }
         }
 
         window.addEventListener("click", (e) => {
-            if (Math.abs(rotationVelocity) > 0.002) return;
             if (e.target.closest(".top-nav") || e.target.closest(".cinema-post-modal")) return;
+            const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (dist > 8) return; // Ignore drag release
             handleCardSelection(e.clientX, e.clientY);
         });
+
+        function triggerActiveModal() {
+            if (cardMeshes.length === 0) return;
+            const activeIdx = isSingleHeroMode ? 0 : Math.round(currentScroll);
+            const targetMesh = cardMeshes[activeIdx] || cardMeshes[0];
+            if (targetMesh && targetMesh.userData.item) {
+                playChime();
+                triggerHaptic("medium");
+                openCinemaModal(targetMesh.userData.item);
+            }
+        }
 
         // Deliver File to Bot Function
         function downloadQualityFile(botUrl) {
@@ -1108,7 +1360,6 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                     epSec.appendChild(epGrid);
                     bodyBox.appendChild(epSec);
                 } else if (!item.packs || item.packs.length === 0) {
-                    // Fallback to quality buttons
                     renderQualityCardsFallback(item, bodyBox);
                 }
             } else {
@@ -1147,13 +1398,15 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                     `;
                     mGrid.appendChild(card);
                 });
-
                 movieSec.appendChild(mGrid);
                 bodyBox.appendChild(movieSec);
             }
 
             // Bottom Bot Button
             document.getElementById("modalBotAllBtn").onclick = () => downloadQualityFile(item.bot_url);
+
+            // Reset scroll position to top
+            document.getElementById("modalScrollArea").scrollTop = 0;
 
             modal.classList.add("active");
             document.getElementById("bottomHintBar").style.opacity = "0";
@@ -1208,6 +1461,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         searchInput.addEventListener("input", (e) => {
             const query = e.target.value.trim();
             clearBtn.style.display = query ? "flex" : "none";
+
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
                 performLiveSearch(query);
@@ -1246,71 +1500,72 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Animation Loop with Smooth Floating Physics & 3D Parallax Tilt
+        // Animation Loop with Smooth Floating Physics & CineFlow Arc
         let clock = 0;
         function animate() {
             requestAnimationFrame(animate);
             clock += 0.016;
 
-            // Rotate starfield slowly
+            // Celestial rotations
             starField.rotation.y += 0.0003;
-            cosmicHalo.rotation.z += 0.005;
+            cosmicHalo.rotation.z += 0.004;
+            cosmicHaloOuter.rotation.z -= 0.003;
+            stardust.rotation.z += 0.006;
 
             if (isSingleHeroMode && cardMeshes.length > 0) {
                 // HERO MODE:
-                // 1. Subtle smooth floating levitation
                 const heroCard = cardMeshes[0];
-                heroCard.position.y = Math.sin(clock * 1.6) * 0.12;
+                heroCard.position.set(0, Math.sin(clock * 1.6) * 0.12, 0);
 
-                // 2. Parallax 3D spring tilt on touch/drag
+                // Parallax 3D spring tilt on touch/drag
                 heroTiltX += (targetHeroTiltX - heroTiltX) * 0.12;
                 heroTiltY += (targetHeroTiltY - heroTiltY) * 0.12;
                 heroCard.rotation.x = heroTiltX;
                 heroCard.rotation.y = heroTiltY;
 
                 // Pulsing Halo behind card
-                cosmicHalo.scale.set(1 + Math.sin(clock * 2) * 0.04, 1 + Math.sin(clock * 2) * 0.04, 1);
+                const scalePulse = 1 + Math.sin(clock * 2) * 0.035;
+                cosmicHalo.scale.set(scalePulse, scalePulse, 1);
+                cosmicHaloOuter.scale.set(scalePulse * 1.02, scalePulse * 1.02, 1);
             } else if (cardMeshes.length > 0) {
-                // CAROUSEL MODE: Apply inertia decay when not dragging
-                if (!isDragging) {
-                    rotationVelocity *= 0.94;
-                    cardsGroup.rotation.y += rotationVelocity;
+                // CINEFLOW SLIDER MODE: Smooth lerp to target scroll
+                currentScroll += (targetScroll - currentScroll) * 0.12;
+
+                const activeSnap = Math.round(currentScroll);
+                if (activeSnap !== lastSnapIndex && Math.abs(currentScroll - activeSnap) < 0.15) {
+                    lastSnapIndex = activeSnap;
+                    playOrbTick();
+                    triggerHaptic("light");
+                    if (cardMeshes[activeSnap]) {
+                        updateBottomHud(cardMeshes[activeSnap].userData.item);
+                    }
                 }
 
-                // Focus front-most card
-                let minDistance = Infinity;
-                let frontMesh = null;
-                let frontIndex = 0;
-
+                // Render each card along the smooth CineFlow Arc (Zero clipping!)
+                const cardSpacing = 4.0;
                 cardMeshes.forEach((mesh, idx) => {
-                    const worldPos = new THREE.Vector3();
-                    mesh.getWorldPosition(worldPos);
-                    const dist = worldPos.distanceTo(camera.position);
+                    const offset = idx - currentScroll;
 
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        frontMesh = mesh;
-                        frontIndex = idx;
+                    // Frustum culling: Only draw cards in front-view range [-3.5, 3.5]
+                    if (Math.abs(offset) > 3.5) {
+                        mesh.visible = false;
+                        return;
                     }
 
-                    if (dist < 11.5) {
-                        const sc = 1.0 + (11.5 - dist) * 0.04;
-                        mesh.scale.set(sc, sc, sc);
-                    } else {
-                        mesh.scale.set(1, 1, 1);
-                    }
+                    mesh.visible = true;
+                    // Spacing along X, curved depth along Z:
+                    mesh.position.x = offset * cardSpacing;
+                    mesh.position.z = -Math.abs(offset) * 1.65;
+                    mesh.position.y = Math.sin(clock * 1.6 + idx * 0.4) * 0.08;
+
+                    // Tilted smoothly toward user
+                    mesh.rotation.y = -Math.sign(offset) * Math.min(Math.abs(offset) * 0.32, 0.55);
+                    mesh.rotation.x = 0;
+
+                    // Scale: center card is 1.0, side cards step down
+                    const sc = Math.max(0.68, 1.0 - Math.abs(offset) * 0.12);
+                    mesh.scale.set(sc, sc, sc);
                 });
-
-                if (frontMesh && frontMesh.userData.item) {
-                    const item = frontMesh.userData.item;
-                    document.getElementById("movieTitlePreview").innerText = item.title || item.clean_name;
-
-                    if (frontIndex !== lastTickIndex && Math.abs(rotationVelocity) > 0.001) {
-                        lastTickIndex = frontIndex;
-                        playOrbTick();
-                        triggerHaptic("light");
-                    }
-                }
             }
 
             renderer.render(scene, camera);
@@ -1328,4 +1583,6 @@ def render_galaxy_movieverse(items: list, base_url: str, bot_username: str, init
     html = GALAXY_HTML_TEMPLATE
     html = html.replace("__CATALOG_JSON__", json.dumps(items))
     html = html.replace("__INITIAL_QUERY__", html_escape(initial_query))
+    html = html.replace("__BOT_USERNAME__", bot_username)
+    html = html.replace("__BASE_URL__", base_url)
     return html

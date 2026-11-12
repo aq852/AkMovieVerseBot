@@ -114,6 +114,8 @@ async def get_cached_poster_url(title: str) -> str:
     clean_q = re.sub(r"\s*Season.*", "", clean_q, flags=re.IGNORECASE).strip()
     clean_q = re.sub(r"[\-_:\[\]\(\)]", " ", clean_q).strip()
     clean_q = re.sub(r"\s+", " ", clean_q)
+    # Strip common release group tags (e.g. Sav10r, PSA, GalaxyRG, Pahe, YIFY, etc.)
+    clean_q = re.sub(r"^(?:Sav10r|PSA|GalaxyRG|Pahe|MkvCinemas|YIFY|EMBER|Judas|MeGusta|TGx|GalaxyTV|RareFilmm)\b\s*", "", clean_q, flags=re.IGNORECASE).strip()
     if not clean_q or len(clean_q) < 2 or clean_q.lower() in ["untitled", "movie video", "video", "none", "clip", "mediaclip"]:
         return ""
 
@@ -168,33 +170,49 @@ async def get_cached_poster_url(title: str) -> str:
                     if resp.status == 200:
                         data = await resp.json()
                         results = data.get("results", [])
+                        best_match = None
+                        # 1. Prefer exact title match with poster
                         for r in results:
-                            poster_path = r.get("poster_path")
-                            if poster_path:
-                                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-                                _POSTER_CACHE[clean_q] = poster_url
-                                _POSTER_CACHE[q_term] = poster_url
-                                # Persist asynchronously to MongoDB
-                                try:
-                                    from database.mongo import mongo
+                            r_title = (r.get("title") or r.get("name") or "").lower()
+                            if r_title == clean_q.lower() and r.get("poster_path"):
+                                best_match = r
+                                break
+                        # 2. Prefer highest vote count / popularity among entries with a poster
+                        if not best_match:
+                            valid_results = [r for r in results if r.get("poster_path")]
+                            if valid_results:
+                                valid_results.sort(key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)), reverse=True)
+                                best_match = valid_results[0]
+
+                        if best_match and best_match.get("poster_path"):
+                            # If it's an unverified/fan entry with <= 2 votes and a broader query exists, continue to parent
+                            if best_match.get("vote_count", 0) <= 2 and len(queries_to_try) > 1 and q_term == queries_to_try[0]:
+                                continue
+                            poster_path = best_match["poster_path"]
+                            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                            _POSTER_CACHE[clean_q] = poster_url
+                            _POSTER_CACHE[q_term] = poster_url
+                            # Persist asynchronously to MongoDB
+                            try:
+                                from database.mongo import mongo
+                                asyncio.create_task(
+                                    mongo.db["poster_cache"].update_one(
+                                        {"title": clean_q},
+                                        {"$set": {"poster_url": poster_url}},
+                                        upsert=True
+                                    )
+                                )
+                                if q_term != clean_q:
                                     asyncio.create_task(
                                         mongo.db["poster_cache"].update_one(
-                                            {"title": clean_q},
+                                            {"title": q_term},
                                             {"$set": {"poster_url": poster_url}},
                                             upsert=True
                                         )
                                     )
-                                    if q_term != clean_q:
-                                        asyncio.create_task(
-                                            mongo.db["poster_cache"].update_one(
-                                                {"title": q_term},
-                                                {"$set": {"poster_url": poster_url}},
-                                                upsert=True
-                                            )
-                                        )
-                                except Exception:
-                                    pass
-                                return poster_url
+                            except Exception:
+                                pass
+                            return poster_url
     except Exception:
         pass
 
