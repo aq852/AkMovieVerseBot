@@ -1,6 +1,6 @@
-"""Flixify 3D Galaxy Movieverse Telegram Mini App (WebApp).
+"""Flixify / AkMovieVerse 3D — Futuristic 3D Search & File Delivery Telegram Mini App (WebApp).
 Interactive 3D WebGL space universe where movie and web series cards float in an orbit around
-a glowing cosmic nebula core with touch inertia, gyroscopic tilt, smooth zoom, and 1-tap streaming.
+a glowing cosmic nebula core with real-time search, touch inertia, gyroscopic tilt, and direct Telegram bot file delivery.
 """
 
 import json
@@ -11,7 +11,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AkMovieVerse — 3D Galaxy Movieverse</title>
+    <title>MovieVerse 3D — Futuristic Search & File Delivery</title>
     <!-- Telegram Mini App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Three.js 3D WebGL Engine -->
@@ -60,28 +60,112 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             left: 0;
             right: 0;
             z-index: 10;
-            padding: 14px 16px;
+            padding: 12px 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: linear-gradient(180deg, rgba(5, 8, 17, 0.9) 0%, rgba(5, 8, 17, 0) 100%);
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(5, 8, 17, 0.95) 0%, rgba(5, 8, 17, 0) 100%);
         }
 
         .brand-logo {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 16px;
+            gap: 6px;
+            font-size: 15px;
             font-weight: 900;
             color: #f43f5e;
             letter-spacing: 0.5px;
             text-shadow: 0 0 16px rgba(244, 63, 94, 0.6);
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
+        /* Live Search Bar */
+        .search-bar-wrap {
+            position: relative;
+            flex: 1;
+            max-width: 320px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(244, 63, 94, 0.35);
+            border-radius: 20px;
+            padding: 7px 30px 7px 32px;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 600;
+            outline: none;
+            transition: all 0.2s ease;
+            user-select: auto;
+            -webkit-user-select: auto;
+        }
+
+        .search-input:focus {
+            border-color: #f43f5e;
+            box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
+            background: rgba(15, 23, 42, 0.95);
+        }
+
+        .search-icon-left {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .search-clear-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            color: #cbd5e1;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        .search-spinner {
+            position: absolute;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(244, 63, 94, 0.3);
+            border-top-color: #f43f5e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        /* Filter Pills Row */
         .hud-pills {
+            position: fixed;
+            top: 54px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .filter-btn {
@@ -91,8 +175,8 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             color: #94a3b8;
             font-size: 11px;
             font-weight: 700;
-            padding: 6px 12px;
-            border-radius: 20px;
+            padding: 5px 12px;
+            border-radius: 18px;
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -104,10 +188,34 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             box-shadow: 0 0 14px rgba(244, 63, 94, 0.4);
         }
 
-        /* Center Orbit Guide Notice */
+        /* Center Search / Results Banner Notice */
+        .search-banner {
+            position: fixed;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #38bdf8;
+            pointer-events: none;
+            display: none;
+            text-align: center;
+            max-width: 90%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Swipe Hint */
         .swipe-hint {
             position: fixed;
-            top: 68px;
+            bottom: 64px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
@@ -115,7 +223,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             backdrop-filter: blur(8px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 20px;
-            padding: 5px 14px;
+            padding: 4px 12px;
             font-size: 11px;
             font-weight: 600;
             color: #94a3b8;
@@ -134,20 +242,20 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         /* Active Movie Title Indicator */
         .focused-title-bar {
             position: fixed;
-            bottom: 24px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             pointer-events: none;
             transition: opacity 0.3s ease;
         }
 
         .focused-title {
-            font-size: 17px;
+            font-size: 16px;
             font-weight: 800;
             color: #ffffff;
             text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
@@ -189,7 +297,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             position: fixed;
             inset: 0;
             z-index: 100;
-            background: rgba(5, 8, 17, 0.8);
+            background: rgba(5, 8, 17, 0.82);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             display: flex;
@@ -208,11 +316,13 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         .movie-sheet-card {
             width: 100%;
             max-width: 440px;
+            max-height: 85vh;
+            overflow-y: auto;
             background: linear-gradient(180deg, #131b2e 0%, #0a0f1d 100%);
             border: 1px solid rgba(244, 63, 94, 0.3);
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(244, 63, 94, 0.2);
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(244, 63, 94, 0.2);
             border-radius: 28px 28px 0 0;
-            padding: 24px 20px 28px 20px;
+            padding: 22px 18px 26px 18px;
             transform: translateY(100%);
             transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.2);
             position: relative;
@@ -242,14 +352,14 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         .sheet-content {
             display: flex;
-            gap: 16px;
-            margin-bottom: 20px;
+            gap: 14px;
+            margin-bottom: 16px;
         }
 
         .sheet-poster {
-            width: 105px;
-            height: 155px;
-            border-radius: 14px;
+            width: 95px;
+            height: 140px;
+            border-radius: 12px;
             object-fit: cover;
             border: 1px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
@@ -261,12 +371,12 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 6px;
+            gap: 5px;
             min-width: 0;
         }
 
         .sheet-title {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 800;
             color: #ffffff;
             line-height: 1.25;
@@ -295,7 +405,13 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             color: #fbbf24;
         }
 
-        .meta-pill-qual {
+        .meta-pill-type {
+            background: rgba(168, 85, 247, 0.2);
+            border-color: rgba(168, 85, 247, 0.4);
+            color: #c084fc;
+        }
+
+        .meta-pill-size {
             background: rgba(56, 189, 248, 0.15);
             border-color: rgba(56, 189, 248, 0.35);
             color: #38bdf8;
@@ -307,51 +423,101 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             color: #34d399;
         }
 
+        /* Quality Download Buttons Section */
+        .quality-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .quality-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .btn-qual-download {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            padding: 10px 12px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-qual-download:hover, .btn-qual-download:active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border-color: #38bdf8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4);
+        }
+
+        .btn-qual-download .q-name {
+            color: #38bdf8;
+            font-weight: 800;
+        }
+
+        .btn-qual-download:active .q-name {
+            color: #ffffff;
+        }
+
+        .btn-qual-download .q-size {
+            font-size: 10px;
+            color: #94a3b8;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
         /* Action Buttons */
         .sheet-actions {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .btn-stream {
+        .btn-bot-primary {
             width: 100%;
-            padding: 15px;
+            padding: 13px;
             border-radius: 16px;
             border: none;
             background: linear-gradient(135deg, #f43f5e 0%, #e11d48 50%, #be123c 100%);
             color: #ffffff;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 800;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             cursor: pointer;
-            box-shadow: 0 6px 20px rgba(225, 29, 72, 0.4), 0 0 25px rgba(244, 63, 94, 0.3);
+            box-shadow: 0 6px 20px rgba(225, 29, 72, 0.35), 0 0 25px rgba(244, 63, 94, 0.2);
             text-decoration: none;
             transition: transform 0.15s ease;
         }
 
-        .btn-stream:active {
+        .btn-bot-primary:active {
             transform: scale(0.97);
         }
 
-        .btn-bot {
-            width: 100%;
-            padding: 13px;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            background: rgba(30, 41, 59, 0.7);
-            color: #e2e8f0;
-            font-size: 14px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            cursor: pointer;
-            text-decoration: none;
+        .delivery-note {
+            text-align: center;
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -361,18 +527,29 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
     <canvas id="webglCanvas"></canvas>
     <div class="vignette-overlay"></div>
 
-    <!-- Top HUD Controls -->
+    <!-- Top HUD Controls with Real-time Search -->
     <div class="hud-header">
         <div class="brand-logo">
-            <span>🍿</span>
-            <span>AkMovieVerse 3D</span>
+            <span>🪐</span>
+            <span>MovieVerse 3D</span>
         </div>
-        <div class="hud-pills">
-            <button class="filter-btn active" onclick="applyCategoryFilter('all')">🪐 All</button>
-            <button class="filter-btn" onclick="applyCategoryFilter('movies')">🎬 Movies</button>
-            <button class="filter-btn" onclick="applyCategoryFilter('series')">📺 Series</button>
+        <div class="search-bar-wrap">
+            <span class="search-icon-left">🔍</span>
+            <input type="text" id="galaxySearchInput" class="search-input" placeholder="Search 3D Orbit..." value="__INITIAL_QUERY__" />
+            <div class="search-spinner" id="searchSpinner"></div>
+            <button class="search-clear-btn" id="clearSearchBtn" onclick="clearSearch()">✕</button>
         </div>
     </div>
+
+    <!-- Category Filter Pills -->
+    <div class="hud-pills">
+        <button class="filter-btn active" onclick="applyCategoryFilter('all')">🪐 All</button>
+        <button class="filter-btn" onclick="applyCategoryFilter('movies')">🎬 Movies</button>
+        <button class="filter-btn" onclick="applyCategoryFilter('series')">📺 Series</button>
+    </div>
+
+    <!-- Center Search Results Banner -->
+    <div class="search-banner" id="searchBanner"></div>
 
     <!-- Swipe Guide -->
     <div class="swipe-hint" id="swipeHint">
@@ -383,7 +560,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="focused-title-bar" id="focusedTitleBar">
         <div class="focused-title" id="focusedTitleText">Loading Universe...</div>
         <div class="focused-sub" id="focusedSubText">
-            <span class="tap-prompt-badge">👆 Tap Card to Stream</span>
+            <span class="tap-prompt-badge">👆 Tap Card to Get Files in Bot</span>
         </div>
     </div>
 
@@ -397,18 +574,26 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                     <div class="sheet-title" id="sheetTitleText">Movie Title</div>
                     <div class="sheet-badges" id="sheetBadgesContainer">
                         <span class="meta-pill meta-pill-rating">⭐ 8.2 IMDb</span>
-                        <span class="meta-pill meta-pill-qual">1080p FHD</span>
-                        <span class="meta-pill meta-pill-audio">Multi Audio</span>
+                        <span class="meta-pill meta-pill-type">🎬 Movie</span>
                     </div>
                 </div>
             </div>
+
+            <!-- Quality Download Options -->
+            <div class="quality-section-title">
+                <span>⚡ Available File Qualities:</span>
+            </div>
+            <div class="quality-grid" id="sheetQualityGrid">
+                <!-- Dynamically generated quality buttons -->
+            </div>
+
             <div class="sheet-actions">
-                <a id="sheetStreamBtn" class="btn-stream" href="#" target="_blank">
-                    <span>▶️</span> <span>WATCH / STREAM NOW</span>
-                </a>
-                <a id="sheetBotBtn" class="btn-bot" href="#" target="_blank">
-                    <span>🤖</span> <span>Get File in Telegram Bot</span>
-                </a>
+                <button id="sheetBotBtn" class="btn-bot-primary">
+                    <span>🤖</span> <span>Get All Qualities / Episodes in Bot ↗️</span>
+                </button>
+                <div class="delivery-note">
+                    🔒 Files deliver directly into your Telegram bot chat
+                </div>
             </div>
         </div>
     </div>
@@ -461,7 +646,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                     const gain = actx.createGain();
                     osc.type = "triangle";
                     osc.frequency.value = freq;
-                    gain.gain.setValueAtTime(0.2, actx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.18, actx.currentTime + idx * 0.08);
                     gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + idx * 0.08 + 0.25);
                     osc.connect(gain);
                     gain.connect(actx.destination);
@@ -480,7 +665,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         // Dynamic Raw Media Data from Backend Catalog
-        const RAW_CATALOG = __CATALOG_JSON__;
+        let RAW_CATALOG = __CATALOG_JSON__;
 
         // Three.js 3D Engine Setup
         const canvas = document.getElementById("webglCanvas");
@@ -516,7 +701,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         const starField = new THREE.Points(starGeo, starMat);
         scene.add(starField);
 
-        // 2. Cosmic Nebula Center Core (AkMovieVerse Sun)
+        // 2. Cosmic Nebula Center Core (MovieVerse Sun)
         const coreGeo = new THREE.SphereGeometry(1.8, 32, 32);
         const coreMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e, wireframe: true, transparent: true, opacity: 0.65 });
         const cosmicCore = new THREE.Mesh(coreGeo, coreMat);
@@ -542,11 +727,11 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             cx.fillStyle = grad;
             cx.fillRect(0, 0, 400, 600);
             cx.fillStyle = "#f43f5e";
-            cx.font = "bold 34px sans-serif";
+            cx.font = "bold 32px sans-serif";
             cx.textAlign = "center";
-            cx.fillText("🍿 AkMovieVerse", 200, 260);
+            cx.fillText("🪐 MovieVerse", 200, 260);
             cx.fillStyle = "#ffffff";
-            cx.font = "bold 24px sans-serif";
+            cx.font = "bold 22px sans-serif";
             cx.fillText(titleText || "Movie", 200, 320);
             return new THREE.CanvasTexture(c);
         }
@@ -565,7 +750,12 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 return true;
             });
 
-            const total = Math.min(filtered.length, 24);
+            if (filtered.length === 0) {
+                document.getElementById("focusedTitleText").innerText = "No Files in Orbit";
+                return;
+            }
+
+            const total = Math.min(filtered.length, 28);
             const radius = 13.5;
             const cardW = 3.2;
             const cardH = 4.8;
@@ -620,11 +810,11 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         let isDragging = false;
         let previousMouseX = 0;
         let rotationVelocity = 0;
-        let targetRotation = 0;
         let lastTickIndex = -1;
 
         // Touch & Mouse Event Handlers
         window.addEventListener("mousedown", (e) => {
+            if (e.target.closest(".hud-header") || e.target.closest(".hud-pills") || e.target.closest(".movie-sheet-card")) return;
             isDragging = true;
             previousMouseX = e.clientX;
             getAudioContext();
@@ -644,6 +834,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         // Touch Listeners for Mobile
         window.addEventListener("touchstart", (e) => {
+            if (e.target.closest(".hud-header") || e.target.closest(".hud-pills") || e.target.closest(".movie-sheet-card")) return;
             if (e.touches.length === 1) {
                 isDragging = true;
                 previousMouseX = e.touches[0].clientX;
@@ -686,10 +877,22 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
         window.addEventListener("click", (e) => {
             if (Math.abs(rotationVelocity) > 0.002) return;
-            // Ignore clicks if on header or sheet
-            if (e.target.closest(".hud-header") || e.target.closest(".movie-sheet-card")) return;
+            // Ignore clicks if on header, pills or sheet
+            if (e.target.closest(".hud-header") || e.target.closest(".hud-pills") || e.target.closest(".movie-sheet-card")) return;
             handleCardSelection(e.clientX, e.clientY);
         });
+
+        // Deliver File to Bot Function
+        function downloadQualityFile(botUrl) {
+            if (!botUrl) return;
+            playChime();
+            triggerHaptic("heavy");
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+                window.Telegram.WebApp.openTelegramLink(botUrl);
+            } else {
+                window.open(botUrl, '_blank');
+            }
+        }
 
         // Open Bottom Action Sheet
         function openMovieSheet(item) {
@@ -704,26 +907,60 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             
             const ratingPill = document.createElement("span");
             ratingPill.className = "meta-pill meta-pill-rating";
-            ratingPill.innerText = `⭐ ${item.rating || '8.0'} IMDb`;
+            ratingPill.innerText = `⭐ ${item.rating || '8.2'} IMDb`;
             badgesBox.appendChild(ratingPill);
 
-            if (item.qualities && item.qualities.length > 0) {
-                const qualPill = document.createElement("span");
-                qualPill.className = "meta-pill meta-pill-qual";
-                qualPill.innerText = item.qualities.slice(0, 2).join(" • ");
-                badgesBox.appendChild(qualPill);
+            const typePill = document.createElement("span");
+            typePill.className = "meta-pill meta-pill-type";
+            typePill.innerText = item.is_series ? "📺 Web Series" : "🎬 Movie";
+            badgesBox.appendChild(typePill);
+
+            if (item.total_size) {
+                const sizePill = document.createElement("span");
+                sizePill.className = "meta-pill meta-pill-size";
+                sizePill.innerText = `📦 ${item.total_size}`;
+                badgesBox.appendChild(sizePill);
             }
 
             if (item.languages && item.languages.length > 0) {
                 const audPill = document.createElement("span");
                 audPill.className = "meta-pill meta-pill-audio";
-                audPill.innerText = item.languages.includes("Multi Audio") ? "🌐 Multi Audio" : item.languages.slice(0, 2).join(" • ");
+                audPill.innerText = item.languages.includes("Multi Audio") ? "🌐 Multi Audio" : `🌐 ${item.languages.slice(0, 2).join(" • ")}`;
                 badgesBox.appendChild(audPill);
             }
 
-            // Stream & Bot URLs
-            document.getElementById("sheetStreamBtn").href = item.watch_url;
-            document.getElementById("sheetBotBtn").href = item.bot_url;
+            // Populate Quality Grid
+            const qualGrid = document.getElementById("sheetQualityGrid");
+            qualGrid.innerHTML = "";
+
+            const qualityFiles = item.quality_files || [];
+            if (qualityFiles.length > 0) {
+                qualityFiles.forEach(qf => {
+                    const btn = document.createElement("button");
+                    btn.className = "btn-qual-download";
+                    const qName = qf.quality || "HD";
+                    const is4k = qName.toLowerCase().includes("2160") || qName.toLowerCase().includes("4k");
+                    const icon = is4k ? "💎" : "📥";
+                    btn.innerHTML = `
+                        <span class="q-icon">${icon}</span>
+                        <span class="q-name">${qName}</span>
+                        <span class="q-size">${qf.size || ''}</span>
+                    `;
+                    btn.onclick = () => downloadQualityFile(qf.bot_url);
+                    qualGrid.appendChild(btn);
+                });
+            } else {
+                const notice = document.createElement("div");
+                notice.style.fontSize = "12px";
+                notice.style.color = "#94a3b8";
+                notice.style.padding = "6px 0";
+                notice.innerText = "All qualities available via bot command:";
+                qualGrid.appendChild(notice);
+            }
+
+            // Main Bot Deep Link Button
+            const botBtn = document.getElementById("sheetBotBtn");
+            botBtn.onclick = () => downloadQualityFile(item.bot_url);
 
             document.getElementById("movieSheet").classList.add("active");
             document.getElementById("focusedTitleBar").style.opacity = "0";
@@ -733,6 +970,63 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById("movieSheet").classList.remove("active");
             document.getElementById("focusedTitleBar").style.opacity = "1";
             triggerHaptic("light");
+        }
+
+        // Live Real-Time Search Handler
+        let searchTimeout = null;
+        const searchInput = document.getElementById("galaxySearchInput");
+        const clearBtn = document.getElementById("clearSearchBtn");
+        const searchSpinner = document.getElementById("searchSpinner");
+        const searchBanner = document.getElementById("searchBanner");
+
+        if (searchInput.value.trim()) {
+            clearBtn.style.display = "flex";
+            searchBanner.innerText = `✨ Exploring matches for "${searchInput.value.trim()}"`;
+            searchBanner.style.display = "block";
+        }
+
+        searchInput.addEventListener("input", (e) => {
+            const query = e.target.value.trim();
+            clearBtn.style.display = query ? "flex" : "none";
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                performLiveSearch(query);
+            }, 320);
+        });
+
+        function clearSearch() {
+            searchInput.value = "";
+            clearBtn.style.display = "none";
+            performLiveSearch("");
+        }
+
+        async function performLiveSearch(query) {
+            searchSpinner.style.display = "inline-block";
+            try {
+                const url = `/api/galaxy/search?q=${encodeURIComponent(query)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data && Array.isArray(data.results)) {
+                    RAW_CATALOG = data.results;
+                    buildOrbit(activeFilter);
+                    playChime();
+                    triggerHaptic("medium");
+
+                    if (query && data.results.length === 0) {
+                        searchBanner.innerText = `🌌 No cosmic files found for "${query}"`;
+                        searchBanner.style.display = "block";
+                    } else if (query) {
+                        searchBanner.innerText = `✨ Found ${data.results.length} files in 3D Orbit for "${query}"`;
+                        searchBanner.style.display = "block";
+                    } else {
+                        searchBanner.style.display = "none";
+                    }
+                }
+            } catch (err) {
+                console.error("Galaxy search error:", err);
+            } finally {
+                searchSpinner.style.display = "none";
+            }
         }
 
         // Category Filter Switcher
@@ -814,39 +1108,9 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def render_galaxy_movieverse(items: list, base_url: str, bot_username: str) -> str:
-    """Format and render the 3D Galaxy Movieverse page with dynamic MongoDB catalog."""
-    catalog_json = []
-
-    for item in items:
-        clean = item.get("clean_name", "")
-        title = item.get("title", clean)
-        is_series = bool(item.get("is_series", False))
-        slug = item.get("slug", "")
-        pid = item.get("primary_file_id", "0")
-
-        # Watch URL
-        if is_series:
-            watch_url = f"{base_url}/series/{slug}"
-        else:
-            watch_url = f"{base_url}/post/{slug}"
-
-        # Bot deep link
-        bot_url = f"https://t.me/{bot_username}?start=filter_{clean}"
-
-        catalog_json.append({
-            "title": title,
-            "clean_name": clean,
-            "is_series": is_series,
-            "poster_url": item.get("poster_url") or "",
-            "year": item.get("year"),
-            "rating": "8.0",
-            "qualities": item.get("sorted_qualities", []),
-            "languages": item.get("languages_list", []),
-            "watch_url": watch_url,
-            "bot_url": bot_url
-        })
-
+def render_galaxy_movieverse(items: list, base_url: str, bot_username: str, initial_query: str = "") -> str:
+    """Format and render the 3D MovieVerse Search page with dynamic MongoDB catalog."""
     html = GALAXY_HTML_TEMPLATE
-    html = html.replace("__CATALOG_JSON__", json.dumps(catalog_json))
+    html = html.replace("__CATALOG_JSON__", json.dumps(items))
+    html = html.replace("__INITIAL_QUERY__", html_escape(initial_query))
     return html

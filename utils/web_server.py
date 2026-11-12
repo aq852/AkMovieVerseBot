@@ -7398,27 +7398,127 @@ async def web_spin_roll_api(request: web.Request) -> web.Response:
     })
 
 
-async def galaxy_handler(request: web.Request) -> web.Response:
-    """Serve the 3D Galaxy Movieverse interactive WebGL space experience."""
-    base_url = get_stream_base_url(request)
+def format_galaxy_item(item: dict, bot_username: str, poster_url: str = "") -> dict:
+    """Format catalog item with quality download buttons and bot deep links for 3D MovieVerse."""
+    import urllib.parse
+    clean = item.get("clean_name", "")
+    title = item.get("title", clean)
+    is_series = bool(item.get("is_series", False))
+    total_sz = get_readable_size(int(item.get("total_size", 0))) if item.get("total_size") else ""
+
+    encoded_clean = urllib.parse.quote_plus(clean)
+    bot_url = f"https://t.me/{bot_username}?start=filter_{encoded_clean}"
+
+    # Build quality-specific download buttons
+    qual_files = []
+    seen_quals = set()
+    files_list = item.get("files", [])
+
+    for f in files_list:
+        meta = parse_media_metadata(f.get("file_name", ""))
+        q = meta.get("quality") or "HD"
+        if q not in seen_quals:
+            seen_quals.add(q)
+            f_uid = f.get("file_unique_id") or str(f.get("_id"))
+            f_sz = get_readable_size(int(f.get("file_size", 0)))
+            qual_files.append({
+                "quality": q,
+                "size": f_sz,
+                "bot_url": f"https://t.me/{bot_username}?start=file_{f_uid}"
+            })
+
+    q_rank = {"2160p": 5, "4k": 5, "1080p": 4, "720p": 3, "540p": 2, "480p": 1}
+    qual_files.sort(key=lambda x: q_rank.get(x["quality"].lower(), 0), reverse=True)
+
+    return {
+        "title": title,
+        "clean_name": clean,
+        "is_series": is_series,
+        "poster_url": poster_url or item.get("poster_url") or "",
+        "year": item.get("year"),
+        "rating": "8.2",
+        "total_size": total_sz,
+        "qualities": item.get("sorted_qualities", []),
+        "languages": item.get("languages_list", []),
+        "bot_url": bot_url,
+        "quality_files": qual_files
+    }
+
+
+async def search_galaxy_catalog(query: str = "", limit: int = 30) -> list:
+    """Search catalog items or MongoDB documents for 3D MovieVerse display."""
+    all_catalog = await get_grouped_catalog()
+    matching_items = []
+
+    if query:
+        q_clean = query.lower()
+        for item in all_catalog:
+            if q_clean in item.get("title", "").lower() or q_clean in item.get("clean_name", "").lower():
+                matching_items.append(item)
+
+        if len(matching_items) < 8:
+            tokens = [re.escape(t) for t in query.split() if len(t) >= 2]
+            if tokens:
+                mongo_filter = {"$and": [{"file_name": {"$regex": t, "$options": "i"}} for t in tokens]}
+                try:
+                    direct_docs = await mongo.files.find(mongo_filter).sort("_id", -1).limit(40).to_list(40)
+                    if direct_docs:
+                        existing_keys = {item["key"] for item in matching_items}
+                        extra_groups = _group_file_docs(direct_docs)
+                        for g in extra_groups:
+                            if g["key"] not in existing_keys:
+                                matching_items.append(g)
+                except Exception as e:
+                    logger.debug(f"Direct galaxy search error: {e}")
+    else:
+        matching_items = all_catalog[:limit]
+
+    return matching_items[:limit]
+
+
+async def galaxy_search_api(request: web.Request) -> web.Response:
+    """Live search API for MovieVerse 3D WebApp."""
+    q = request.query.get("q", "").strip()
     bot_username = Config.BOT_USERNAME or "bot"
 
-    catalog = await get_grouped_catalog()
-    enriched_items = []
-    from utils.helpers import get_cached_poster_url
+    matching_items = await search_galaxy_catalog(q, limit=28)
+    titles = [item.get("clean_name", "") for item in matching_items]
+    posters = await asyncio.gather(*[get_cached_poster_url(t) for t in titles], return_exceptions=True)
 
-    for item in catalog[:24]:
-        clean = item.get("clean_name", "")
-        poster = await get_cached_poster_url(clean)
-        item_copy = dict(item)
-        item_copy["poster_url"] = poster or "https://api.aniwallpaper.workers.dev/random"
-        enriched_items.append(item_copy)
+    results = []
+    for item, poster in zip(matching_items, posters):
+        p_url = poster if isinstance(poster, str) and poster else ""
+        results.append(format_galaxy_item(item, bot_username, p_url))
+
+    return web.json_response({
+        "status": "ok",
+        "query": q,
+        "count": len(results),
+        "results": results
+    })
+
+
+async def galaxy_handler(request: web.Request) -> web.Response:
+    """Serve the 3D MovieVerse interactive WebGL space experience with direct bot file delivery."""
+    base_url = get_stream_base_url(request)
+    bot_username = Config.BOT_USERNAME or "bot"
+    q = request.query.get("q", "").strip()
+
+    matching_items = await search_galaxy_catalog(q, limit=28)
+    titles = [item.get("clean_name", "") for item in matching_items]
+    posters = await asyncio.gather(*[get_cached_poster_url(t) for t in titles], return_exceptions=True)
+
+    enriched_items = []
+    for item, poster in zip(matching_items, posters):
+        p_url = poster if isinstance(poster, str) and poster else ""
+        enriched_items.append(format_galaxy_item(item, bot_username, p_url))
 
     from utils.galaxy_movieverse import render_galaxy_movieverse
     html = render_galaxy_movieverse(
         items=enriched_items,
         base_url=base_url,
-        bot_username=bot_username
+        bot_username=bot_username,
+        initial_query=q
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -7433,6 +7533,7 @@ async def run_web_server():
     # 3D Galaxy Movieverse Routes
     app.router.add_get("/galaxy", galaxy_handler)
     app.router.add_get("/galaxy/", galaxy_handler)
+    app.router.add_get("/api/galaxy/search", galaxy_search_api)
 
     # Flixify 3D Lucky Wheel Telegram Mini App Routes
     app.router.add_get("/spin", web_spin_handler)

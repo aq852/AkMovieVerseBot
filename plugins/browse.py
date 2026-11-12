@@ -60,7 +60,7 @@ async def browse_catalog_command(client: Client, message: Message):
 
     buttons = [
         [
-            InlineKeyboardButton("🪐 OPEN 3D GALAXY MOVIEVERSE 🚀", web_app=WebAppInfo(url=galaxy_url))
+            InlineKeyboardButton("🪐 OPEN MOVIEVERSE 3D 🚀", web_app=WebAppInfo(url=galaxy_url))
         ],
         [
             InlineKeyboardButton("🌐 Open Web Catalog ↗️", url=browse_url),
@@ -77,25 +77,31 @@ async def browse_catalog_command(client: Client, message: Message):
 
 @Client.on_message(filters.command(["galaxy", "3d", "movieverse"]))
 async def galaxy_movieverse_command(client: Client, message: Message):
-    """Deliver interactive Telegram Mini App card for the 3D Galaxy Movieverse."""
+    """Deliver interactive Telegram Mini App card for the 3D MovieVerse Search & File Delivery."""
     stream_base = get_effective_stream_base_url()
     channel_name, channel_url = await resolve_channel_display_and_url(client)
 
     if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
         stream_base = "https://akmovieverse.duckdns.org"
 
-    galaxy_url = f"{stream_base}/galaxy"
+    # Support optional search query in command: e.g. /movieverse jailer
+    args = message.text.split(None, 1)
+    q = args[1].strip() if len(args) > 1 else ""
+    import urllib.parse
+    g_param = f"?q={urllib.parse.quote_plus(q)}" if q else ""
+    galaxy_url = f"{stream_base}/galaxy{g_param}"
     escaped_ch_name = html.escape(channel_name)
 
+    q_label = f" for '<b>{html.escape(q)}</b>'" if q else ""
     text = (
-        "🪐 <b>FLIXIFY 3D GALAXY MOVIEVERSE</b> 🚀\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✨ <i>Step into the future of cinema browsing!</i>\n\n"
-        "🌌 <b>Features:</b>\n"
-        "• <b>3D Interactive Solar Orbit:</b> Swipe to rotate floating movie cards\n"
-        "• <b>1-Tap Streaming:</b> Tap any 3D card to watch directly in Telegram\n"
-        "• <b>Real TMDB Posters & Specs:</b> 4K HDR, Multi-Audio & IMDb ratings\n\n"
-        "👇 <i>Neeche diye gaye button par tap karke 3D Universe explore karein:</i>"
+        f"🪐 <b>MOVIEVERSE 3D SEARCH & EXPLORER</b> 🚀\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✨ <i>Step into the future of 3D search and file delivery{q_label}!</i>\n\n"
+        f"🌌 <b>Features:</b>\n"
+        f"• <b>3D Interactive Solar Orbit:</b> Swipe to rotate floating movie & series cards\n"
+        f"• <b>Live Cosmic Search:</b> Search any title & see cards rearrange in real-time\n"
+        f"• <b>Direct Quality Delivery:</b> 480p, 720p, 1080p, 4K files delivered straight to bot PM\n\n"
+        f"👇 <i>Neeche button par tap karke MovieVerse 3D launch karein:</i>"
     )
 
     try:
@@ -105,7 +111,7 @@ async def galaxy_movieverse_command(client: Client, message: Message):
 
     markup = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🪐 OPEN 3D GALAXY MOVIEVERSE 🚀", web_app=WebAppInfo(url=galaxy_url))
+            InlineKeyboardButton("🪐 OPEN MOVIEVERSE 3D 🚀", web_app=WebAppInfo(url=galaxy_url))
         ],
         [
             InlineKeyboardButton("🌐 Open in Web Browser ↗️", url=galaxy_url),

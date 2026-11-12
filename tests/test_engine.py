@@ -40,11 +40,13 @@ class TestAutoFilterEngine(unittest.TestCase):
             mode="single"
         )
         self.assertIsNotNone(single_markup)
-        # Check that Filter Results exists in first row
-        self.assertIn("Filter Results", single_markup.inline_keyboard[0][0].text)
-        # Check that Remove Ads and Send All exist in second row
-        self.assertIn("Remove ads", single_markup.inline_keyboard[1][0].text)
-        self.assertIn("SEND ALL", single_markup.inline_keyboard[1][1].text)
+        # Check that MovieVerse 3D exists in top row
+        self.assertIn("MovieVerse 3D", single_markup.inline_keyboard[0][0].text)
+        # Check that Filter Results exists in second row
+        self.assertIn("Filter Results", single_markup.inline_keyboard[1][0].text)
+        # Check that Remove Ads and Send All exist in third row
+        self.assertIn("Remove ads", single_markup.inline_keyboard[2][0].text)
+        self.assertIn("SEND ALL", single_markup.inline_keyboard[2][1].text)
         # Verify that number buttons are not present by default (clean UI)
         all_texts = [btn.text for row in single_markup.inline_keyboard for btn in row]
         self.assertNotIn("1️⃣", all_texts)
@@ -1754,9 +1756,10 @@ class TestAutoFilterEngine(unittest.TestCase):
         detected = get_stream_base_url(mock_req)
         self.assertEqual(detected, "https://akmovieverse.duckdns.org")
 
-        # 2. Verify user commands scope exclusions (browse, styles, group settings excluded)
+        # 2. Verify user commands scope inclusions and exclusions (styles, group settings excluded)
         user_cmd_names = [cmd.command for cmd in USER_COMMANDS]
-        self.assertNotIn("browse", user_cmd_names)
+        self.assertIn("browse", user_cmd_names)
+        self.assertIn("galaxy", user_cmd_names)
         self.assertNotIn("styles", user_cmd_names)
         self.assertNotIn("settings", user_cmd_names)
         self.assertIn("start", user_cmd_names)

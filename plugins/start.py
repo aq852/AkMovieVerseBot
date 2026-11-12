@@ -600,6 +600,40 @@ async def start_command_handler(client: Client, message: Message):
         await group_auto_filter_handler(client, message)
         return
 
+    # 6b. MovieVerse 3D Deep-link: /start galaxy_<query> or /start movieverse
+    elif args.startswith("galaxy_") or args in ("galaxy", "movieverse", "3d"):
+        import urllib.parse
+        raw_galaxy_q = urllib.parse.unquote_plus(args.split("galaxy_", 1)[1]).strip() if args.startswith("galaxy_") else ""
+        from utils.web_server import get_effective_stream_base_url
+        stream_base = get_effective_stream_base_url()
+        if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+            stream_base = "https://akmovieverse.duckdns.org"
+
+        g_param = f"?q={urllib.parse.quote_plus(raw_galaxy_q)}" if raw_galaxy_q else ""
+        galaxy_target_url = f"{stream_base}/galaxy{g_param}"
+
+        try:
+            from hydrogram.types import WebAppInfo
+        except ImportError:
+            from pyrogram.types import WebAppInfo
+
+        q_label = f" for '<b>{html.escape(raw_galaxy_q)}</b>'" if raw_galaxy_q else ""
+        g_text = (
+            f"🪐 <b>MOVIEVERSE 3D SEARCH</b> 🚀\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"✨ <i>Explore files in an interactive 3D WebGL orbit{q_label}!</i>\n\n"
+            f"• <b>3D Interactive Cards:</b> Swipe to spin solar orbit\n"
+            f"• <b>Instant Quality Selection:</b> 480p, 720p, 1080p, 4K\n"
+            f"• <b>Direct Bot Delivery:</b> 1-tap download straight to this chat\n\n"
+            f"👇 <i>Tap below to launch MovieVerse 3D:</i>"
+        )
+        g_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🪐 OPEN MOVIEVERSE 3D 🚀", web_app=WebAppInfo(url=galaxy_target_url))],
+            [InlineKeyboardButton("🌐 Open in Web Browser ↗️", url=galaxy_target_url)]
+        ])
+        await message.reply_text(g_text, reply_markup=g_markup, disable_web_page_preview=True)
+        return
+
     # 7. Time-based & Single-Use Secret Share Deep-link: /start share_<token>
     elif args.startswith("share_"):
         token = args.split("share_")[1]

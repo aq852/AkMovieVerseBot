@@ -6,9 +6,9 @@ import random
 import logging
 import humanize
 try:
-    from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 except ImportError:
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from config import Config
 
@@ -585,6 +585,21 @@ def build_filter_buttons(
     """Construct clean compact buttons with quick numbers, filter trigger, VIP, and pagination."""
     keyboard = []
     short_q = query[:20]
+
+    # Row 0: 🪐 MovieVerse 3D (Explore Results) 🚀
+    stream_base = getattr(Config, "STREAM_BASE_URL", None) or "https://akmovieverse.duckdns.org"
+    if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+        stream_base = "https://akmovieverse.duckdns.org"
+
+    import urllib.parse
+    galaxy_search_url = f"{stream_base}/galaxy?q={urllib.parse.quote_plus(query)}"
+
+    if is_pm:
+        btn_3d = InlineKeyboardButton("🪐 MovieVerse 3D (Explore Results) 🚀", web_app=WebAppInfo(url=galaxy_search_url))
+    else:
+        btn_3d = InlineKeyboardButton("🪐 MovieVerse 3D (Explore Results) 🚀", url=f"https://t.me/{bot_username}?start=galaxy_{urllib.parse.quote_plus(short_q)}")
+
+    keyboard.append([btn_3d])
 
     # Row 1: Single clean prominent Filter Button
     keyboard.append([
