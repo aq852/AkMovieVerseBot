@@ -236,6 +236,11 @@ async def save_file(media: dict) -> tuple[bool, str]:
         target_col, _ = await get_active_target_collection()
         try:
             await target_col.insert_one(file_doc)
+            try:
+                from utils.web_server import clear_catalog_cache
+                clear_catalog_cache()
+            except Exception:
+                pass
             return True, "saved"
         except Exception as e_insert:
             err_str = str(e_insert).lower()
@@ -430,6 +435,13 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
                     res["saved"] += 1
                 except Exception:
                     res["errors"] += 1
+
+    if res["saved"] > 0:
+        try:
+            from utils.web_server import clear_catalog_cache
+            clear_catalog_cache()
+        except Exception:
+            pass
 
     return res
 

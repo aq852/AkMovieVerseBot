@@ -205,6 +205,13 @@ async def auto_channel_listener(client: Client, message: Message):
     success, status = await save_file(media_info)
     if success:
         logger.info(f"Auto-indexed: {media_info['file_name']} from channel {message.chat.id}")
+        # Invalidate grouped catalog cache so newly uploaded files appear on web/3D catalog instantly!
+        try:
+            from utils.web_server import clear_catalog_cache
+            clear_catalog_cache()
+        except Exception:
+            pass
+
         # Automatically notify any users who requested this movie!
         try:
             from plugins.movie_requests import auto_notify_pending_requesters

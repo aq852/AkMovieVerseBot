@@ -294,7 +294,14 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertIn("<blockquote expandable>", caption)
         self.assertIn("Amazon Prime Video", caption)
 
-        buttons = build_post_buttons(sample_group)
+        # By default watch online is off (1 button: Get File)
+        buttons_default = build_post_buttons(sample_group)
+        self.assertIsNotNone(buttons_default)
+        self.assertEqual(len(buttons_default.inline_keyboard[0]), 1)
+        self.assertEqual(buttons_default.inline_keyboard[0][0].text, "🤖 Get File")
+
+        # When enable_watch=True, 2 buttons are returned: Watch Online + Get File
+        buttons = build_post_buttons(sample_group, enable_watch=True)
         self.assertIsNotNone(buttons)
         self.assertEqual(len(buttons.inline_keyboard), 1)
         self.assertEqual(len(buttons.inline_keyboard[0]), 2)
@@ -399,8 +406,8 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertIn("S1: 1-12", cap)
         self.assertIn("S8: 1-12", cap)
 
-        # Test Series buttons: Watch Online + Get File
-        buttons = build_post_buttons(series_group)
+        # Test Series buttons with watch online enabled
+        buttons = build_post_buttons(series_group, enable_watch=True)
         self.assertIsNotNone(buttons)
         self.assertEqual(buttons.inline_keyboard[0][0].text, "▶️ Watch Online")
         self.assertEqual(buttons.inline_keyboard[0][1].text, "🤖 Get File")
@@ -1167,7 +1174,7 @@ class TestAutoFilterEngine(unittest.TestCase):
             "primary_file_id": "f1"
         }
         markup_multi = build_post_buttons(group_multi)
-        get_file_btn_multi = markup_multi.inline_keyboard[0][1]
+        get_file_btn_multi = markup_multi.inline_keyboard[0][0]
         self.assertIn("start=filter_Inception", get_file_btn_multi.url)
 
         # Movie with only single quality -> must route directly to start=file_
@@ -1179,7 +1186,7 @@ class TestAutoFilterEngine(unittest.TestCase):
             "primary_file_id": "f1"
         }
         markup_single = build_post_buttons(group_single)
-        get_file_btn_single = markup_single.inline_keyboard[0][1]
+        get_file_btn_single = markup_single.inline_keyboard[0][0]
         self.assertIn("start=file_f1", get_file_btn_single.url)
 
     def test_user_requests_and_alerts_enhancements(self):

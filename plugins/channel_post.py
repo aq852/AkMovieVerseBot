@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Global runtime state & per-title debounce buffers
 _AUTO_POST_TIMERS = {}
+_AUTO_POST_TITLES = {}
 _AUTO_POST_PREFS = {"enabled": None, "channel_id": None}
 _TMDB_POST_CACHE = {}
 _POST_LOCKS: dict[str, asyncio.Lock] = {}
@@ -669,7 +670,7 @@ def build_post_buttons(group: dict, custom_btn: dict | None = None, enable_watch
     return InlineKeyboardMarkup(rows)
 
 
-async def build_aggregated_post_group(group_key: str) -> dict | None:
+async def build_aggregated_post_group(group_key: str, clean_hint: str = None) -> dict | None:
     """Build canonical aggregated media group for auto-posting or admin /post command.
     For series ('series:<norm_key>'): Aggregates ALL seasons, all episodes, qualities, and audios across the entire show.
     For movies ('movie:<norm_key>:<year>'): Aggregates all releases, qualities, parts, and audios.
@@ -678,8 +679,27 @@ async def build_aggregated_post_group(group_key: str) -> dict | None:
     raw_key = group_key.split(":", 1)[1] if ":" in group_key else group_key
     norm_key = raw_key.split(":")[0]
 
-    # Query all matching files across all connected clusters
-    query_filter = _build_search_filter(norm_key)
+    # If clean_hint is not passed, attempt to resolve proper title from grouped catalog
+    if not clean_hint:
+        try:
+            catalog = await get_grouped_catalog()
+            for it in catalog:
+                it_key = it.get("key", "")
+                it_clean_norm = re.sub(r"[^\w]", "", it.get("clean_name", "").lower())
+                if (
+                    it_key == group_key or
+                    it_key.startswith(f"{group_key}:") or
+                    (group_key.startswith(it_key) and len(it_key) > 5) or
+                    it_clean_norm == norm_key or
+                    (it.get("aliases") and group_key in it.get("aliases"))
+                ):
+                    clean_hint = it.get("clean_name")
+                    break
+        except Exception:
+            pass
+
+    search_str = clean_hint if clean_hint else norm_key
+    query_filter = _build_search_filter(search_str)
     all_matched = []
     for col in mongo.all_files_collections:
         if col is not None:
@@ -687,7 +707,23 @@ async def build_aggregated_post_group(group_key: str) -> dict | None:
                 docs = await col.find(query_filter).to_list(1500)
                 all_matched.extend(docs)
             except Exception as e:
-                logger.debug(f"Error querying files for {norm_key}: {e}")
+                logger.debug(f"Error querying files for {search_str}: {e}")
+
+    # Fallback if search with norm_key produced no files
+    if not all_matched and not clean_hint and norm_key:
+        try:
+            catalog = await get_grouped_catalog()
+            for it in catalog:
+                it_key = it.get("key", "")
+                it_clean_norm = re.sub(r"[^\w]", "", it.get("clean_name", "").lower())
+                if it_clean_norm == norm_key or it_key.startswith(f"series:{norm_key}") or it_key.startswith(f"movie:{norm_key}"):
+                    clean_hint = it.get("clean_name")
+                    if clean_hint:
+                        docs = await mongo.files.find(_build_search_filter(clean_hint)).to_list(1500)
+                        all_matched.extend(docs)
+                        break
+        except Exception:
+            pass
 
     if not all_matched:
         return None
@@ -713,9 +749,12 @@ async def build_aggregated_post_group(group_key: str) -> dict | None:
             continue
         # Robust name match: exact match, substring match, or year-stripped match
         norm_key_noyear = re.sub(r"(19|20)\d{2}$", "", norm_key)
-        matched_norm = (file_norm == norm_key or norm_key in file_norm)
+        matched_norm = (file_norm == norm_key or norm_key in file_norm or file_norm in norm_key)
         if not matched_norm and norm_key_noyear:
             matched_norm = (file_norm == norm_key_noyear or norm_key_noyear in file_norm)
+        if not matched_norm and clean_hint:
+            clean_norm = re.sub(r"[^\w]", "", clean_hint.lower())
+            matched_norm = (file_norm == clean_norm or clean_norm in file_norm or file_norm in clean_norm)
         if not matched_norm:
             continue
 
@@ -921,7 +960,7 @@ async def publish_or_upgrade_channel_post(
         return False, str(e), None
 
 
-async def _buffer_post_worker(client: Client, group_key: str, delay: int):
+async def _buffer_post_worker(client: Client, group_key: str, delay: int, clean_hint: str = None):
     """Wait for debounce window (2 mins) to let all parts/qualities finish uploading, then publish/upgrade."""
     try:
         await asyncio.sleep(delay)
@@ -931,11 +970,22 @@ async def _buffer_post_worker(client: Client, group_key: str, delay: int):
                 # A newer debounce timer was started for this title
                 return
 
-            target_group = await build_aggregated_post_group(group_key)
+            hint = clean_hint or _AUTO_POST_TITLES.get(group_key)
+            target_group = await build_aggregated_post_group(group_key, clean_hint=hint)
             if not target_group:
                 catalog = await get_grouped_catalog()
+                raw_key = group_key.split(":", 1)[1] if ":" in group_key else group_key
+                norm_key = raw_key.split(":")[0]
                 for it in catalog:
-                    if it.get("key") == group_key or group_key in it.get("aliases", []):
+                    it_key = it.get("key", "")
+                    it_clean_norm = re.sub(r"[^\w]", "", it.get("clean_name", "").lower())
+                    if (
+                        it_key == group_key or
+                        it_key.startswith(f"{group_key}:") or
+                        (group_key.startswith(it_key) and len(it_key) > 5) or
+                        it_clean_norm == norm_key or
+                        (it.get("aliases") and group_key in it.get("aliases"))
+                    ):
                         target_group = it
                         break
 
@@ -949,6 +999,7 @@ async def _buffer_post_worker(client: Client, group_key: str, delay: int):
     finally:
         if _AUTO_POST_TIMERS.get(group_key) is asyncio.current_task():
             _AUTO_POST_TIMERS.pop(group_key, None)
+            _AUTO_POST_TITLES.pop(group_key, None)
 
 
 async def queue_file_for_auto_post(client: Client, media_info: dict):
@@ -970,6 +1021,8 @@ async def queue_file_for_auto_post(client: Client, media_info: dict):
         yr_str = str(yr) if yr else ""
         group_key = f"movie:{norm_key}:{yr_str}"
 
+    _AUTO_POST_TITLES[group_key] = clean
+
     # If this title already has an active timer, cancel and refresh it (rolling debounce buffer)
     if group_key in _AUTO_POST_TIMERS:
         old_task = _AUTO_POST_TIMERS[group_key]
@@ -977,7 +1030,7 @@ async def queue_file_for_auto_post(client: Client, media_info: dict):
             old_task.cancel()
 
     delay = getattr(Config, "AUTO_POST_DELAY", 120)
-    task = asyncio.create_task(_buffer_post_worker(client, group_key, delay))
+    task = asyncio.create_task(_buffer_post_worker(client, group_key, delay, clean_hint=clean))
     _AUTO_POST_TIMERS[group_key] = task
     logger.info(f"Queued auto-post for '{clean}' ({group_key}) with {delay}s buffer.")
 
@@ -1056,9 +1109,9 @@ async def admin_post_command(client: Client, message: Message):
     norm_q = re.sub(r"[^\w]", "", query.lower())
 
     # 1. Try unified master group first (e.g. series:dexter or movie:xxx)
-    chosen_group = await build_aggregated_post_group(f"series:{norm_q}")
+    chosen_group = await build_aggregated_post_group(f"series:{norm_q}", clean_hint=query)
     if not chosen_group:
-        chosen_group = await build_aggregated_post_group(f"movie:{norm_q}:")
+        chosen_group = await build_aggregated_post_group(f"movie:{norm_q}:", clean_hint=query)
 
     # 2. Fallback to catalog search
     if not chosen_group:
