@@ -2498,6 +2498,107 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_strict_indexing_channel_guards_and_source_isolation(self):
+        """Verify that save_file strictly blocks files from GIFT, LOG, DUMP channels or unauthorized sources."""
+        import asyncio
+        from unittest.mock import patch, MagicMock, AsyncMock
+        from database.files import save_file, save_files_bulk
+        from config import Config
+
+        async def _test():
+            class MockCursor:
+                def __aiter__(self):
+                    return self
+                async def __anext__(self):
+                    raise StopAsyncIteration
+
+            mock_mongo = MagicMock()
+            mock_mongo.has_secondary = False
+            mock_mongo.files.find_one = AsyncMock(return_value=None)
+            mock_mongo.files.find.return_value = MockCursor()
+
+            mock_target_col = MagicMock()
+            mock_target_col.insert_one = AsyncMock(return_value=None)
+            mock_target_col.bulk_write = AsyncMock(return_value=MagicMock(inserted_count=1))
+
+            with patch("config.Config.LOG_CHANNEL", -1001111), \
+                 patch("config.Config.UPDATES_CHANNEL", -1002222), \
+                 patch("config.Config.GIFT_CHANNEL", -1003333), \
+                 patch("config.Config.DUMP_CHANNEL", -1004444), \
+                 patch("database.channels.is_storage_channel", AsyncMock(side_effect=lambda cid: cid == -1005555)), \
+                 patch("database.files.mongo", mock_mongo), \
+                 patch("database.files.get_active_target_collection", AsyncMock(return_value=(mock_target_col, "primary"))):
+
+                # 1. Blocked from GIFT_CHANNEL
+                ok, reason = await save_file({
+                    "file_unique_id": "test_gift_1",
+                    "file_name": "GiftMovie.mp4",
+                    "channel_id": -1003333,
+                    "source": "auto_index"
+                })
+                self.assertFalse(ok)
+                self.assertEqual(reason, "blocked_excluded_channel")
+
+                # 2. Blocked from DUMP_CHANNEL
+                ok, reason = await save_file({
+                    "file_unique_id": "test_dump_1",
+                    "file_name": "DumpMovie.mp4",
+                    "channel_id": -1004444,
+                    "source": "auto_index"
+                })
+                self.assertFalse(ok)
+                self.assertEqual(reason, "blocked_excluded_channel")
+
+                # 3. Blocked from unauthorized source (e.g. user_forward, download, pm)
+                ok, reason = await save_file({
+                    "file_unique_id": "test_pm_1",
+                    "file_name": "PmMovie.mp4",
+                    "channel_id": -1005555,
+                    "source": "user_forward"
+                })
+                self.assertFalse(ok)
+                self.assertEqual(reason, "blocked_unauthorized_source")
+
+                # 4. Blocked from non-storage channel in auto_index
+                ok, reason = await save_file({
+                    "file_unique_id": "test_rand_1",
+                    "file_name": "RandomChannel.mp4",
+                    "channel_id": -1009999,
+                    "source": "auto_index"
+                })
+                self.assertFalse(ok)
+                self.assertEqual(reason, "blocked_not_storage_channel")
+
+                # 5. Allowed from authorized storage channel in auto_index
+                ok, reason = await save_file({
+                    "file_unique_id": "test_storage_ok",
+                    "file_name": "LegitMovie.mp4",
+                    "channel_id": -1005555,
+                    "source": "auto_index"
+                })
+                self.assertTrue(ok)
+                self.assertEqual(reason, "saved")
+
+                # 6. Allowed from crawler in bulk_index
+                ok, reason = await save_file({
+                    "file_unique_id": "test_bulk_ok",
+                    "file_name": "BulkMovie.mp4",
+                    "channel_id": -1007777,
+                    "source": "bulk_index"
+                })
+                self.assertTrue(ok)
+                self.assertEqual(reason, "saved")
+
+                # 7. Bulk save filters excluded channels
+                bulk_input = [
+                    {"file_unique_id": "b1", "file_name": "Good.mp4", "channel_id": -1005555},
+                    {"file_unique_id": "b2", "file_name": "BadGift.mp4", "channel_id": -1003333},
+                ]
+                res = await save_files_bulk(bulk_input)
+                self.assertEqual(res["errors"], 1)
+
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()

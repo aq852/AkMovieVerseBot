@@ -166,14 +166,41 @@ async def get_active_target_collection() -> tuple:
 
 
 async def save_file(media: dict) -> tuple[bool, str]:
-    """Save media metadata to MongoDB, preventing duplicate entries across all connected clusters."""
+    """Save media metadata to MongoDB, preventing duplicate entries across all connected clusters.
+    STRICT INTEGRITY: Only files from authorized storage channels (auto_index) or manual channel crawl (bulk_index) are permitted.
+    """
     try:
-        file_unique_id = media.get("file_unique_id")
+        file_unique_id = media.get("file_unique_id") if isinstance(media, dict) else getattr(media, "file_unique_id", None)
         if not file_unique_id:
             return False, "Missing file_unique_id"
 
-        file_size = media.get("file_size", 0)
-        file_name = media.get("file_name", "Untitled")
+        file_size = media.get("file_size", 0) if isinstance(media, dict) else getattr(media, "file_size", 0)
+        file_name = (media.get("file_name") if isinstance(media, dict) else getattr(media, "file_name", None)) or "Untitled"
+
+        # STRICT STORAGE CHANNEL & SOURCE INTEGRITY GUARD:
+        # Only files from authorized storage CHANNELS (auto_index) or manual index crawls (bulk_index) are permitted!
+        # NEVER from gift channels, user PMs, forwarded bot messages, or downloads!
+        channel_id = media.get("channel_id") if isinstance(media, dict) else getattr(getattr(media, "chat", None), "id", None)
+        source = media.get("source") if isinstance(media, dict) else getattr(media, "source", None)
+
+        from config import Config
+        gift_ch = getattr(Config, "GIFT_CHANNEL", 0) or 0
+        dump_ch = getattr(Config, "DUMP_CHANNEL", 0) or 0
+        excluded_channels = {ch for ch in [Config.LOG_CHANNEL, Config.UPDATES_CHANNEL, dump_ch, gift_ch] if ch}
+
+        if channel_id and channel_id in excluded_channels:
+            logger.warning(f"BLOCKED save_file: Channel {channel_id} is in excluded channels list (Log/Updates/Dump/Gift). File '{file_name}' rejected.")
+            return False, "blocked_excluded_channel"
+
+        if source not in ("auto_index", "bulk_index"):
+            logger.warning(f"BLOCKED save_file: Invalid source '{source}' for file '{file_name}'. Only auto_index and bulk_index are permitted.")
+            return False, "blocked_unauthorized_source"
+
+        if source == "auto_index":
+            from database.channels import is_storage_channel
+            if not channel_id or not await is_storage_channel(channel_id):
+                logger.warning(f"BLOCKED save_file: Channel {channel_id} is not an authorized storage channel. File '{file_name}' rejected.")
+                return False, "blocked_not_storage_channel"
 
         # 100% Exact Duplicate Check across Primary and Secondary DBs
         dup_query = [{"file_unique_id": file_unique_id}]
@@ -242,9 +269,20 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
     batch_uids = []
     batch_names = []
 
+    from config import Config
+    gift_ch = getattr(Config, "GIFT_CHANNEL", 0) or 0
+    dump_ch = getattr(Config, "DUMP_CHANNEL", 0) or 0
+    excluded_channels = {ch for ch in [Config.LOG_CHANNEL, Config.UPDATES_CHANNEL, dump_ch, gift_ch] if ch}
+
     for m in media_list:
         uid = m.get("file_unique_id")
         if not uid:
+            res["errors"] += 1
+            continue
+
+        ch_id = m.get("channel_id")
+        if ch_id and ch_id in excluded_channels:
+            logger.warning(f"BLOCKED save_files_bulk: Channel {ch_id} is in excluded channels list.")
             res["errors"] += 1
             continue
 
@@ -590,6 +628,17 @@ async def get_search_results(query: str, offset: int = 0, limit: int = 10, quali
     """
     try:
         filter_dict = _build_search_filter(query, quality, language, season)
+
+        # STRICT INTEGRITY FILTER: Never return files from excluded/system channels in search results
+        from config import Config
+        gift_ch = getattr(Config, "GIFT_CHANNEL", 0) or 0
+        dump_ch = getattr(Config, "DUMP_CHANNEL", 0) or 0
+        excluded_channels = [ch for ch in [Config.LOG_CHANNEL, Config.UPDATES_CHANNEL, dump_ch, gift_ch] if ch]
+        if excluded_channels:
+            if filter_dict:
+                filter_dict = {"$and": [filter_dict, {"channel_id": {"$nin": excluded_channels}}]}
+            else:
+                filter_dict = {"channel_id": {"$nin": excluded_channels}}
         if not mongo.has_secondary:
             cursor = mongo.files.find(filter_dict).sort([("_id", -1)]).skip(offset).limit(limit)
             results = await cursor.to_list(length=limit)
@@ -675,6 +724,16 @@ async def count_files(query: str, quality: str = None, language: str = None, sea
     """Count total files matching the query and sub-filters across all clusters for pagination."""
     try:
         filter_dict = _build_search_filter(query, quality, language, season)
+        from config import Config
+        gift_ch = getattr(Config, "GIFT_CHANNEL", 0) or 0
+        dump_ch = getattr(Config, "DUMP_CHANNEL", 0) or 0
+        excluded_channels = [ch for ch in [Config.LOG_CHANNEL, Config.UPDATES_CHANNEL, dump_ch, gift_ch] if ch]
+        if excluded_channels:
+            if filter_dict:
+                filter_dict = {"$and": [filter_dict, {"channel_id": {"$nin": excluded_channels}}]}
+            else:
+                filter_dict = {"channel_id": {"$nin": excluded_channels}}
+
         if not mongo.has_secondary:
             return await mongo.files.count_documents(filter_dict)
 

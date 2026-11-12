@@ -4491,19 +4491,9 @@ async def watch_handler(request: web.Request):
                 if movie_prints:
                     break
 
-        # Fallback to direct Mongo query by clean title tokens if catalog only has 1 or none
-        if len(movie_prints) <= 1:
-            clean_name_raw = meta.get("clean_name") or clean_title
-            tokens = [t for t in re.findall(r"[\w']+", clean_name_raw) if len(t) >= 3 and not t.isdigit()]
-            if tokens:
-                q_filter = {"$and": [{"file_name": {"$regex": re.escape(t), "$options": "i"}} for t in tokens[:2]]}
-                found_docs = await mongo.files.find(q_filter).to_list(100)
-                candidate_docs = [
-                    d for d in found_docs
-                    if not parse_media_metadata(d.get("file_name", "")).get("is_series")
-                ]
-                if len(candidate_docs) > len(movie_prints):
-                    movie_prints = candidate_docs
+        # Fallback to single file_doc if item has no prints list
+        if not movie_prints and file_doc:
+            movie_prints = [file_doc]
 
         # 1. Detect Multi-Part Movie (Part 1, Part 2, etc.)
         parts_map = {}
@@ -5088,27 +5078,24 @@ async def get_grouped_catalog() -> list:
     if mode == "cleared":
         return []
 
+    # Base requirement: File must not be explicitly disabled for web stream
+    stream_active_filter = {"is_web_stream": {"$ne": False}}
+
     or_conditions = []
 
-    # 1. Any file explicitly approved for web stream is ALWAYS included (even if older than cutoff)
-    or_conditions.append({"is_web_stream": True})
-
-    # 2. Whitelisted stream channels are ALWAYS included
+    # 1. Whitelisted stream channels are ALWAYS included
     if channels:
         or_conditions.append({"channel_id": {"$in": channels}})
 
-    # 3. Dynamic filter modes
+    # 2. Dynamic filter modes
     if mode == "auto":
+        cond = {"source": {"$ne": "bulk_index"}}
         if cutoff_id:
             try:
-                or_conditions.append({
-                    "_id": {"$gte": ObjectId(cutoff_id)},
-                    "source": {"$ne": "bulk_index"}
-                })
+                cond["_id"] = {"$gte": ObjectId(cutoff_id)}
             except Exception:
-                or_conditions.append({"source": "auto_index"})
-        else:
-            or_conditions.append({"source": "auto_index"})
+                pass
+        or_conditions.append(cond)
     elif mode == "all":
         if cutoff_id:
             try:
@@ -5119,7 +5106,10 @@ async def get_grouped_catalog() -> list:
             # All mode with no cutoff means entire database
             or_conditions = []
 
-    base_query = {"$or": or_conditions} if or_conditions else {}
+    if or_conditions:
+        base_query = {"$and": [stream_active_filter, {"$or": or_conditions}]}
+    else:
+        base_query = stream_active_filter
 
     try:
         anime_regex = (

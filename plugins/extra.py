@@ -809,9 +809,6 @@ async def share_file_command(client: Client, message: Message):
     file_unique_id = media.file_unique_id
     file_name = getattr(media, "file_name", "Shared File")
 
-    # Ensure file is saved in DB
-    from database.files import save_file
-    await save_file(media)
 
     # Parse duration and max uses
     from database.share_links import parse_duration, create_share_link

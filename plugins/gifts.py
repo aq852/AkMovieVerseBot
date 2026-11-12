@@ -2203,8 +2203,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                     from database.gifts import DEFAULT_GIFT_POSTER
                     poster_photo = DEFAULT_GIFT_POSTER
 
-    # Step 3: Index file in MongoDB
-    from database.files import save_file
+    # Step 3: Package file metadata for Gift Reward Engine (strictly isolated from search index)
     file_doc = {
         "file_id": file_id,
         "file_unique_id": file_unique_id,
@@ -2216,10 +2215,6 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         "channel_id": message.chat.id,
         "message_id": message.id
     }
-    try:
-        await save_file(file_doc)
-    except Exception as e_save:
-        logger.debug(f"Auto-gift save_file note: {e_save}")
 
     # Step 4: Create Gift in Database
     gift_doc = await create_gift(
