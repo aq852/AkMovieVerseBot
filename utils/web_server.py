@@ -7306,12 +7306,119 @@ async def stremio_stream_handler(request: web.Request):
     )
 
 
+async def web_spin_handler(request: web.Request) -> web.Response:
+    """Serve the Flixify 3D Lucky Wheel Telegram Mini App (WebApp)."""
+    uid_str = request.query.get("uid", "").strip()
+    token = request.query.get("tok", "").strip()
+
+    try:
+        user_id = int(uid_str)
+    except (ValueError, TypeError):
+        return web.Response(
+            text="<h3>⛔ Access Denied</h3><p>Missing or invalid user ID. Open /spin in your bot chat.</p>",
+            content_type="text/html",
+            status=403
+        )
+
+    from plugins.spin import verify_spin_token
+    if not verify_spin_token(user_id, token):
+        return web.Response(
+            text="<h3>⛔ Session Invalid or Expired</h3><p>Please open /spin in your bot chat to generate a fresh session link.</p>",
+            content_type="text/html",
+            status=403
+        )
+
+    from database.loyalty import can_spin_today, record_daily_activity
+    from utils.spin_webapp import render_spin_webapp
+
+    # Advance daily activity streak
+    profile = await record_daily_activity(user_id)
+    allowed, spin_type, ref_spins, cooldown_secs = await can_spin_today(user_id)
+
+    # Fetch user's first name from bot client cache if available
+    user_name = "Player"
+    client = getattr(Config, "MASTER_CLIENT", None)
+    if client:
+        try:
+            tg_user = await client.get_users(user_id)
+            if tg_user and getattr(tg_user, "first_name", None):
+                user_name = tg_user.first_name
+        except Exception:
+            pass
+
+    html = render_spin_webapp(
+        user_id=user_id,
+        token=token,
+        user_name=user_name,
+        profile=profile,
+        allowed=allowed,
+        cooldown_secs=cooldown_secs
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def web_spin_roll_api(request: web.Request) -> web.Response:
+    """Backend API to resolve an authorized wheel spin under server-side probability gate."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "Invalid JSON body"}, status=400)
+
+    try:
+        user_id = int(body.get("uid", 0))
+    except (ValueError, TypeError):
+        return web.json_response({"success": False, "error": "Invalid user ID"}, status=400)
+
+    token = str(body.get("tok", "")).strip()
+
+    from plugins.spin import verify_spin_token, execute_spin_roll
+    if not verify_spin_token(user_id, token):
+        return web.json_response({"success": False, "error": "Invalid or expired session token"}, status=403)
+
+    user_name = "Player"
+    client = getattr(Config, "MASTER_CLIENT", None)
+    if client:
+        try:
+            tg_user = await client.get_users(user_id)
+            if tg_user and getattr(tg_user, "first_name", None):
+                user_name = tg_user.first_name
+        except Exception:
+            pass
+
+    success, msg, details = await execute_spin_roll(client, user_id, user_name)
+    if not success:
+        return web.json_response({
+            "success": False,
+            "error": "Cooldown active or spin already consumed",
+            "reason": msg,
+            "details": details
+        })
+
+    return web.json_response({
+        "success": True,
+        "target_segment": details.get("target_segment", 0),
+        "prize_type": details.get("prize_type", "coins"),
+        "prize_val": details.get("prize_val", 5),
+        "item_title": details.get("item_title", "Reward"),
+        "new_balance": details.get("new_balance", 0),
+        "streak": details.get("streak", 1),
+        "rank": details.get("rank", "🌟 Newbie"),
+        "result_text": msg
+    })
+
+
 async def run_web_server():
     """Start background aiohttp server with health check, verification, and streaming routes."""
     app = web.Application()
     app.router.add_get("/", health_handler)
     app.router.add_get("/health", health_handler)
     app.router.add_get("/verify/{token}", verify_redirect_handler)
+
+    # Flixify 3D Lucky Wheel Telegram Mini App Routes
+    app.router.add_get("/spin", web_spin_handler)
+    app.router.add_get("/spin/", web_spin_handler)
+    app.router.add_post("/api/spin/roll", web_spin_roll_api)
+    app.router.add_route("OPTIONS", "/api/spin/roll", options_handler)
 
     # Fast Streaming & Web Player Routes
     app.router.add_get("/stream/{file_unique_id}", stream_handler)

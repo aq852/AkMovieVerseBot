@@ -258,6 +258,73 @@ class TestMediaMetadataAndCatalogGrouping(unittest.TestCase):
         self.assertEqual(len(vq_groups), 1)
         self.assertTrue(vq_groups[0]["is_series"])
 
+    def test_spin_token_generation_and_verification(self):
+        """Test secure HMAC token generation and tamper verification for WebApp wheel."""
+        from plugins.spin import generate_spin_token, verify_spin_token
+
+        user_id = 99887766
+        token = generate_spin_token(user_id)
+        self.assertIsInstance(token, str)
+        self.assertEqual(len(token), 16)
+
+        # Valid token must verify
+        self.assertTrue(verify_spin_token(user_id, token))
+
+        # Tampered user_id or token must fail
+        self.assertFalse(verify_spin_token(user_id + 1, token))
+        self.assertFalse(verify_spin_token(user_id, token + "x"))
+        self.assertFalse(verify_spin_token(user_id, "invalid_token"))
+
+    def test_render_spin_webapp(self):
+        """Test rendering of HTML5 Mini App with user stats and state."""
+        from utils.spin_webapp import render_spin_webapp
+
+        profile = {
+            "coins": 45,
+            "current_streak": 7,
+            "lifetime_rank": "🥈 Silver Cinephile"
+        }
+        html = render_spin_webapp(
+            user_id=123456,
+            token="testtoken123",
+            user_name="Amit",
+            profile=profile,
+            allowed=True,
+            cooldown_secs=0
+        )
+        self.assertIn("123456", html)
+        self.assertIn("testtoken123", html)
+        self.assertIn("Amit", html)
+        self.assertIn("45", html)
+        self.assertIn("Silver Cinephile", html)
+        self.assertIn("TAP TO SPIN", html)
+        self.assertNotIn("__USER_ID__", html)
+        self.assertNotIn("__TOKEN__", html)
+
+    def test_execute_spin_roll_integration(self):
+        """Test server-side execute_spin_roll reward granting and segment mapping."""
+        from plugins.spin import execute_spin_roll
+        from unittest.mock import patch, MagicMock
+
+        mock_profile = {
+            "user_id": 112233,
+            "coins": 10,
+            "current_streak": 3,
+            "longest_streak": 3,
+            "lifetime_rank": "🌟 Newbie"
+        }
+
+        with patch("plugins.spin.can_spin_today", AsyncMock(return_value=(True, "free", 0, 0))), \
+             patch("plugins.spin.consume_spin", AsyncMock(return_value=True)), \
+             patch("plugins.spin.get_loyalty_profile", AsyncMock(return_value=mock_profile)), \
+             patch("plugins.spin.add_coins", AsyncMock(return_value=15)):
+
+            success, msg, details = asyncio.run(execute_spin_roll(None, 112233, "Tester"))
+            self.assertTrue(success)
+            self.assertIn(details["target_segment"], [0, 2, 4, 5, 7])  # Coins segments
+            self.assertEqual(details["prize_type"], "coins")
+            self.assertGreater(details["new_balance"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
