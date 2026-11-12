@@ -232,6 +232,21 @@ async def init_indexes():
         await mongo.files.create_index([("file_name", "text")])
         await mongo.files.create_index("file_name")
         await mongo.files.create_index([("created_at", -1)])
+        await mongo.files.create_index("source")
+        await mongo.files.create_index("channel_id")
+        await mongo.files.create_index("is_web_stream")
+
+        if mongo.has_secondary:
+            try:
+                await mongo.files_secondary.create_index("file_unique_id", unique=True)
+                await mongo.files_secondary.create_index([("file_name", "text")])
+                await mongo.files_secondary.create_index("file_name")
+                await mongo.files_secondary.create_index([("created_at", -1)])
+                await mongo.files_secondary.create_index("source")
+                await mongo.files_secondary.create_index("channel_id")
+                await mongo.files_secondary.create_index("is_web_stream")
+            except Exception as e_sec_idx:
+                logger.debug(f"Secondary DB index note: {e_sec_idx}")
 
         # Users and Chats unique indexes
         await mongo.users.create_index("user_id", unique=True)

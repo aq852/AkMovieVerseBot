@@ -5078,18 +5078,18 @@ async def get_grouped_catalog() -> list:
     if mode == "cleared":
         return []
 
-    # Base requirement: File must not be explicitly disabled for web stream
-    stream_active_filter = {"is_web_stream": {"$ne": False}}
-
     or_conditions = []
 
-    # 1. Whitelisted stream channels are ALWAYS included
+    # 1. Any file explicitly approved for web stream is ALWAYS included
+    or_conditions.append({"is_web_stream": True})
+
+    # 2. Whitelisted stream channels are ALWAYS included
     if channels:
         or_conditions.append({"channel_id": {"$in": channels}})
 
-    # 2. Dynamic filter modes
+    # 3. Dynamic filter modes
     if mode == "auto":
-        cond = {"source": {"$ne": "bulk_index"}}
+        cond = {"source": "auto_index"}
         if cutoff_id:
             try:
                 cond["_id"] = {"$gte": ObjectId(cutoff_id)}
@@ -5106,10 +5106,7 @@ async def get_grouped_catalog() -> list:
             # All mode with no cutoff means entire database
             or_conditions = []
 
-    if or_conditions:
-        base_query = {"$and": [stream_active_filter, {"$or": or_conditions}]}
-    else:
-        base_query = stream_active_filter
+    base_query = {"$or": or_conditions} if or_conditions else {}
 
     try:
         anime_regex = (
