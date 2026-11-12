@@ -33,7 +33,7 @@ class TestMovieVerse3D(unittest.TestCase):
         # Must contain MovieVerse 3D branding
         self.assertIn("MovieVerse 3D", html)
         self.assertIn("galaxySearchInput", html)
-        self.assertIn("sheetQualityGrid", html)
+        self.assertIn("cinemaModal", html)
 
         # Must have initial query
         self.assertIn('value="Jailer"', html)
@@ -43,7 +43,7 @@ class TestMovieVerse3D(unittest.TestCase):
         self.assertNotIn("sheetStreamBtn", html)
 
         # Must have bot file delivery actions
-        self.assertIn("Get All Qualities / Episodes in Bot", html)
+        self.assertIn("Get All Files / Episodes in Bot", html)
         self.assertIn("downloadQualityFile", html)
 
     def test_format_galaxy_item(self):

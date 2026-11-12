@@ -7399,7 +7399,7 @@ async def web_spin_roll_api(request: web.Request) -> web.Response:
 
 
 def format_galaxy_item(item: dict, bot_username: str, poster_url: str = "") -> dict:
-    """Format catalog item with quality download buttons and bot deep links for 3D MovieVerse."""
+    """Format catalog item with complete episodes, qualities, and bot deep links for 3D MovieVerse."""
     import urllib.parse
     clean = item.get("clean_name", "")
     title = item.get("title", clean)
@@ -7409,7 +7409,7 @@ def format_galaxy_item(item: dict, bot_username: str, poster_url: str = "") -> d
     encoded_clean = urllib.parse.quote_plus(clean)
     bot_url = f"https://t.me/{bot_username}?start=filter_{encoded_clean}"
 
-    # Build quality-specific download buttons
+    # Build quality-specific download buttons for quick summary
     qual_files = []
     seen_quals = set()
     files_list = item.get("files", [])
@@ -7430,18 +7430,79 @@ def format_galaxy_item(item: dict, bot_username: str, poster_url: str = "") -> d
     q_rank = {"2160p": 5, "4k": 5, "1080p": 4, "720p": 3, "540p": 2, "480p": 1}
     qual_files.sort(key=lambda x: q_rank.get(x["quality"].lower(), 0), reverse=True)
 
+    # Detailed Movie Files
+    movie_files = []
+    if not is_series:
+        for f in files_list:
+            f_uid = f.get("file_unique_id") or str(f.get("_id"))
+            f_meta = parse_media_metadata(f.get("file_name", ""))
+            f_qual = f_meta.get("quality") or "HD"
+            f_sz = get_readable_size(int(f.get("file_size", 0)))
+            part_lbl = f_meta.get("part_label") or ""
+            movie_files.append({
+                "quality": f_qual,
+                "part_label": part_lbl,
+                "size": f_sz,
+                "file_name": f.get("file_name", "Movie Print"),
+                "bot_url": f"https://t.me/{bot_username}?start=file_{f_uid}"
+            })
+        movie_files.sort(key=lambda x: q_rank.get(x["quality"].lower(), 0), reverse=True)
+
+    # Detailed Episodes & Packs for Series
+    episodes = []
+    packs = []
+    if is_series:
+        if item.get("episodes_map"):
+            for ep_num in sorted(item["episodes_map"].keys()):
+                for ef in item["episodes_map"][ep_num]:
+                    ef_uid = ef.get("file_unique_id") or str(ef.get("_id"))
+                    ef_meta = parse_media_metadata(ef.get("file_name", ""))
+                    ef_qual = ef_meta.get("quality") or "HD"
+                    ef_sz = get_readable_size(int(ef.get("file_size", 0)))
+                    episodes.append({
+                        "episode": ep_num,
+                        "quality": ef_qual,
+                        "size": ef_sz,
+                        "file_name": ef.get("file_name", f"Episode {ep_num}"),
+                        "bot_url": f"https://t.me/{bot_username}?start=file_{ef_uid}"
+                    })
+
+        if item.get("combined_files"):
+            for pf in item["combined_files"]:
+                pf_uid = pf.get("file_unique_id") or str(pf.get("_id"))
+                pf_meta = parse_media_metadata(pf.get("file_name", ""))
+                pf_qual = pf_meta.get("quality") or "HD"
+                pf_sz = get_readable_size(int(pf.get("file_size", 0)))
+                packs.append({
+                    "title": f"Season {item.get('season', 1)} Complete Pack",
+                    "quality": pf_qual,
+                    "size": pf_sz,
+                    "file_name": pf.get("file_name", "Season Pack"),
+                    "bot_url": f"https://t.me/{bot_username}?start=file_{pf_uid}"
+                })
+
+    p_url = poster_url or item.get("poster_url") or ""
+    storyline = f"Get verified high-definition releases of {title} with multi-audio and instant Telegram bot delivery."
+    if is_series:
+        storyline = f"Explore complete season episodes and packs of {title} in crystal clear HD audio and video prints."
+
     return {
         "title": title,
         "clean_name": clean,
         "is_series": is_series,
-        "poster_url": poster_url or item.get("poster_url") or "",
+        "poster_url": p_url,
+        "backdrop_url": p_url,
         "year": item.get("year"),
         "rating": "8.2",
+        "storyline": storyline,
         "total_size": total_sz,
         "qualities": item.get("sorted_qualities", []),
         "languages": item.get("languages_list", []),
         "bot_url": bot_url,
-        "quality_files": qual_files
+        "quality_files": qual_files,
+        "movie_files": movie_files,
+        "episodes": episodes,
+        "packs": packs
     }
 
 
