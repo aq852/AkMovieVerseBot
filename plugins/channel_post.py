@@ -322,14 +322,14 @@ async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool
 
 
 async def get_autopost_style() -> int:
-    """Retrieve active auto-post style: 1 = Cinematic Widescreen, 2 = Minimalist Single-Poster, 3 = Compact Text."""
+    """Retrieve active auto-post style: 1 = Cinematic Widescreen, 2 = Minimalist Single-Poster, 3 = Compact Text, 4 = Ultra-Clean Compact (Format 1)."""
     try:
         doc = await mongo.db["bot_settings"].find_one({"key": "autopost_style"})
         if doc and "style" in doc:
             return int(doc["style"])
     except Exception:
         pass
-    return 1
+    return 4
 
 
 async def set_autopost_style(style_id: int):
@@ -501,7 +501,18 @@ def format_post_caption(group: dict, tmdb_data: dict, style: int = 1) -> str:
 
     bot_username = Config.BOT_USERNAME or "bot"
 
-    if style == 2:
+    if style == 4:
+        # Style 4: Ultra-Clean Compact 4-Line (Format 1 - No Fluff, No Blockquotes)
+        caption = (
+            f"🎬 <b>{html.escape(full_title)}</b>\n"
+            f"⭐ <b>{rating_str}</b> • {html.escape(genres_str)}\n"
+            f"🌐 <b>Audio:</b> {html.escape(audio_str)}\n"
+            f"💿 <b>Quality:</b> {html.escape(quality_str)}"
+        )
+        if is_series:
+            caption += f"\n{episodes_section}"
+
+    elif style == 2:
         # Style 2: Minimalist Single-Poster
         caption = (
             f"🎬 <b>Title :</b> {html.escape(full_title)}\n"
@@ -759,7 +770,7 @@ async def publish_or_upgrade_channel_post(
     # Use explicit custom_photo if chosen in admin preview, else default backdrop or poster
     if custom_photo:
         photo_url = custom_photo
-    elif active_style == 2 or prefer_poster:
+    elif active_style in (2, 4) or prefer_poster:
         photo_url = tmdb_meta.get("poster_url") or tmdb_meta.get("backdrop_url")
     else:
         photo_url = tmdb_meta.get("backdrop_url") or tmdb_meta.get("poster_url")
@@ -1316,19 +1327,20 @@ async def set_updates_channel_command(client: Client, message: Message):
 
 @Client.on_message(filters.command(["poststyle", "set_post_style"]) & filters.private)
 async def set_post_style_command(client: Client, message: Message):
-    """View or switch auto-post channel release card style: /poststyle 1|2|3"""
+    """View or switch auto-post channel release card style: /poststyle 1|2|3|4"""
     if not Config.is_admin(message.from_user.id):
         return
 
     args = message.command[1:]
     if args and args[0].isdigit():
         new_style = int(args[0])
-        if new_style in (1, 2, 3):
+        if new_style in (1, 2, 3, 4):
             await set_autopost_style(new_style)
             style_names = {
                 1: "🎬 Style 1: Cinematic Widescreen (16:9 Backdrop + Expandable Storyline)",
                 2: "📱 Style 2: Minimalist Single-Poster (2:3 Vertical Poster + 5-Line Info)",
-                3: "📄 Style 3: Clean Compact Text (Fast & lightweight release)"
+                3: "📄 Style 3: Clean Compact Text (Fast release format)",
+                4: "✨ Style 4: Ultra-Clean Compact 4-Line (Format 1 - No Fluff)"
             }
             await message.reply_text(f"✅ <b>Auto-Post Style Updated!</b>\n\nNow using: <b>{style_names[new_style]}</b>")
             return
@@ -1339,6 +1351,9 @@ async def set_post_style_command(client: Client, message: Message):
         "────────────────────────\n"
         f"• <b>Current Active Style:</b> <b>Style {current}</b>\n\n"
         "<b>Available Styles:</b>\n"
+        "✨ <b>Style 4: Ultra-Clean Compact 4-Line (Format 1 - Default)</b>\n"
+        "   • Official 2:3 vertical poster\n"
+        "   • Pure 4-line essentials (Title, Rating, Audio, Quality, Episodes) — zero fluff!\n\n"
         "1️⃣ <b>Style 1: Cinematic Widescreen</b>\n"
         "   • 16:9 Landscape backdrop\n"
         "   • Expandable dropdown quote with plot storyline\n\n"
@@ -1351,6 +1366,9 @@ async def set_post_style_command(client: Client, message: Message):
         "👇 <i>Tap below to switch active channel release style:</i>"
     )
     markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"{'✅ ' if current == 4 else ''}✨ Style 4 (Format 1)", callback_data="cp_setstyle:4")
+        ],
         [
             InlineKeyboardButton(f"{'✅ ' if current == 1 else ''}🎬 Style 1 (Cinematic)", callback_data="cp_setstyle:1"),
             InlineKeyboardButton(f"{'✅ ' if current == 2 else ''}📱 Style 2 (Poster)", callback_data="cp_setstyle:2")
@@ -1378,6 +1396,9 @@ async def post_style_callback(client: Client, query: CallbackQuery):
         "────────────────────────\n"
         f"• <b>Current Active Style:</b> <b>Style {current}</b>\n\n"
         "<b>Available Styles:</b>\n"
+        "✨ <b>Style 4: Ultra-Clean Compact 4-Line (Format 1 - Default)</b>\n"
+        "   • Official 2:3 vertical poster\n"
+        "   • Pure 4-line essentials (Title, Rating, Audio, Quality, Episodes) — zero fluff!\n\n"
         "1️⃣ <b>Style 1: Cinematic Widescreen</b>\n"
         "   • 16:9 Landscape backdrop\n"
         "   • Expandable dropdown quote with plot storyline\n\n"
@@ -1390,6 +1411,9 @@ async def post_style_callback(client: Client, query: CallbackQuery):
         "👇 <i>Tap below to switch active channel release style:</i>"
     )
     markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"{'✅ ' if current == 4 else ''}✨ Style 4 (Format 1)", callback_data="cp_setstyle:4")
+        ],
         [
             InlineKeyboardButton(f"{'✅ ' if current == 1 else ''}🎬 Style 1 (Cinematic)", callback_data="cp_setstyle:1"),
             InlineKeyboardButton(f"{'✅ ' if current == 2 else ''}📱 Style 2 (Poster)", callback_data="cp_setstyle:2")

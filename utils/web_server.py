@@ -2883,15 +2883,12 @@ MEDIA_POST_HTML = """<!DOCTYPE html>
         <!-- Top Navigation Bar -->
         <header class="flex items-center justify-between gap-2 navbar-card py-2.5 px-3 sm:px-4">
             <div class="flex items-center min-w-0">
-                <a href="/browse" class="text-base sm:text-xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-1.5 truncate">
+                <div class="text-base sm:text-xl font-black text-red-500 tracking-wider flex items-center gap-1.5 truncate">
                     <span>🍿</span> <span class="truncate">AkMovieVerse</span>
-                </a>
+                </div>
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                <a href="{browse_url}" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1 border border-white/10 whitespace-nowrap">
-                    <span>◀</span> <span>Browse</span>
-                </a>
-                <a href="{channel_url}" target="_blank" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl transition border border-sky-500/20 hidden sm:inline-flex whitespace-nowrap">
+                <a href="{channel_url}" target="_blank" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl transition border border-sky-500/20 flex items-center gap-1 whitespace-nowrap">
                     <span>📢</span> <span>Channel</span>
                 </a>
                 <a href="https://t.me/{bot_username}" target="_blank" class="text-xs sm:text-sm font-medium px-2.5 sm:px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1 border border-white/10 whitespace-nowrap">
@@ -6568,17 +6565,11 @@ ONLINE_PLAYER_HTML = """<!DOCTYPE html>
         <!-- Header -->
         <header class="flex items-center justify-between glass-panel px-3.5 py-2.5 sm:px-6 sm:py-4 rounded-2xl">
             <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                <a href="/browse" class="text-lg sm:text-2xl font-black text-red-500 tracking-wider hover:opacity-90 transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap" title="Browse Catalog">
+                <div class="text-lg sm:text-2xl font-black text-red-500 tracking-wider flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
                     <span>🍿</span> <span>AkMovieVerse</span>
-                </a>
-                <a href="/browse" class="hidden md:inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 bg-red-950/80 hover:bg-red-900/80 text-red-400 border border-red-500/30 rounded-full transition">
-                    <span>🎬</span> <span>Browse Catalog</span>
-                </a>
+                </div>
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                <a href="/browse" class="text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10 whitespace-nowrap">
-                    <span>🎬</span> <span>Browse</span>
-                </a>
                 <a href="{bot_url}" class="text-xs sm:text-sm font-medium px-2.5 sm:px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl transition flex items-center gap-1.5 border border-white/10 whitespace-nowrap">
                     <span>🤖</span> <span>Bot</span><span class="hidden sm:inline">&nbsp;Help</span>
                 </a>

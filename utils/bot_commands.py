@@ -78,7 +78,7 @@ ADMIN_COMMANDS = [
     BotCommand("tgm", "Upload media to Multi-CDN: reply /tgm"),
     BotCommand("paste", "Publish article to Telegraph: /paste"),
     BotCommand("post", "Interactive channel release draft: /post <title>"),
-    BotCommand("poststyle", "Select auto-post style: /poststyle [1|2|3]"),
+    BotCommand("poststyle", "Select auto-post style: /poststyle [1|2|3|4]"),
     BotCommand("postbutton", "Custom auto-post button: /postbutton <text> | <url>"),
     BotCommand("autopost", "Toggle auto-post engine: /autopost [on|off|status]"),
     BotCommand("autoreaction", "Auto reactions on channel posts: /autoreaction [on|off|set]"),
