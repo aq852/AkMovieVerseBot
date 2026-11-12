@@ -446,8 +446,8 @@ CATEGORY_CONTENT = {
 CHEAT_SHEET_TEXT = (
     "📜 <b>Admin Commands Quick Reference</b>\n"
     "━━━━━━━━━━━━━━━━━━\n"
-    "<blockquote expandable><b>🎁 GIFTS &amp; REWARDS:</b>\n"
-    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /setgiftinterval | /setgiftquiet | /setgiftclean | /giftban | /giftunban | /giftsettings</code>\n"
+    "<blockquote expandable><b>🎁 GIFTS, SPIN &amp; STORE:</b>\n"
+    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /setgiftinterval | /setgiftquiet | /setgiftclean | /giftban | /giftunban | /giftsettings | /additem | /delitem | /storeitems | /givecoins | /takecoins</code>\n"
     "\n"
     "<b>📢 ADS &amp; SHORTENERS:</b>\n"
     "• <code>/setad | /ads | /delad | /shorteners | /shortenerstats | /set_web_url | /add_shortener | /del_shortener | /setfreelimit</code>\n"

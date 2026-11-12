@@ -185,6 +185,34 @@ class Bot(Client):
         except Exception as e:
             logger.warning(f"Could not launch gift queue worker: {e}")
 
+        # 12. Initialize Flixify Store Catalog
+        try:
+            from database.store import init_default_store_items
+            asyncio.create_task(init_default_store_items())
+            logger.info("Initialized Flixify Store Catalog.")
+        except Exception as e:
+            logger.warning(f"Could not initialize store catalog: {e}")
+
+        # 13. Channel Access Auto-Eviction Worker (Runs Every 10 Minutes)
+        try:
+            async def _channel_eviction_loop():
+                while True:
+                    try:
+                        await asyncio.sleep(600)
+                        from database.channel_access import check_and_evict_expired_channel_members
+                        evicted = await check_and_evict_expired_channel_members(self)
+                        if evicted > 0:
+                            logger.info(f"Channel Eviction Worker: evicted {evicted} expired members.")
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e_evict:
+                        logger.debug(f"Channel eviction loop notice: {e_evict}")
+
+            asyncio.create_task(_channel_eviction_loop())
+            logger.info("Launched Channel Access Auto-Eviction Worker.")
+        except Exception as e:
+            logger.warning(f"Could not launch channel eviction loop: {e}")
+
     async def stop(self, *args):
         try:
             from utils.downloader import purge_stale_temp_downloads

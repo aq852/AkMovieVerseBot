@@ -100,6 +100,11 @@ async def add_premium(user_id: int, seconds: int) -> bool:
         return False
 
 
+async def add_premium_user(user_id: int, days: int = 1) -> bool:
+    """Grant or extend premium subscription in days (convenience helper)."""
+    return await add_premium(user_id, int(days) * 86400)
+
+
 async def remove_premium(user_id: int) -> bool:
     """Revoke premium status from a user."""
     try:

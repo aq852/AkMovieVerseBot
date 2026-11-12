@@ -247,8 +247,45 @@ async def start_command_handler(client: Client, message: Message):
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
     args = message.text.split()[1] if len(message.text.split()) > 1 else ""
 
-    # 1. Referral Deep-link: /start refer_<id>
-    if args.startswith("refer_"):
+    # 1. Referral Deep-link: /start refer_<id> or /start spin_<id>
+    if args.startswith("spin_"):
+        referrer_str = args.split("spin_")[1]
+        if referrer_str.isdigit() and is_new:
+            referrer_id = int(referrer_str)
+            if referrer_id != user_id:
+                try:
+                    from database.loyalty import credit_referral_spin
+                    ok_spin, reason = await credit_referral_spin(referrer_id)
+                    if ok_spin:
+                        await client.send_message(
+                            referrer_id,
+                            "🎰 🎉 <b>CONGRATULATIONS! EXTRA SPIN UNLOCKED!</b> 🌟\n\n"
+                            "Aapke dost ne aapke invite link se bot join kiya hai!\n"
+                            "🎁 Aapko mila hai <b>+1 Instant Lucky Spin</b>!\n\n"
+                            "👉 Wheel ghumane ke liye <b>/spin</b> dabayein!"
+                        )
+                except Exception as e_spin:
+                    logger.debug(f"Spin referral credit error: {e_spin}")
+        from plugins.spin import spin_command_handler
+        return await spin_command_handler(client, message)
+
+    elif args == "spin":
+        from plugins.spin import spin_command_handler
+        return await spin_command_handler(client, message)
+
+    elif args in ["coins", "store", "shop"]:
+        from plugins.store import store_command_handler
+        return await store_command_handler(client, message)
+
+    elif args in ["profile", "rank"]:
+        from plugins.store import profile_command_handler
+        return await profile_command_handler(client, message)
+
+    elif args in ["leaderboard", "top"]:
+        from plugins.store import leaderboard_command_handler
+        return await leaderboard_command_handler(client, message)
+
+    elif args.startswith("refer_"):
         referrer_str = args.split("refer_")[1]
         if referrer_str.isdigit():
             referrer_id = int(referrer_str)
@@ -342,75 +379,95 @@ async def start_command_handler(client: Client, message: Message):
             )
             return
 
-        # 24-Hour Session Verification OR Daily Free Quota
+        # 24-Hour Session Verification OR Daily Free Quota OR Direct Pass
         user_is_verified = await is_user_verified(user_id)
         delivered_under_free = False
+        used_pass_flag = False
+        passes_left = 0
         used_free_count = 0
         free_quota_limit = getattr(Config, "DAILY_FREE_LIMIT", 3)
 
         if not user_is_verified:
-            from database.users import check_daily_free_download, consume_daily_free_download
-            has_free, used_today, limit = await check_daily_free_download(user_id)
-            if has_free:
-                used_free_count = await consume_daily_free_download(user_id)
-                free_quota_limit = limit
-                delivered_under_free = True
-            else:
-                token = await create_verify_token(user_id, file_unique_id)
-                redirect_url = f"https://t.me/{bot_username}?start=verify_{token}"
+            # 1. First check bonus direct download pass from /store or rewards
+            try:
+                from database.loyalty import use_direct_pass
+                used_pass, passes_left = await use_direct_pass(user_id)
+                if used_pass:
+                    used_pass_flag = True
+            except Exception:
+                used_pass_flag = False
 
-                final_verify_url = None
-                verify_markup = None
-                verify_text = None
+            if not used_pass_flag:
+                from database.users import check_daily_free_download, consume_daily_free_download
+                has_free, used_today, limit = await check_daily_free_download(user_id)
+                if has_free:
+                    used_free_count = await consume_daily_free_download(user_id)
+                    free_quota_limit = limit
+                    delivered_under_free = True
+                else:
+                    token = await create_verify_token(user_id, file_unique_id)
+                    redirect_url = f"https://t.me/{bot_username}?start=verify_{token}"
 
-                if Config.SHORTENER_ENABLED:
-                    from utils.shortener import get_rotated_shortlink
-                    from database.verify import update_token_shortlink
+                    final_verify_url = None
+                    verify_markup = None
+                    verify_text = None
 
-                    short_link, shortener_used = await get_rotated_shortlink(redirect_url)
-                    await update_token_shortlink(token, short_link, shortener_used)
+                    if Config.SHORTENER_ENABLED:
+                        from utils.shortener import get_rotated_shortlink
+                        from database.verify import update_token_shortlink
 
-                    if Config.WEB_URL:
+                        short_link, shortener_used = await get_rotated_shortlink(redirect_url)
+                        await update_token_shortlink(token, short_link, shortener_used)
+
+                        if Config.WEB_URL:
+                            final_verify_url = f"{Config.WEB_URL}/verify/{token}"
+                        else:
+                            final_verify_url = short_link
+
+                        verify_markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔓 Verify Access (24h Pass)", url=final_verify_url)],
+                            [InlineKeyboardButton("📖 How to Bypass / Tutorial", url=Config.TUTORIAL_URL)],
+                            [InlineKeyboardButton("👑 Buy VIP (Skip Verification)", callback_data="view_plans")]
+                        ])
+                        verify_text = (
+                            f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
+                            f"You have used your <b>{limit} Daily Free Downloads</b> for today.\n\n"
+                            "To unlock <b>24 Hours of UNLIMITED, Instant Downloads</b>:\n"
+                            "👉 Complete a quick 1-minute verification below, or buy VIP!\n\n"
+                            "<i>💡 Tip: Your daily free quota resets every midnight automatically!</i>"
+                        )
+                    elif getattr(Config, "WEB_URL", ""):
+                        from database.verify import update_token_shortlink
+                        await update_token_shortlink(token, redirect_url, "clean_gateway")
                         final_verify_url = f"{Config.WEB_URL}/verify/{token}"
-                    else:
-                        final_verify_url = short_link
 
-                    verify_markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔓 Verify Access (24h Pass)", url=final_verify_url)],
-                        [InlineKeyboardButton("📖 How to Bypass / Tutorial", url=Config.TUTORIAL_URL)],
-                        [InlineKeyboardButton("👑 Buy VIP (Skip Verification)", callback_data="view_plans")]
-                    ])
-                    verify_text = (
-                        f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
-                        f"You have used your <b>{limit} Daily Free Downloads</b> for today.\n\n"
-                        "To unlock <b>24 Hours of UNLIMITED, Instant Downloads</b>:\n"
-                        "👉 Complete a quick 1-minute verification below, or buy VIP!\n\n"
-                        "<i>💡 Tip: Your daily free quota resets every midnight automatically!</i>"
-                    )
-                elif getattr(Config, "WEB_URL", ""):
-                    from database.verify import update_token_shortlink
-                    await update_token_shortlink(token, redirect_url, "clean_gateway")
-                    final_verify_url = f"{Config.WEB_URL}/verify/{token}"
+                        verify_markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🛡️ 1-Click Verification (24h Pass)", url=final_verify_url)],
+                            [InlineKeyboardButton("👑 VIP Members Skip All Checks", callback_data="view_plans")]
+                        ])
+                        verify_text = (
+                            f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
+                            "Please complete a quick 5-second check to unlock <b>24 Hours of Unlimited Downloads</b>!\n\n"
+                            "• <i>No external spam ads • Just a quick safety check.</i>\n"
+                            "• <i>Your daily free quota resets every midnight!</i>"
+                        )
 
-                    verify_markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🛡️ 1-Click Verification (24h Pass)", url=final_verify_url)],
-                        [InlineKeyboardButton("👑 VIP Members Skip All Checks", callback_data="view_plans")]
-                    ])
-                    verify_text = (
-                        f"⏳ <b>Daily Free Limit Reached ({used_today}/{limit} Used)!</b>\n\n"
-                        "Please complete a quick 5-second check to unlock <b>24 Hours of Unlimited Downloads</b>!\n\n"
-                        "• <i>No external spam ads • Just a quick safety check.</i>\n"
-                        "• <i>Your daily free quota resets every midnight!</i>"
-                    )
-
-                if final_verify_url and verify_markup:
-                    await message.reply_text(verify_text, reply_markup=verify_markup)
-                    return
+                    if final_verify_url and verify_markup:
+                        await message.reply_text(verify_text, reply_markup=verify_markup)
+                        return
 
         # Deliver File Directly
         try:
             await deliver_file_with_copyright_warning(client, user_id, file_doc)
-            if delivered_under_free:
+            if used_pass_flag:
+                try:
+                    await message.reply_text(
+                        f"⚡ <b>Direct Download Pass Used!</b> <code>({passes_left} remaining)</code>\n"
+                        "<i>Enjoy your instant, ad-free download! Get more passes via /store.</i>"
+                    )
+                except Exception:
+                    pass
+            elif delivered_under_free:
                 rem = max(0, free_quota_limit - used_free_count)
                 try:
                     await message.reply_text(

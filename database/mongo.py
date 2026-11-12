@@ -288,6 +288,17 @@ async def init_indexes():
         except Exception:
             pass
 
+        # Loyalty, Store & Channel Access Indexes
+        try:
+            await mongo.db["loyalty_users"].create_index("user_id", unique=True)
+            await mongo.db["loyalty_users"].create_index([("longest_streak", -1), ("coins", -1)])
+            await mongo.db["store_items"].create_index("item_id", unique=True)
+            await mongo.db["store_items"].create_index("price_coins")
+            await mongo.db["channel_access_ledger"].create_index([("status", 1), ("expires_at", 1)])
+            await mongo.db["channel_access_ledger"].create_index("user_id")
+        except Exception as e_loyalty_idx:
+            logger.debug(f"Loyalty indexes note: {e_loyalty_idx}")
+
         # Secondary MongoDB files indexes (if secondary cluster is connected)
         if mongo.has_secondary:
             try:

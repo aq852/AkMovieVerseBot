@@ -39,6 +39,10 @@ USER_COMMANDS = [
     BotCommand("plans", "View VIP ad-free plans"),
     BotCommand("myplan", "Check your VIP status"),
     BotCommand("refer", "Invite friends & earn free VIP"),
+    BotCommand("spin", "Daily lucky spin wheel & rewards"),
+    BotCommand("store", "Coin rewards store & VIP upgrades"),
+    BotCommand("profile", "Loyalty rank, streak & coin wallet"),
+    BotCommand("leaderboard", "Top streaks & richest users"),
     BotCommand("redeem", "Redeem VIP promo coupon: /redeem <code>"),
     BotCommand("poster", "Design HD poster: /poster <name>"),
     BotCommand("tgm", "Upload media to CDN: reply /tgm"),
@@ -169,7 +173,12 @@ ADMIN_COMMANDS = [
     BotCommand("gen_stremio", "Issue Stremio TV addon link: /gen_stremio <id>"),
     BotCommand("reset_stremio", "Reset Stremio TV token: /reset_stremio <id>"),
     BotCommand("del_stremio", "Revoke Stremio access: /del_stremio <id>"),
-    BotCommand("stremiostats", "Stremio live dashboard: /stremiostats")
+    BotCommand("stremiostats", "Stremio live dashboard: /stremiostats"),
+    BotCommand("additem", "Add store item: /additem <id> <price> <type> <val> <title>"),
+    BotCommand("delitem", "Delete store item: /delitem <item_id>"),
+    BotCommand("storeitems", "View all Flixify Store items"),
+    BotCommand("givecoins", "Credit coins to user: /givecoins <id> <amount>"),
+    BotCommand("takecoins", "Deduct coins from user: /takecoins <id> <amount>")
 ]
 
 async def register_all_bot_commands(client: Client) -> dict:
