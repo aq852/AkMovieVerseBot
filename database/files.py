@@ -286,6 +286,12 @@ async def save_files_bulk(media_list: list[dict]) -> dict:
             res["errors"] += 1
             continue
 
+        src = m.get("source", "bulk_index")
+        if src not in ("auto_index", "bulk_index"):
+            logger.warning(f"BLOCKED save_files_bulk: Invalid source '{src}'. Only auto_index and bulk_index are permitted.")
+            res["errors"] += 1
+            continue
+
         fname = m.get("file_name", "Untitled")
         fsize = m.get("file_size", 0)
 

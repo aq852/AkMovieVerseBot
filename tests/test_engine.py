@@ -2589,13 +2589,14 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertTrue(ok)
                 self.assertEqual(reason, "saved")
 
-                # 7. Bulk save filters excluded channels
+                # 7. Bulk save filters excluded channels and invalid sources
                 bulk_input = [
-                    {"file_unique_id": "b1", "file_name": "Good.mp4", "channel_id": -1005555},
-                    {"file_unique_id": "b2", "file_name": "BadGift.mp4", "channel_id": -1003333},
+                    {"file_unique_id": "b1", "file_name": "Good.mp4", "channel_id": -1005555, "source": "auto_index"},
+                    {"file_unique_id": "b2", "file_name": "BadGift.mp4", "channel_id": -1003333, "source": "auto_index"},
+                    {"file_unique_id": "b3", "file_name": "BadSource.mp4", "channel_id": -1005555, "source": "user_forward"},
                 ]
                 res = await save_files_bulk(bulk_input)
-                self.assertEqual(res["errors"], 1)
+                self.assertEqual(res["errors"], 2)
 
         asyncio.run(_test())
 
