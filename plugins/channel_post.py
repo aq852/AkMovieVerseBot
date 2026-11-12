@@ -142,6 +142,37 @@ async def set_auto_reaction_state(enabled: bool = None, emojis: list[str] = None
             logger.error(f"Error persisting auto reaction settings: {e}")
 
 
+# Channel Post "Watch Online" Button Setting
+_AUTO_POST_WATCH_PREF = {"enabled": None}
+
+
+async def is_auto_post_watch_enabled() -> bool:
+    """Check whether Watch Online button is enabled on channel posts. Defaults to False."""
+    if _AUTO_POST_WATCH_PREF["enabled"] is not None:
+        return _AUTO_POST_WATCH_PREF["enabled"]
+    try:
+        doc = await mongo.db["bot_settings"].find_one({"key": "auto_post_watch"})
+        if doc and "enabled" in doc:
+            _AUTO_POST_WATCH_PREF["enabled"] = bool(doc["enabled"])
+            return _AUTO_POST_WATCH_PREF["enabled"]
+    except Exception:
+        pass
+    return False  # Disabled by default per user request
+
+
+async def set_auto_post_watch_state(enabled: bool):
+    """Persist auto post watch online button state to MongoDB."""
+    _AUTO_POST_WATCH_PREF["enabled"] = enabled
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "auto_post_watch"},
+            {"$set": {"enabled": enabled}},
+            upsert=True
+        )
+    except Exception as e:
+        logger.error(f"Error persisting auto_post_watch: {e}")
+
+
 async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool = False) -> dict:
     """Fetch official TMDB metadata (16:9 Backdrop, 2:3 Poster, Genres, OTT Platform, Storyline, Rating)."""
     from utils.title_cleaner import clean_movie_title, is_tmdb_match_valid
@@ -593,8 +624,8 @@ async def set_autopost_custom_button(text: str | None, url: str | None):
         await mongo.db["bot_settings"].delete_one({"key": "autopost_custom_btn"})
 
 
-def build_post_buttons(group: dict, custom_btn: dict | None = None) -> InlineKeyboardMarkup:
-    """Build channel post buttons: [▶️ Watch Online], [🤖 Get File], and optional custom button."""
+def build_post_buttons(group: dict, custom_btn: dict | None = None, enable_watch: bool | None = None) -> InlineKeyboardMarkup:
+    """Build channel post buttons: [🤖 Get File], optional [▶️ Watch Online], and optional custom button."""
     web_url = getattr(Config, "WEB_URL", "http://127.0.0.1:8088").rstrip("/")
     bot_username = Config.BOT_USERNAME or "bot"
 
@@ -620,12 +651,15 @@ def build_post_buttons(group: dict, custom_btn: dict | None = None) -> InlineKey
         else:
             bot_file_url = f"https://t.me/{bot_username}?start=file_{pid}"
 
-    rows = [
-        [
-            InlineKeyboardButton("▶️ Watch Online", url=watch_url),
-            InlineKeyboardButton("🤖 Get File", url=bot_file_url)
-        ]
-    ]
+    # Determine whether Watch Online button is enabled (Defaults to False)
+    show_watch = enable_watch if enable_watch is not None else (_AUTO_POST_WATCH_PREF["enabled"] is True)
+
+    first_row = []
+    if show_watch:
+        first_row.append(InlineKeyboardButton("▶️ Watch Online", url=watch_url))
+    first_row.append(InlineKeyboardButton("🤖 Get File", url=bot_file_url))
+
+    rows = [first_row]
 
     if custom_btn and custom_btn.get("text") and custom_btn.get("url"):
         rows.append([
@@ -765,7 +799,8 @@ async def publish_or_upgrade_channel_post(
     active_style = await get_autopost_style()
     caption = format_post_caption(group, tmdb_meta, style=active_style)
     custom_btn = await get_autopost_custom_button()
-    buttons = build_post_buttons(group, custom_btn=custom_btn)
+    watch_enabled = await is_auto_post_watch_enabled()
+    buttons = build_post_buttons(group, custom_btn=custom_btn, enable_watch=watch_enabled)
 
     # Use explicit custom_photo if chosen in admin preview, else default backdrop or poster
     if custom_photo:
@@ -1298,6 +1333,40 @@ async def auto_reaction_control_command(client: Client, message: Message):
             f"• <code>/autoreaction off</code> — Turn OFF\n"
             f"• <code>/autoreaction set 🔥 ❤️ 🍿 ⚡</code> — Set custom emojis\n"
             f"• <code>/autoreaction reset</code> — Reset to default emojis"
+        )
+
+
+@Client.on_message(filters.command(["postwatch", "watchbtn", "postwatchbtn"]) & filters.private)
+async def post_watch_toggle_command(client: Client, message: Message):
+    """Toggle Watch Online button on channel posts: /postwatch [on|off|status]"""
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    cmd = message.command[1].lower() if len(message.command) > 1 else "status"
+
+    if cmd == "on":
+        await set_auto_post_watch_state(enabled=True)
+        await message.reply_text(
+            "✅ <b>Watch Online Button Enabled!</b>\n\n"
+            "Channel posts will now include the <code>[ ▶️ Watch Online ]</code> button alongside <code>[ 🤖 Get File ]</code>."
+        )
+    elif cmd == "off":
+        await set_auto_post_watch_state(enabled=False)
+        await message.reply_text(
+            "🛑 <b>Watch Online Button Removed / Disabled!</b>\n\n"
+            "Channel posts will now strictly display <code>[ 🤖 Get File ]</code> (Focusing 100% on bot delivery & shortener monetization).\n\n"
+            "<i>To re-enable anytime, send:</i> <code>/postwatch on</code>"
+        )
+    else:
+        is_on = await is_auto_post_watch_enabled()
+        status_badge = "🟢 ENABLED / ON" if is_on else "🔴 DISABLED / OFF"
+        await message.reply_text(
+            f"🎬 <b>Channel Post 'Watch Online' Setting:</b>\n\n"
+            f"• <b>Status:</b> {status_badge}\n"
+            f"• <b>Active Buttons:</b> {'[ ▶️ Watch Online ] + [ 🤖 Get File ]' if is_on else '[ 🤖 Get File ] only'}\n\n"
+            f"<b>Commands:</b>\n"
+            f"• <code>/postwatch off</code> — Remove Watch Online button (Recommended)\n"
+            f"• <code>/postwatch on</code> — Show Watch Online button"
         )
 
 

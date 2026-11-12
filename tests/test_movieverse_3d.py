@@ -113,6 +113,36 @@ class TestMovieVerse3D(unittest.TestCase):
         self.assertIn("MovieVerse 3D", top_btn_group.text)
         self.assertIn("start=galaxy_Jawan", top_btn_group.url)
 
+    def test_channel_post_buttons_watch_toggle(self):
+        from plugins.channel_post import build_post_buttons
+
+        group = {
+            "clean_name": "Jailer 2",
+            "is_series": False,
+            "primary_file_id": "file_123",
+            "files": [{"file_name": "Jailer.2.mkv"}],
+            "qualities": {"1080p"}
+        }
+
+        # 1. By default, Watch Online is NOT included (only Get File)
+        markup_default = build_post_buttons(group, enable_watch=False)
+        self.assertEqual(len(markup_default.inline_keyboard), 1)
+        self.assertEqual(len(markup_default.inline_keyboard[0]), 1)
+        self.assertEqual(markup_default.inline_keyboard[0][0].text, "🤖 Get File")
+
+        # 2. When enable_watch=True, both Watch Online and Get File are present
+        markup_watch = build_post_buttons(group, enable_watch=True)
+        self.assertEqual(len(markup_watch.inline_keyboard[0]), 2)
+        btn_texts = [btn.text for btn in markup_watch.inline_keyboard[0]]
+        self.assertIn("▶️ Watch Online", btn_texts)
+        self.assertIn("🤖 Get File", btn_texts)
+
+        # 3. Custom button in row 2
+        custom_btn = {"text": "📌 Join Backup", "url": "https://t.me/backup"}
+        markup_custom = build_post_buttons(group, custom_btn=custom_btn, enable_watch=False)
+        self.assertEqual(len(markup_custom.inline_keyboard), 2)
+        self.assertEqual(markup_custom.inline_keyboard[1][0].text, "📌 Join Backup")
+
 
 if __name__ == "__main__":
     unittest.main()

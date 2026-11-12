@@ -85,6 +85,7 @@ ADMIN_COMMANDS = [
     BotCommand("postbutton", "Custom auto-post button: /postbutton <text> | <url>"),
     BotCommand("autopost", "Toggle auto-post engine: /autopost [on|off|status]"),
     BotCommand("autoreaction", "Auto reactions on channel posts: /autoreaction [on|off|set]"),
+    BotCommand("postwatch", "Toggle Watch Online button on posts: /postwatch [on|off]"),
     BotCommand("setupdateschannel", "Set updates channel: /setupdateschannel <id>"),
     BotCommand("streaming", "Toggle streaming engine: /streaming [on|off]"),
     BotCommand("stream_download", "Toggle web fast download: /stream_download [on|off]"),
