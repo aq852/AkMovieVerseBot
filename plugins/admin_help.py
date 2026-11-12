@@ -227,7 +227,9 @@ CATEGORY_CONTENT = {
         "• <code>/setposter &lt;title&gt; &lt;link_or_reply&gt;</code>\n"
         "<b>Usage:</b> Set custom poster for Web Catalog &amp; /post release cards (via direct image link or replying to a photo).\n\n"
         "• <code>/delposter &lt;title&gt;</code> | <code>/getposter &lt;title&gt;</code>\n"
-        "<b>Usage:</b> Delete custom poster override (reverts to TMDB) or inspect active poster."
+        "<b>Usage:</b> Delete custom poster override (reverts to TMDB) or inspect active poster.\n\n"
+        "• <code>/autoreaction [on|off|set|reset]</code>\n"
+        "<b>Usage:</b> Automated Telegram reactions (🔥 ❤️ 🍿 ⚡) triggered on every channel release."
     ),
 
     "filestore": (
@@ -461,7 +463,7 @@ CHEAT_SHEET_TEXT = (
     "• <code>/demands | /ban | /unban | /set_pic</code>\n"
     "\n"
     "<b>📢 RELEASES &amp; AUTO-POST:</b>\n"
-    "• <code>/post | /autopost | /poststyle | /postbutton | /setupdateschannel | /setposter | /delposter | /getposter</code>\n"
+    "• <code>/post | /autopost | /poststyle | /postbutton | /setupdateschannel | /setposter | /delposter | /getposter | /autoreaction</code>\n"
     "\n"
     "<b>📦 FILE STORE &amp; BATCHES:</b>\n"
     "• <code>/batch | /genlink | /batches | /delbatch | /share | /tgm | /paste | /editpaste | /delpaste</code>\n"

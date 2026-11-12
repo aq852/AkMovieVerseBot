@@ -6,6 +6,7 @@ import datetime
 import urllib.parse
 import aiohttp
 import uuid
+import random
 
 try:
     from hydrogram import Client, filters, enums
@@ -85,6 +86,60 @@ async def set_autopost_state(enabled: bool = None, channel_id: int = None):
             )
         except Exception as e:
             logger.error(f"Error persisting autopost settings: {e}")
+
+
+# Auto Reactions on Channel Posts
+_AUTO_REACTION_PREFS = {"enabled": None, "emojis": None}
+DEFAULT_REACTION_EMOJIS = ["🔥", "❤️", "🍿", "⚡", "🎉", "😍", "👍"]
+
+
+async def is_auto_reaction_enabled() -> bool:
+    """Check whether auto reactions on channel posts are enabled."""
+    if _AUTO_REACTION_PREFS["enabled"] is not None:
+        return _AUTO_REACTION_PREFS["enabled"]
+    try:
+        doc = await mongo.db["bot_settings"].find_one({"key": "auto_post_reactions"})
+        if doc and "enabled" in doc:
+            _AUTO_REACTION_PREFS["enabled"] = bool(doc["enabled"])
+            return _AUTO_REACTION_PREFS["enabled"]
+    except Exception:
+        pass
+    return True  # Enabled by default
+
+
+async def get_auto_reaction_emojis() -> list[str]:
+    """Retrieve pool of emojis used for automatic channel reactions."""
+    if _AUTO_REACTION_PREFS["emojis"] is not None:
+        return _AUTO_REACTION_PREFS["emojis"]
+    try:
+        doc = await mongo.db["bot_settings"].find_one({"key": "auto_post_reactions"})
+        if doc and doc.get("emojis"):
+            _AUTO_REACTION_PREFS["emojis"] = list(doc["emojis"])
+            return _AUTO_REACTION_PREFS["emojis"]
+    except Exception:
+        pass
+    return DEFAULT_REACTION_EMOJIS
+
+
+async def set_auto_reaction_state(enabled: bool = None, emojis: list[str] = None):
+    """Persist auto reaction state & emojis to MongoDB."""
+    updates = {}
+    if enabled is not None:
+        _AUTO_REACTION_PREFS["enabled"] = enabled
+        updates["enabled"] = enabled
+    if emojis is not None:
+        _AUTO_REACTION_PREFS["emojis"] = emojis
+        updates["emojis"] = emojis
+
+    if updates:
+        try:
+            await mongo.db["bot_settings"].update_one(
+                {"key": "auto_post_reactions"},
+                {"$set": updates},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error persisting auto reaction settings: {e}")
 
 
 async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool = False) -> dict:
@@ -795,6 +850,22 @@ async def publish_or_upgrade_channel_post(
             upsert=True
         )
         logger.info(f"Published new post for {group_key} to channel {target_channel} (Msg ID: {sent_msg.id})")
+
+        # Automatically trigger reaction on channel post
+        if await is_auto_reaction_enabled():
+            try:
+                emojis = await get_auto_reaction_emojis()
+                if emojis:
+                    chosen_emoji = random.choice(emojis)
+                    await client.send_reaction(
+                        chat_id=target_channel,
+                        message_id=sent_msg.id,
+                        emoji=chosen_emoji
+                    )
+                    logger.info(f"Auto-reacted '{chosen_emoji}' to post {sent_msg.id} in {target_channel}")
+            except Exception as e_react:
+                logger.debug(f"Auto reaction failed for post {sent_msg.id}: {e_react}")
+
         return True, "published", sent_msg.id
     except FloodWait as fw:
         await asyncio.sleep(fw.value)
@@ -1151,6 +1222,71 @@ async def autopost_control_command(client: Client, message: Message):
             f"• <code>/autopost off</code> — Pause auto-post\n"
             f"• <code>/setupdateschannel &lt;id&gt;</code> — Change target channel\n"
             f"• <code>/post &lt;title&gt;</code> — Manual publish"
+        )
+
+
+@Client.on_message(filters.command(["autoreaction", "postreaction"]) & filters.private)
+async def auto_reaction_control_command(client: Client, message: Message):
+    """Toggle or configure automatic reactions on channel posts:
+    /autoreaction on | off | status | set <emojis> | reset
+    """
+    if not Config.is_admin(message.from_user.id):
+        return
+
+    cmd = message.command[1].lower() if len(message.command) > 1 else "status"
+
+    if cmd == "on":
+        await set_auto_reaction_state(enabled=True)
+        emojis = await get_auto_reaction_emojis()
+        await message.reply_text(
+            f"✅ <b>Auto Reactions Enabled!</b>\n\n"
+            f"Bot will now automatically react to every channel post.\n"
+            f"🎯 <b>Active Emojis:</b> {' '.join(emojis)}\n\n"
+            f"<i>To customize emojis, send:</i> <code>/autoreaction set 🔥 ❤️ 🍿 ⚡</code>"
+        )
+    elif cmd == "off":
+        await set_auto_reaction_state(enabled=False)
+        await message.reply_text(
+            "🛑 <b>Auto Reactions Disabled!</b>\n\n"
+            "Channel posts will no longer receive automated reactions.\n"
+            "To re-enable anytime, send <code>/autoreaction on</code>."
+        )
+    elif cmd == "reset":
+        await set_auto_reaction_state(enabled=True, emojis=DEFAULT_REACTION_EMOJIS)
+        await message.reply_text(
+            f"🔄 <b>Auto Reactions Reset to Default!</b>\n\n"
+            f"🎯 <b>Active Emojis:</b> {' '.join(DEFAULT_REACTION_EMOJIS)}"
+        )
+    elif cmd == "set":
+        raw_parts = message.text.split(None, 2)
+        if len(raw_parts) < 3 or not raw_parts[2].strip():
+            return await message.reply_text(
+                "⚠️ <b>Usage:</b> <code>/autoreaction set 🔥 ❤️ 🍿 ⚡ 🎉</code>\n\n"
+                "Please provide one or more emojis separated by spaces."
+            )
+        input_emojis = [e.strip() for e in raw_parts[2].split() if e.strip()]
+        if not input_emojis:
+            return await message.reply_text("❌ No valid emojis found. Example: <code>/autoreaction set 🔥 ❤️ 🍿</code>")
+
+        await set_auto_reaction_state(enabled=True, emojis=input_emojis)
+        await message.reply_text(
+            f"✅ <b>Custom Auto Reaction Emojis Saved!</b>\n\n"
+            f"🎯 <b>Active Emojis ({len(input_emojis)}):</b> {' '.join(input_emojis)}\n\n"
+            f"Bot will randomly pick from this pool for each channel post."
+        )
+    else:
+        is_on = await is_auto_reaction_enabled()
+        emojis = await get_auto_reaction_emojis()
+        status_badge = "🟢 ACTIVE / ON" if is_on else "🔴 PAUSED / OFF"
+        await message.reply_text(
+            f"🎭 <b>Auto Reaction System:</b>\n\n"
+            f"• <b>Status:</b> {status_badge}\n"
+            f"• <b>Active Pool:</b> {' '.join(emojis)}\n\n"
+            f"<b>Commands:</b>\n"
+            f"• <code>/autoreaction on</code> — Turn ON\n"
+            f"• <code>/autoreaction off</code> — Turn OFF\n"
+            f"• <code>/autoreaction set 🔥 ❤️ 🍿 ⚡</code> — Set custom emojis\n"
+            f"• <code>/autoreaction reset</code> — Reset to default emojis"
         )
 
 
