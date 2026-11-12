@@ -7398,12 +7398,41 @@ async def web_spin_roll_api(request: web.Request) -> web.Response:
     })
 
 
+async def galaxy_handler(request: web.Request) -> web.Response:
+    """Serve the 3D Galaxy Movieverse interactive WebGL space experience."""
+    base_url = get_stream_base_url(request)
+    bot_username = Config.BOT_USERNAME or "bot"
+
+    catalog = await get_grouped_catalog()
+    enriched_items = []
+    from utils.helpers import get_cached_poster_url
+
+    for item in catalog[:24]:
+        clean = item.get("clean_name", "")
+        poster = await get_cached_poster_url(clean)
+        item_copy = dict(item)
+        item_copy["poster_url"] = poster or "https://api.aniwallpaper.workers.dev/random"
+        enriched_items.append(item_copy)
+
+    from utils.galaxy_movieverse import render_galaxy_movieverse
+    html = render_galaxy_movieverse(
+        items=enriched_items,
+        base_url=base_url,
+        bot_username=bot_username
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
 async def run_web_server():
     """Start background aiohttp server with health check, verification, and streaming routes."""
     app = web.Application()
     app.router.add_get("/", health_handler)
     app.router.add_get("/health", health_handler)
     app.router.add_get("/verify/{token}", verify_redirect_handler)
+
+    # 3D Galaxy Movieverse Routes
+    app.router.add_get("/galaxy", galaxy_handler)
+    app.router.add_get("/galaxy/", galaxy_handler)
 
     # Flixify 3D Lucky Wheel Telegram Mini App Routes
     app.router.add_get("/spin", web_spin_handler)

@@ -38,6 +38,7 @@ async def browse_catalog_command(client: Client, message: Message):
         return
 
     browse_url = f"{stream_base}/browse"
+    galaxy_url = f"{stream_base}/galaxy"
     escaped_ch_name = html.escape(channel_name)
 
     caption = (
@@ -45,18 +46,25 @@ async def browse_catalog_command(client: Client, message: Message):
         "Browse thousands of high-definition movies, web series, dual-audio releases, and complete seasons directly in your browser!\n\n"
         "✨ <b>Web Cinema Features:</b>\n"
         "• 🎬 <b>In-Browser Cinema Player:</b> Instant 1-click playback\n"
+        "• 🪐 <b>3D Galaxy Movieverse:</b> Interactive floating 3D universe\n"
         "• 📺 <b>External Players:</b> MX Player, VLC & M3U Playlist support\n"
         "• 🚀 <b>Lightning Fast Downloads:</b> High-speed web file transfers\n"
         "• 🔍 <b>Smart Live Search:</b> Filter by Movies, Series, Qualities & Audio\n\n"
         f"📢 <b>Official Channel:</b> <a href=\"{channel_url}\">{escaped_ch_name}</a>"
     )
 
+    try:
+        from hydrogram.types import WebAppInfo
+    except ImportError:
+        from pyrogram.types import WebAppInfo
+
     buttons = [
         [
-            InlineKeyboardButton("🌐 OPEN WEB CINEMA CATALOG ↗️", url=browse_url)
+            InlineKeyboardButton("🪐 OPEN 3D GALAXY MOVIEVERSE 🚀", web_app=WebAppInfo(url=galaxy_url))
         ],
         [
-            InlineKeyboardButton("📌 Join Updates Channel ↗️", url=channel_url)
+            InlineKeyboardButton("🌐 Open Web Catalog ↗️", url=browse_url),
+            InlineKeyboardButton("📌 Channel ↗️", url=channel_url)
         ]
     ]
 
@@ -65,6 +73,47 @@ async def browse_catalog_command(client: Client, message: Message):
         reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True
     )
+
+
+@Client.on_message(filters.command(["galaxy", "3d", "movieverse"]))
+async def galaxy_movieverse_command(client: Client, message: Message):
+    """Deliver interactive Telegram Mini App card for the 3D Galaxy Movieverse."""
+    stream_base = get_effective_stream_base_url()
+    channel_name, channel_url = await resolve_channel_display_and_url(client)
+
+    if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+        stream_base = "https://akmovieverse.duckdns.org"
+
+    galaxy_url = f"{stream_base}/galaxy"
+    escaped_ch_name = html.escape(channel_name)
+
+    text = (
+        "🪐 <b>FLIXIFY 3D GALAXY MOVIEVERSE</b> 🚀\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "✨ <i>Step into the future of cinema browsing!</i>\n\n"
+        "🌌 <b>Features:</b>\n"
+        "• <b>3D Interactive Solar Orbit:</b> Swipe to rotate floating movie cards\n"
+        "• <b>1-Tap Streaming:</b> Tap any 3D card to watch directly in Telegram\n"
+        "• <b>Real TMDB Posters & Specs:</b> 4K HDR, Multi-Audio & IMDb ratings\n\n"
+        "👇 <i>Neeche diye gaye button par tap karke 3D Universe explore karein:</i>"
+    )
+
+    try:
+        from hydrogram.types import WebAppInfo
+    except ImportError:
+        from pyrogram.types import WebAppInfo
+
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🪐 OPEN 3D GALAXY MOVIEVERSE 🚀", web_app=WebAppInfo(url=galaxy_url))
+        ],
+        [
+            InlineKeyboardButton("🌐 Open in Web Browser ↗️", url=galaxy_url),
+            InlineKeyboardButton(f"📢 {escaped_ch_name}", url=channel_url)
+        ]
+    ])
+
+    await message.reply_text(text, reply_markup=markup)
 
 
 @Client.on_message(filters.command(["setstream", "set_stream"]) & filters.private)

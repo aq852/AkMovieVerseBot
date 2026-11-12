@@ -43,6 +43,8 @@ USER_COMMANDS = [
     BotCommand("store", "Coin rewards store & VIP upgrades"),
     BotCommand("profile", "Loyalty rank, streak & coin wallet"),
     BotCommand("leaderboard", "Top streaks & richest users"),
+    BotCommand("galaxy", "3D Galaxy Movieverse: /galaxy"),
+    BotCommand("browse", "Browse web cinema catalog: /browse"),
     BotCommand("redeem", "Redeem VIP promo coupon: /redeem <code>"),
     BotCommand("poster", "Design HD poster: /poster <name>"),
     BotCommand("tgm", "Upload media to CDN: reply /tgm"),
