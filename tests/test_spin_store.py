@@ -189,5 +189,75 @@ class TestStoreAndFulfillment(unittest.IsolatedAsyncioTestCase):
         mock_client.unban_chat_member.assert_awaited_once_with(chat_id=-1001234567890, user_id=999)
 
 
+class TestMediaMetadataAndCatalogGrouping(unittest.TestCase):
+    def test_movie_parts_and_sequel_parsing(self):
+        from utils.helpers import parse_media_metadata
+        # Movie sequel numbers like "Jailer 2" must never be parsed as series or episode 2
+        m_j2 = parse_media_metadata("Jailer 2 1080p.mkv")
+        self.assertFalse(m_j2["is_series"])
+        self.assertEqual(m_j2["clean_name"], "Jailer 2")
+
+        # Multi-part movie files must be parsed as parts and NOT series
+        m_part1 = parse_media_metadata("Jailer 2 Part 1 1080p.mkv")
+        self.assertTrue(m_part1["is_part"])
+        self.assertFalse(m_part1["is_series"])
+        self.assertEqual(m_part1["part"], 1)
+        self.assertEqual(m_part1["clean_name"], "Jailer 2")
+
+        m_part2 = parse_media_metadata("Jailer 2 Part 2 1080p.mkv")
+        self.assertTrue(m_part2["is_part"])
+        self.assertFalse(m_part2["is_series"])
+        self.assertEqual(m_part2["part"], 2)
+
+        m_sf = parse_media_metadata("Street Fighter Part 1.mp4")
+        self.assertTrue(m_sf["is_part"])
+        self.assertFalse(m_sf["is_series"])
+        self.assertEqual(m_sf["clean_name"], "Street Fighter")
+
+        # True TV series must still be parsed correctly
+        m_ser = parse_media_metadata("VisionQuest S01E01 720p.mkv")
+        self.assertTrue(m_ser["is_series"])
+        self.assertEqual(m_ser["season"], 1)
+        self.assertEqual(m_ser["episode"], 1)
+
+    def test_catalog_merging_parts_and_qualities(self):
+        from utils.web_server import _group_file_docs
+        docs = [
+            {"_id": "1", "file_name": "Jailer 2 (2026) 1080p.mkv", "file_size": 3000000000},
+            {"_id": "2", "file_name": "Jailer 2 (2026) 720p.mkv", "file_size": 1500000000},
+            {"_id": "3", "file_name": "Jailer 2 1080p.mkv", "file_size": 3000000000},
+            {"_id": "4", "file_name": "Jailer 2 720p.mkv", "file_size": 1500000000},
+            {"_id": "5", "file_name": "Jailer 2 Part 1 1080p.mkv", "file_size": 2000000000},
+            {"_id": "6", "file_name": "Jailer 2 Part 2 1080p.mkv", "file_size": 2000000000},
+            {"_id": "7", "file_name": "Street Fighter Part 1.mp4", "file_size": 1500000000},
+            {"_id": "8", "file_name": "Street Fighter Part 2.mp4", "file_size": 1500000000},
+            {"_id": "9", "file_name": "VisionQuest S01E01 720p.mkv", "file_size": 800000000},
+            {"_id": "10", "file_name": "VisionQuest S01E02 720p.mkv", "file_size": 800000000},
+        ]
+        groups = _group_file_docs(docs)
+
+        # There should only be 1 Jailer 2 group with all 6 files, NOT split into series!
+        j2_groups = [g for g in groups if "jailer" in g["clean_name"].lower()]
+        self.assertEqual(len(j2_groups), 1)
+        j2 = j2_groups[0]
+        self.assertFalse(j2["is_series"])
+        self.assertTrue(j2["has_parts"])
+        self.assertEqual(len(j2["files"]), 6)
+        self.assertIn("1080P", j2["sorted_qualities"])
+        self.assertIn("720P", j2["sorted_qualities"])
+
+        # Street Fighter should be 1 movie group with 2 parts
+        sf_groups = [g for g in groups if "street" in g["clean_name"].lower()]
+        self.assertEqual(len(sf_groups), 1)
+        self.assertFalse(sf_groups[0]["is_series"])
+        self.assertTrue(sf_groups[0]["has_parts"])
+        self.assertEqual(len(sf_groups[0]["files"]), 2)
+
+        # VisionQuest must be a series
+        vq_groups = [g for g in groups if "visionquest" in g["clean_name"].lower()]
+        self.assertEqual(len(vq_groups), 1)
+        self.assertTrue(vq_groups[0]["is_series"])
+
+
 if __name__ == "__main__":
     unittest.main()

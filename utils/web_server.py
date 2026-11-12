@@ -4825,9 +4825,26 @@ def _group_file_docs(docs: list) -> list:
             group_key = f"series:{norm_key}:s{s_num or 1}"
             disp_title = f"{clean} (Season {s_num or 1})"
         else:
-            yr_str = str(yr) if yr else ""
-            group_key = f"movie:{norm_key}:{yr_str}"
-            disp_title = f"{clean} ({yr})" if yr else clean
+            # Movie grouping: Merge with existing movie group if same normalized title and compatible year
+            existing_movie_key = None
+            for k, eg in groups.items():
+                if not eg.get("is_series") and eg.get("clean_name") and re.sub(r"[^\w]", "", eg["clean_name"].lower()) == norm_key:
+                    eg_yr = eg.get("year")
+                    if not eg_yr or not yr or abs(eg_yr - yr) <= 1:
+                        existing_movie_key = k
+                        break
+
+            if existing_movie_key:
+                group_key = existing_movie_key
+                g = groups[group_key]
+                if not g.get("year") and yr:
+                    g["year"] = yr
+                    g["title"] = f"{g['clean_name']} ({yr})"
+                    g["slug"] = re.sub(r"[^\w\-]", "-", g["title"].lower()).strip("-")
+            else:
+                yr_str = str(yr) if yr else ""
+                group_key = f"movie:{norm_key}:{yr_str}"
+                disp_title = f"{clean} ({yr})" if yr else clean
 
         gen_time = d.get("_id").generation_time if hasattr(d.get("_id"), "generation_time") else None
         if hasattr(gen_time, "replace"):
@@ -5258,8 +5275,6 @@ async def post_handler(request: web.Request):
                                     best_match = gm
                                     break
                         target_item = best_match or grouped_matches[0]
-                        if _GROUPED_CATALOG_CACHE.get("groups"):
-                            _GROUPED_CATALOG_CACHE["groups"].append(target_item)
             except Exception as e:
                 logger.error(f"Direct post_handler mongo search error for '{slug_or_id}': {e}")
 
@@ -5412,21 +5427,36 @@ async def post_handler(request: web.Request):
             </div>
             '''
     else:
-        # Movie Prints Selector (if more than 1 file or multiple qualities)
+        # Movie Prints Selector (if more than 1 file or multiple qualities or parts)
         if len(target_item.get("files", [])) > 1:
             print_cards = []
-            for f in target_item["files"]:
+            qual_order_map = {"2160p": 5, "4k": 5, "1080p": 4, "720p": 3, "540p": 2, "480p": 1}
+
+            def _sort_movie_file(f):
+                fm = parse_media_metadata(f.get("file_name", ""))
+                p_num = fm.get("part") or 0
+                q_val = (fm.get("quality") or "").lower()
+                q_score = qual_order_map.get(q_val, 1)
+                sz = int(f.get("file_size", 0))
+                return (p_num, -q_score, -sz)
+
+            sorted_movie_files = sorted(target_item["files"], key=_sort_movie_file)
+
+            for f in sorted_movie_files:
                 fn = f.get("file_name", "Movie Print")
                 fmeta = parse_media_metadata(fn)
                 fq = fmeta.get("quality") or "HD"
+                part_lbl = fmeta.get("part_label")
+                card_badge = f"{part_lbl} • {fq}" if part_lbl else fq
+                card_sub = f"{html_escape(clean_title)} ({part_lbl})" if part_lbl else html_escape(clean_title)
                 fs = get_readable_size(int(f.get("file_size", 0)))
                 fid = f.get("file_unique_id") or str(f.get("_id"))
                 print_cards.append(f'''
                 <a href="/watch/{fid}" class="print-card p-3.5 flex items-center justify-between gap-3 group">
                     <div class="flex items-center gap-2.5 min-w-0">
-                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/30">{html_escape(fq)}</span>
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/30">{html_escape(card_badge)}</span>
                         <div class="min-w-0">
-                            <div class="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition truncate">{html_escape(clean_title)}</div>
+                            <div class="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition truncate">{card_sub}</div>
                             <div class="text-[11px] text-gray-400 font-semibold">{fs} • {html_escape(source_val)}</div>
                         </div>
                     </div>
@@ -5435,11 +5465,13 @@ async def post_handler(request: web.Request):
                     </span>
                 </a>
                 ''')
+
+            section_title = f"Available Parts & Qualities ({len(target_item['files'])})" if target_item.get("has_parts") else f"Available Prints & Qualities ({len(target_item['files'])})"
             prints_or_episodes_html = f'''
             <div class="w-full mt-6 space-y-3">
                 <div class="flex items-center justify-between px-1">
                     <h2 class="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2">
-                        <span>🎬</span> <span>Available Prints & Qualities ({len(target_item['files'])})</span>
+                        <span>🎬</span> <span>{section_title}</span>
                     </h2>
                     <span class="text-xs text-gray-400 font-medium">Select your preferred video print</span>
                 </div>
@@ -5539,8 +5571,6 @@ async def browse_handler(request: web.Request):
                     for g in extra_groups:
                         if g["key"] not in existing_keys:
                             filtered_catalog.append(g)
-                            if _GROUPED_CATALOG_CACHE.get("groups"):
-                                _GROUPED_CATALOG_CACHE["groups"].append(g)
             except Exception as e:
                 logger.debug(f"Direct browse search error: {e}")
 

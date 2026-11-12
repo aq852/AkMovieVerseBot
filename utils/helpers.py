@@ -294,40 +294,70 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
     has_single_ep = bool(single_ep_m or (season_m and len(season_m.groups()) >= 2 and season_m.group(2)))
     year_m = re.search(r'\b(19\d{2}|20\d{2})\b', norm)
 
-    # 5.a Trailing and Leading episode numbers without 'E' prefix (e.g. "Title_07", "Title - 01 480p", "04 - Title")
+    # 5.a Detect Movie Multi-Part / CD / Disc (Part 1, Part 2, CD 1, CD 2, Disc 1, Disc 2, Pt 1, Pt 2, part001, part002, _001, _002)
+    part_regex = re.compile(r'(?:[\s._\-\(\[]|^)(?:part|pt|cd|disc|disk)[\s._\-]*0*([1-9]\d?)(?:[\s._\-\)\]]|$)', re.IGNORECASE)
+    segment_regex = re.compile(r'[_.-]00([1-9])\.(?:mkv|mp4|avi)$', re.IGNORECASE)
+
+    is_part = False
+    part_num = None
+    part_label = None
+    part_match_start = None
+
+    if not season_m and not single_ep_m and not range_m:
+        matches = list(part_regex.finditer(norm))
+        if matches:
+            last_m = matches[-1]
+            part_num = int(last_m.group(1))
+            matched_text = last_m.group(0)
+            prefix = "CD" if re.search(r'\bCD\b', matched_text, re.IGNORECASE) else ("Disc" if re.search(r'\bDisc\b', matched_text, re.IGNORECASE) else "Part")
+            part_label = f"{prefix} {part_num}"
+            is_part = True
+            part_match_start = last_m.start()
+        else:
+            seg_m = segment_regex.search(raw)
+            if seg_m:
+                part_num = int(seg_m.group(1))
+                part_label = f"Part {part_num}"
+                is_part = True
+                part_match_start = seg_m.start()
+
+    # 5.b Trailing and Leading episode numbers without 'E' prefix (e.g. "Title - 01 480p", "04 - Title")
     trail_ep_m = None
     lead_ep_m = None
-    if not season_m and not single_ep_m and not range_m and not has_combined_word:
+    if not season_m and not single_ep_m and not range_m and not has_combined_word and not is_part:
         trail_match = re.search(
-            r'(?:[-_–\s]+|\b)(?:ep|e|episode)?\s*0*([1-9]\d{0,2})\s*(?:[-_–\s]+(?:480p|720p|1080p|2160p|4k|hevc|x264|x265|bluray|web|hdrip|dvdscr|aac|flac|hindi|english|dual)|$)',
+            r'(?:[-_–\s]+|\b)(?:(?:ep|e|episode|eps)[\s._-]*([1-9]\d{0,3})|(0[1-9]\d?))\s*(?:[-_–\s]+(?:480p|720p|1080p|2160p|4k|hevc|x264|x265|bluray|web|hdrip|dvdscr|aac|flac|hindi|english|dual)|$)',
             norm, re.IGNORECASE
         )
         if trail_match:
-            cand_ep = int(trail_match.group(1))
-            if not (year_m and trail_match.start() == year_m.start()):
-                trail_ep_m = trail_match
+            cand_str = trail_match.group(1) or trail_match.group(2)
+            if cand_str:
+                cand_ep = int(cand_str)
+                if not (year_m and trail_match.start() == year_m.start()):
+                    trail_ep_m = trail_match
 
         if not trail_ep_m:
-            lead_match = re.match(r'^\s*0*([1-9]\d{0,2})\s*[-_–\s]+(.*?)$', norm, re.IGNORECASE)
+            lead_match = re.match(r'^\s*(0[1-9]\d?)\s*[-_–\s]+(.*?)$', norm, re.IGNORECASE)
             if lead_match:
                 cand_lead_title = lead_match.group(2)
                 if not re.search(r'\b(?:the[\s._-]*movie|movie)\b', cand_lead_title, re.IGNORECASE):
-                    cand_lead = int(lead_match.group(1))
-                    if cand_lead <= 999:
-                        lead_ep_m = lead_match
+                    lead_ep_m = lead_match
 
-    is_series = bool(season_m or single_ep_m or range_m or has_combined_word or trail_ep_m or lead_ep_m)
+    # A file with movie parts (Part 1, Part 2, CD 1) without an explicit Season marker is a MOVIE, NOT a series!
+    is_series = bool((season_m or single_ep_m or range_m or has_combined_word or trail_ep_m or lead_ep_m) and not (is_part and not season_m))
     s_num = int(season_m.group(1)) if season_m else (1 if is_series else None)
     
     ep_num = None
-    if season_m and len(season_m.groups()) >= 2 and season_m.group(2):
-        ep_num = int(season_m.group(2))
-    elif single_ep_m:
-        ep_num = int(single_ep_m.group(1))
-    elif trail_ep_m:
-        ep_num = int(trail_ep_m.group(1))
-    elif lead_ep_m:
-        ep_num = int(lead_ep_m.group(1))
+    if is_series:
+        if season_m and len(season_m.groups()) >= 2 and season_m.group(2):
+            ep_num = int(season_m.group(2))
+        elif single_ep_m:
+            ep_num = int(single_ep_m.group(1))
+        elif trail_ep_m:
+            cand_s = trail_ep_m.group(1) or trail_ep_m.group(2)
+            ep_num = int(cand_s) if cand_s else None
+        elif lead_ep_m:
+            ep_num = int(lead_ep_m.group(1))
 
     combined_badge = None
     extra_title = ""
@@ -354,33 +384,6 @@ def parse_media_metadata(filename: str, caption: str = "") -> dict:
         extra_title = f" Season {s_num}"
         is_combined = True
         start_ep = 1
-
-    # 5.b Detect Movie Multi-Part / CD / Disc (Part 1, Part 2, CD 1, CD 2, Disc 1, Disc 2, Pt 1, Pt 2, part001, part002, _001, _002)
-    part_regex = re.compile(r'(?:[\s._\-\(\[]|^)(?:part|pt|cd|disc|disk)[\s._\-]*0*([1-9]\d?)(?:[\s._\-\)\]]|$)', re.IGNORECASE)
-    segment_regex = re.compile(r'[_.-]00([1-9])\.(?:mkv|mp4|avi)$', re.IGNORECASE)
-
-    is_part = False
-    part_num = None
-    part_label = None
-    part_match_start = None
-
-    if not season_m and not single_ep_m and not range_m:
-        matches = list(part_regex.finditer(norm))
-        if matches:
-            last_m = matches[-1]
-            part_num = int(last_m.group(1))
-            matched_text = last_m.group(0)
-            prefix = "CD" if re.search(r'\bCD\b', matched_text, re.IGNORECASE) else ("Disc" if re.search(r'\bDisc\b', matched_text, re.IGNORECASE) else "Part")
-            part_label = f"{prefix} {part_num}"
-            is_part = True
-            part_match_start = last_m.start()
-        else:
-            seg_m = segment_regex.search(raw)
-            if seg_m:
-                part_num = int(seg_m.group(1))
-                part_label = f"Part {part_num}"
-                is_part = True
-                part_match_start = seg_m.start()
 
     # 6. Extract Clean Base Title (Everything before Year / Season / Episode / Part / Resolution)
     split_indices = []
