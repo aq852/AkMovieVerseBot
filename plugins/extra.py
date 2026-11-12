@@ -1562,10 +1562,24 @@ async def restart_bot_cmd(client: Client, message: Message):
         bot_script = os.path.abspath("bot.py")
     python_bin = sys.executable
 
-    # 4. Detached launcher with 2-second sleep to cleanly release port 8080 & SQLite locks
+    # 4. Detached launcher with smart systemd service detection
     if sys.platform != "win32":
-        cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
-        subprocess.Popen(cmd, shell=True, start_new_session=True)
+        service_name = None
+        for sname in ["akbot", "autofilterbot"]:
+            try:
+                res = subprocess.run(["systemctl", "is-active", sname], capture_output=True, text=True, timeout=2)
+                if res.returncode == 0 and "active" in res.stdout:
+                    service_name = sname
+                    break
+            except Exception:
+                pass
+
+        if service_name:
+            cmd = f"sleep 1 && systemctl restart {service_name}"
+            subprocess.Popen(cmd, shell=True, start_new_session=True)
+        else:
+            cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
+            subprocess.Popen(cmd, shell=True, start_new_session=True)
     else:
         cmd = f"timeout /t 2 /nobreak && cd /d \"{root_dir}\" && \"{python_bin}\" \"{bot_script}\""
         subprocess.Popen(cmd, shell=True)
@@ -1625,8 +1639,22 @@ async def update_bot_cmd(client: Client, message: Message):
         pass
 
     if sys.platform != "win32":
-        cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
-        subprocess.Popen(cmd, shell=True, start_new_session=True)
+        service_name = None
+        for sname in ["akbot", "autofilterbot"]:
+            try:
+                res = subprocess.run(["systemctl", "is-active", sname], capture_output=True, text=True, timeout=2)
+                if res.returncode == 0 and "active" in res.stdout:
+                    service_name = sname
+                    break
+            except Exception:
+                pass
+
+        if service_name:
+            cmd = f"sleep 1 && systemctl restart {service_name}"
+            subprocess.Popen(cmd, shell=True, start_new_session=True)
+        else:
+            cmd = f"sleep 2 && cd '{root_dir}' && '{python_bin}' '{bot_script}'"
+            subprocess.Popen(cmd, shell=True, start_new_session=True)
     else:
         cmd = f"timeout /t 2 /nobreak && cd /d \"{root_dir}\" && \"{python_bin}\" \"{bot_script}\""
         subprocess.Popen(cmd, shell=True)
