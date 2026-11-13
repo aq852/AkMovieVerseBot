@@ -65,25 +65,32 @@ _DYNAMIC_JUNK_CACHE = None
 
 
 async def get_dynamic_junk_words() -> set[str]:
-    """Retrieve dynamic junk words from MongoDB with in-memory caching."""
+    """Retrieve dynamic junk words from MongoDB with in-memory caching and dual-cluster resilience."""
     global _DYNAMIC_JUNK_CACHE
     if _DYNAMIC_JUNK_CACHE is not None:
         return _DYNAMIC_JUNK_CACHE
 
     try:
         doc = await mongo.db["bot_settings"].find_one({"key": "dynamic_junk_words"})
-        if doc and "words" in doc:
+        if doc and "words" in doc and isinstance(doc["words"], list):
             _DYNAMIC_JUNK_CACHE = set(w.lower().strip() for w in doc["words"] if w.strip())
             return _DYNAMIC_JUNK_CACHE
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "dynamic_junk_words"})
+            if doc2 and "words" in doc2 and isinstance(doc2["words"], list):
+                _DYNAMIC_JUNK_CACHE = set(w.lower().strip() for w in doc2["words"] if w.strip())
+                return _DYNAMIC_JUNK_CACHE
     except Exception as e:
         logger.debug(f"Error fetching dynamic junk words: {e}")
+        # Return empty set for this request without caching it, so subsequent calls can retry
+        return set()
 
     _DYNAMIC_JUNK_CACHE = set()
     return _DYNAMIC_JUNK_CACHE
 
 
 async def add_dynamic_junk_word(word: str) -> bool:
-    """Add a new custom junk word or site tag to MongoDB blacklist."""
+    """Add a new custom junk word or site tag to MongoDB blacklist atomically via $addToSet."""
     global _DYNAMIC_JUNK_CACHE
     clean_w = word.strip().lower()
     if not clean_w:
@@ -96,9 +103,18 @@ async def add_dynamic_junk_word(word: str) -> bool:
     try:
         await mongo.db["bot_settings"].update_one(
             {"key": "dynamic_junk_words"},
-            {"$set": {"words": list(current_words)}},
+            {"$addToSet": {"words": clean_w}},
             upsert=True
         )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "dynamic_junk_words"},
+                    {"$addToSet": {"words": clean_w}},
+                    upsert=True
+                )
+            except Exception:
+                pass
         return True
     except Exception as e:
         logger.error(f"Error saving dynamic junk word '{clean_w}': {e}")
@@ -106,19 +122,28 @@ async def add_dynamic_junk_word(word: str) -> bool:
 
 
 async def remove_dynamic_junk_word(word: str) -> bool:
-    """Remove a custom junk word from MongoDB blacklist."""
+    """Remove a custom junk word from MongoDB blacklist atomically via $pull."""
     global _DYNAMIC_JUNK_CACHE
     clean_w = word.strip().lower()
     current_words = await get_dynamic_junk_words()
     if clean_w in current_words:
-        current_words.remove(clean_w)
+        current_words.discard(clean_w)
         _DYNAMIC_JUNK_CACHE = current_words
         try:
             await mongo.db["bot_settings"].update_one(
                 {"key": "dynamic_junk_words"},
-                {"$set": {"words": list(current_words)}},
+                {"$pull": {"words": clean_w}},
                 upsert=True
             )
+            if mongo.has_secondary:
+                try:
+                    await mongo.db2["bot_settings"].update_one(
+                        {"key": "dynamic_junk_words"},
+                        {"$pull": {"words": clean_w}},
+                        upsert=True
+                    )
+                except Exception:
+                    pass
             return True
         except Exception as e:
             logger.error(f"Error removing dynamic junk word '{clean_w}': {e}")

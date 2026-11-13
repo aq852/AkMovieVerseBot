@@ -414,24 +414,41 @@ async def back_home_callback(client: Client, query: CallbackQuery):
     await query.answer()
 
 
+_VIP_PAYMENT_CACHE = {"data": None, "loaded": False}
+
+
 async def get_vip_payment_info() -> dict:
-    """Retrieve dynamic VIP payment info (UPI ID, QR URL, USDT Address) from MongoDB with Config fallback."""
-    try:
-        from database.mongo import mongo
-        doc = await mongo.db["bot_settings"].find_one({"key": "vip_payment"})
-        if doc:
-            return {
-                "upi_id": doc.get("upi_id") or Config.UPI_ID,
-                "upi_qr_url": doc.get("upi_qr_url") or Config.UPI_QR_URL,
-                "usdt_trc20": doc.get("usdt_trc20") or Config.USDT_TRC20
-            }
-    except Exception as e:
-        logger.debug(f"Error reading vip_payment settings: {e}")
-    return {
+    """Retrieve dynamic VIP payment info (UPI ID, QR URL, USDT Address) from MongoDB with secondary DB and Config fallback."""
+    if _VIP_PAYMENT_CACHE["loaded"] and _VIP_PAYMENT_CACHE["data"]:
+        return _VIP_PAYMENT_CACHE["data"]
+
+    base = {
         "upi_id": Config.UPI_ID,
         "upi_qr_url": Config.UPI_QR_URL,
         "usdt_trc20": Config.USDT_TRC20
     }
+    try:
+        from database.mongo import mongo
+        doc = await mongo.db["bot_settings"].find_one({"key": "vip_payment"})
+        if not doc and mongo.has_secondary:
+            doc = await mongo.db2["bot_settings"].find_one({"key": "vip_payment"})
+
+        if doc:
+            data = {
+                "upi_id": doc.get("upi_id") or Config.UPI_ID,
+                "upi_qr_url": doc.get("upi_qr_url") or Config.UPI_QR_URL,
+                "usdt_trc20": doc.get("usdt_trc20") or Config.USDT_TRC20
+            }
+            _VIP_PAYMENT_CACHE["data"] = data
+            _VIP_PAYMENT_CACHE["loaded"] = True
+            return data
+    except Exception as e:
+        logger.debug(f"Error reading vip_payment settings: {e}")
+        return base
+
+    _VIP_PAYMENT_CACHE["data"] = base
+    _VIP_PAYMENT_CACHE["loaded"] = True
+    return base
 
 
 @Client.on_callback_query(filters.regex(r"^view_plans"))
@@ -856,11 +873,25 @@ async def setupi_cmd(client: Client, message: Message):
         return
     new_upi = args[1].strip()
     from database.mongo import mongo
-    await mongo.db["bot_settings"].update_one(
-        {"key": "vip_payment"},
-        {"$set": {"upi_id": new_upi}},
-        upsert=True
-    )
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "vip_payment"},
+            {"$set": {"upi_id": new_upi}},
+            upsert=True
+        )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "vip_payment"},
+                    {"$set": {"upi_id": new_upi}},
+                    upsert=True
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error(f"Error persisting UPI ID: {e}")
+    global _VIP_PAYMENT_CACHE
+    _VIP_PAYMENT_CACHE["loaded"] = False
     await message.reply_text(f"✅ <b>UPI ID Successfully Updated:</b>\n<code>{html.escape(new_upi)}</code>")
 
 
@@ -880,11 +911,25 @@ async def setupiqr_cmd(client: Client, message: Message):
         return
     new_qr = args[1].strip()
     from database.mongo import mongo
-    await mongo.db["bot_settings"].update_one(
-        {"key": "vip_payment"},
-        {"$set": {"upi_qr_url": new_qr}},
-        upsert=True
-    )
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "vip_payment"},
+            {"$set": {"upi_qr_url": new_qr}},
+            upsert=True
+        )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "vip_payment"},
+                    {"$set": {"upi_qr_url": new_qr}},
+                    upsert=True
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error(f"Error persisting UPI QR URL: {e}")
+    global _VIP_PAYMENT_CACHE
+    _VIP_PAYMENT_CACHE["loaded"] = False
     await message.reply_text(f"✅ <b>UPI QR URL Successfully Updated:</b>\n<code>{html.escape(new_qr)}</code>")
 
 
@@ -904,11 +949,25 @@ async def setusdt_cmd(client: Client, message: Message):
         return
     new_usdt = args[1].strip()
     from database.mongo import mongo
-    await mongo.db["bot_settings"].update_one(
-        {"key": "vip_payment"},
-        {"$set": {"usdt_trc20": new_usdt}},
-        upsert=True
-    )
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "vip_payment"},
+            {"$set": {"usdt_trc20": new_usdt}},
+            upsert=True
+        )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "vip_payment"},
+                    {"$set": {"usdt_trc20": new_usdt}},
+                    upsert=True
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error(f"Error persisting USDT Address: {e}")
+    global _VIP_PAYMENT_CACHE
+    _VIP_PAYMENT_CACHE["loaded"] = False
     await message.reply_text(f"✅ <b>USDT Address Successfully Updated:</b>\n<code>{html.escape(new_usdt)}</code>")
 
 

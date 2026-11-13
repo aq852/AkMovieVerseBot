@@ -96,7 +96,7 @@ async def get_all_active_shorteners() -> list[dict]:
                 shorteners.append({"domain": clean_dom, "api": api.strip(), "source": tag})
                 seen_domains.add(clean_dom)
 
-    # 2. Load dynamic shorteners from MongoDB
+    # 2. Load dynamic shorteners from MongoDB with secondary DB fallback
     try:
         cursor = mongo.shorteners.find({})
         db_items = await cursor.to_list(length=50)
@@ -105,6 +105,17 @@ async def get_all_active_shorteners() -> list[dict]:
             if clean_dom not in seen_domains and item.get("api"):
                 shorteners.append({"domain": clean_dom, "api": item["api"].strip(), "source": "Dynamic DB"})
                 seen_domains.add(clean_dom)
+        if mongo.has_secondary:
+            try:
+                cursor2 = mongo.db2["multi_shorteners"].find({})
+                db_items2 = await cursor2.to_list(length=50)
+                for item in db_items2:
+                    clean_dom = item["domain"].strip().replace("https://", "").replace("http://", "").rstrip("/")
+                    if clean_dom not in seen_domains and item.get("api"):
+                        shorteners.append({"domain": clean_dom, "api": item["api"].strip(), "source": "Dynamic DB Secondary"})
+                        seen_domains.add(clean_dom)
+            except Exception:
+                pass
     except Exception as e:
         logger.debug(f"Could not load shorteners from MongoDB: {e}")
 
@@ -164,7 +175,7 @@ async def get_shortlink(destination_url: str, shortener_url: str = None, shorten
 
 # MongoDB Dynamic Shorteners Management Helpers
 async def add_custom_shortener(domain: str, api_key: str) -> bool:
-    """Dynamically add or update a shortener in the rotation database."""
+    """Dynamically add or update a shortener in the rotation database with dual-cluster sync."""
     clean_dom = domain.strip().replace("https://", "").replace("http://", "").rstrip("/")
     try:
         await mongo.shorteners.update_one(
@@ -172,6 +183,15 @@ async def add_custom_shortener(domain: str, api_key: str) -> bool:
             {"$set": {"domain": clean_dom, "api": api_key.strip()}},
             upsert=True
         )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["multi_shorteners"].update_one(
+                    {"domain": clean_dom},
+                    {"$set": {"domain": clean_dom, "api": api_key.strip()}},
+                    upsert=True
+                )
+            except Exception:
+                pass
         return True
     except Exception as e:
         logger.error(f"Error adding shortener {domain}: {e}")
@@ -179,10 +199,15 @@ async def add_custom_shortener(domain: str, api_key: str) -> bool:
 
 
 async def remove_custom_shortener(domain: str) -> bool:
-    """Remove a shortener from the dynamic database."""
+    """Remove a shortener from the dynamic database with dual-cluster sync."""
     clean_dom = domain.strip().replace("https://", "").replace("http://", "").rstrip("/")
     try:
         res = await mongo.shorteners.delete_one({"domain": clean_dom})
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["multi_shorteners"].delete_one({"domain": clean_dom})
+            except Exception:
+                pass
         return res.deleted_count > 0
     except Exception as e:
         logger.error(f"Error removing shortener {domain}: {e}")

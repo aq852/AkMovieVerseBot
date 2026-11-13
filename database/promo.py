@@ -47,6 +47,11 @@ async def create_promo_code(
             "created_by": created_by
         }
         await mongo.db["promo_codes"].insert_one(doc)
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["promo_codes"].insert_one(doc.copy())
+            except Exception:
+                pass
         logger.info(f"Promo code created: {clean_code} ({days} days, {max_uses} uses)")
         return True, "Promo code created successfully.", doc
     except Exception as e:
@@ -66,6 +71,11 @@ async def redeem_promo_code(code: str, user_id: int) -> tuple[bool, str, int]:
 
     try:
         promo = await mongo.db["promo_codes"].find_one({"code": clean_code})
+        if not promo and mongo.has_secondary:
+            try:
+                promo = await mongo.db2["promo_codes"].find_one({"code": clean_code})
+            except Exception:
+                pass
         if not promo:
             return False, "❌ Invalid promo code. Please double-check and try again.", 0
 
@@ -128,10 +138,15 @@ async def get_all_promos(limit: int = 30) -> list[dict]:
 
 
 async def delete_promo_code(code: str) -> bool:
-    """Delete or deactivate an existing promo code."""
+    """Delete or deactivate an existing promo code with dual-cluster sync."""
     clean_code = code.strip().upper()
     try:
         res = await mongo.db["promo_codes"].delete_one({"code": clean_code})
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["promo_codes"].delete_one({"code": clean_code})
+            except Exception:
+                pass
         return res.deleted_count > 0
     except Exception as e:
         logger.error(f"Error deleting promo code {clean_code}: {e}")

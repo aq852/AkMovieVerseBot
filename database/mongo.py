@@ -193,17 +193,47 @@ async def load_dynamic_settings():
             "maintenance_mode": ("MAINTENANCE_MODE", lambda v: bool(v)),
             "maintenance_reason": ("MAINTENANCE_REASON", lambda v: str(v)),
             "daily_free_limit": ("DAILY_FREE_LIMIT", lambda v: int(v)),
+            "file_auto_delete_time": ("FILE_AUTO_DELETE_TIME", lambda v: int(v)),
+            "search_auto_delete_time": ("AUTO_DELETE_TIME", lambda v: int(v)),
+            "vip_file_auto_delete_time": ("VIP_FILE_AUTO_DELETE_TIME", lambda v: int(v)),
+            "auto_clean_enabled": ("AUTO_CLEAN_ENABLED", lambda v: bool(v)),
+            "daily_broadcast_enabled": ("DAILY_BROADCAST_ENABLED", lambda v: bool(v)),
+            "daily_broadcast_time": ("DAILY_BROADCAST_TIME", lambda v: str(v)),
         }
 
-        async for doc in mongo.settings.find({}):
-            key = doc.get("_id")
-            val = doc.get("value")
-            if key in settings_map and val is not None:
-                attr_name, caster = settings_map[key]
-                try:
-                    setattr(Config, attr_name, caster(val))
-                except Exception as cast_err:
-                    logger.warning(f"Failed to cast dynamic setting '{key}' = {val}: {cast_err}")
+        # Load from primary bot_settings
+        loaded_keys = set()
+        try:
+            async for doc in mongo.settings.find({}):
+                key = doc.get("_id")
+                val = doc.get("value")
+                if key in settings_map and val is not None:
+                    attr_name, caster = settings_map[key]
+                    try:
+                        setattr(Config, attr_name, caster(val))
+                        _SETTINGS_CACHE[key] = val
+                        loaded_keys.add(key)
+                    except Exception as cast_err:
+                        logger.warning(f"Failed to cast dynamic setting '{key}' = {val}: {cast_err}")
+        except Exception as prim_err:
+            logger.warning(f"Failed to load settings from primary DB: {prim_err}")
+
+        # Secondary DB fallback for missing keys
+        if mongo.has_secondary:
+            try:
+                async for doc2 in mongo.db2["bot_settings"].find({}):
+                    key = doc2.get("_id")
+                    val = doc2.get("value")
+                    if key in settings_map and val is not None and key not in loaded_keys:
+                        attr_name, caster = settings_map[key]
+                        try:
+                            setattr(Config, attr_name, caster(val))
+                            _SETTINGS_CACHE[key] = val
+                            loaded_keys.add(key)
+                        except Exception:
+                            pass
+            except Exception as sec_err:
+                logger.debug(f"Secondary settings hydration note: {sec_err}")
 
         # Hydrate dynamic storage channels from MongoDB into Config.CHANNELS
         try:
@@ -222,12 +252,39 @@ async def load_dynamic_settings():
             logger.debug(f"Could not pre-warm auto-gift config: {gift_err}")
 
         try:
-            from plugins.channel_post import is_auto_post_enabled, get_target_updates_channel, get_autopost_style
+            from plugins.channel_post import is_auto_post_enabled, get_target_updates_channel, get_autopost_style, get_autopost_custom_button
             await is_auto_post_enabled()
             await get_target_updates_channel()
             await get_autopost_style()
+            await get_autopost_custom_button()
         except Exception as post_err:
             logger.debug(f"Could not pre-warm auto-post prefs: {post_err}")
+
+        try:
+            from plugins.auto_approve import get_auto_approve_channels, get_welcome_text, get_welcome_pic
+            await get_auto_approve_channels()
+            await get_welcome_text()
+            await get_welcome_pic()
+        except Exception as app_err:
+            logger.debug(f"Could not pre-warm auto-approve settings: {app_err}")
+
+        try:
+            from utils.title_cleaner import get_dynamic_junk_words
+            await get_dynamic_junk_words()
+        except Exception as junk_err:
+            logger.debug(f"Could not pre-warm junk words: {junk_err}")
+
+        try:
+            from plugins.extra import get_vip_payment_info
+            await get_vip_payment_info()
+        except Exception as pay_err:
+            logger.debug(f"Could not pre-warm vip payment info: {pay_err}")
+
+        try:
+            from database.poster import get_tmdb_credentials
+            await get_tmdb_credentials()
+        except Exception as tmdb_err:
+            logger.debug(f"Could not pre-warm tmdb credentials: {tmdb_err}")
 
         logger.info(
             f"⚡ Persistent settings loaded from MongoDB: "
