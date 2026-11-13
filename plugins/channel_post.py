@@ -1733,12 +1733,18 @@ async def set_custom_poster_command(client: Client, message: Message):
 
     # 3. Update in-memory caches
     from utils.helpers import _POSTER_CACHE
+    keys_to_del = [k for k in list(_POSTER_CACHE.keys()) if k.startswith(clean_q.lower()) or k == clean_q or k.startswith(norm_key)]
+    for k in keys_to_del:
+        _POSTER_CACHE.pop(k, None)
     _POSTER_CACHE[clean_q] = poster_url
+    _POSTER_CACHE[clean_q.lower()] = poster_url
+    _POSTER_CACHE[norm_key] = poster_url
     _TMDB_POST_CACHE.clear()
 
-    # 4. Invalidate MongoDB tmdb_post_cache
+    # 4. Invalidate MongoDB tmdb_post_cache & old poster_cache entries
     try:
         await mongo.db["tmdb_post_cache"].delete_many({"key": {"$regex": f"^{norm_key}:"}})
+        await mongo.db["poster_cache"].delete_many({"key": {"$regex": f"^{clean_q.lower()}:"}})
     except Exception:
         pass
 
@@ -1773,10 +1779,12 @@ async def delete_custom_poster_command(client: Client, message: Message):
     norm_key = re.sub(r"[^\w]", "", clean_q.lower())
 
     await mongo.db["custom_posters"].delete_many({"$or": [{"key": norm_key}, {"title": clean_q}]})
-    await mongo.db["poster_cache"].delete_many({"title": clean_q})
+    await mongo.db["poster_cache"].delete_many({"$or": [{"title": clean_q}, {"key": {"$regex": f"^{clean_q.lower()}:"}}]})
 
     from utils.helpers import _POSTER_CACHE
-    _POSTER_CACHE.pop(clean_q, None)
+    keys_to_del = [k for k in list(_POSTER_CACHE.keys()) if k.startswith(clean_q.lower()) or k == clean_q or k.startswith(norm_key)]
+    for k in keys_to_del:
+        _POSTER_CACHE.pop(k, None)
     _TMDB_POST_CACHE.clear()
 
     await message.reply_text(
