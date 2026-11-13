@@ -2462,6 +2462,46 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_start_and_back_home_menu_consistency(self):
+        """Verify that /start and 'Back to Home' navigation share identical content and buttons without rogue VIP buttons."""
+        from plugins.start import build_start_menu_content
+        from plugins.extra import back_home_callback
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        async def _test():
+            # 1. Generate start menu content
+            welcome_text, markup = await build_start_menu_content(12345, "Amit", "TheFlixifyBot")
+            self.assertIn("JAI SHRI RAM", welcome_text)
+            self.assertIn("Amit", welcome_text)
+            self.assertIn("TheFlixifyBot", welcome_text)
+
+            buttons = [btn.text for row in markup.inline_keyboard for btn in row]
+            self.assertIn("🔰 ADD ME TO YOUR GROUP 🔰", buttons)
+            self.assertIn("HELP 📢", buttons)
+            self.assertIn("ABOUT 📖", buttons)
+            # Ensure "UPGRADE TO VIP" is NOT present on standard start menu
+            self.assertNotIn("UPGRADE TO VIP 🎟️", buttons)
+
+            # 2. Test back_home_callback edits caption and restores identical start markup
+            mock_client = MagicMock()
+            mock_client.me.username = "TheFlixifyBot"
+            mock_query = MagicMock()
+            mock_query.from_user.id = 12345
+            mock_query.from_user.first_name = "Amit"
+            mock_query.message.photo = True
+            mock_query.message.edit_caption = AsyncMock()
+            mock_query.answer = AsyncMock()
+
+            await back_home_callback(mock_client, mock_query)
+            mock_query.message.edit_caption.assert_called_once()
+            called_kwargs = mock_query.message.edit_caption.call_args.kwargs
+            self.assertEqual(called_kwargs["caption"], welcome_text)
+            back_buttons = [btn.text for row in called_kwargs["reply_markup"].inline_keyboard for btn in row]
+            self.assertEqual(buttons, back_buttons)
+
+        asyncio.run(_test())
+
     def test_stream_catalog_management_and_bare_codes(self):
         """Verify bare-code filtering (e.g. S02E33), dynamic stream cutoff settings, and cache clearance."""
         from utils.helpers import parse_media_metadata

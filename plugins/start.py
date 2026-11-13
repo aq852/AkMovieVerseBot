@@ -717,7 +717,8 @@ async def start_command_handler(client: Client, message: Message):
         await message.reply_text(success_text, reply_markup=markup, disable_web_page_preview=True)
         return
 
-    # 7. Standard /start Greeting
+async def build_start_menu_content(user_id: int, name: str, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Generate consistent welcome text and interactive button markup for /start and Back-to-Home."""
     hour = datetime.datetime.utcnow().hour + 5.5
     if 5 <= hour < 12:
         greeting_time = "GOOD MORNING 🌅"
@@ -730,7 +731,7 @@ async def start_command_handler(client: Client, message: Message):
 
     welcome_text = (
         f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
-        f"HEY <b>{name}</b>, {greeting_time}\n\n"
+        f"HEY <b>{html.escape(name)}</b>, {greeting_time}\n\n"
         f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
     )
 
@@ -764,7 +765,11 @@ async def start_command_handler(client: Client, message: Message):
         except Exception as e:
             logger.debug(f"Could not load sponsor ad for start: {e}")
 
-    markup = InlineKeyboardMarkup(markup_rows)
+    return welcome_text, InlineKeyboardMarkup(markup_rows)
+
+
+    # 7. Standard /start Greeting
+    welcome_text, markup = await build_start_menu_content(user_id, name, bot_username)
 
     sent = False
     start_pic = get_random_start_pic()

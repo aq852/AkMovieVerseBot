@@ -394,42 +394,23 @@ async def about_menu_callback(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^back_home"))
 async def back_home_callback(client: Client, query: CallbackQuery):
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
-    name = query.from_user.first_name
-    welcome_text = (
-        f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
-        f"HEY <b>{name}</b>!\n\n"
-        f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
-    )
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
-        [
-            InlineKeyboardButton("HELP 📢", callback_data="help_menu"),
-            InlineKeyboardButton("ABOUT 📖", callback_data="about_menu")
-        ],
-        [
-            InlineKeyboardButton("UPGRADE TO VIP 🎟️", callback_data="view_plans")
-        ]
-    ])
+    user_id = query.from_user.id if query.from_user else 0
+    name = (query.from_user.first_name if query.from_user else "Friend") or "Friend"
 
-    start_pic = get_random_start_pic()
+    from plugins.start import build_start_menu_content
+    welcome_text, markup = await build_start_menu_content(user_id, name, bot_username)
 
     try:
         if query.message.photo:
-            if start_pic:
-                try:
-                    await query.message.edit_media(
-                        media=InputMediaPhoto(start_pic, caption=welcome_text),
-                        reply_markup=markup
-                    )
-                    await query.answer()
-                    return
-                except Exception as e:
-                    logger.debug(f"Failed to edit_media in back_home: {e}")
             await query.message.edit_caption(caption=welcome_text, reply_markup=markup)
         else:
             await query.message.edit_text(welcome_text, reply_markup=markup)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error restoring home in back_home: {e}")
+        try:
+            await query.message.reply_text(welcome_text, reply_markup=markup)
+        except Exception:
+            pass
     await query.answer()
 
 
