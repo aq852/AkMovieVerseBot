@@ -76,39 +76,74 @@ def apply_watermark(image_path: str, watermark_text: str = "@AkMovieVerse") -> s
 
 
 async def get_video_duration(file_path: str) -> float:
-    """Get duration of video in seconds using ffprobe."""
+    """Get duration of video in seconds using ffprobe with strict timeout and no hang."""
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", file_path,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, _ = await proc.communicate()
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=12.0)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return 0.0
+
         dur_str = stdout.decode().strip()
         if dur_str:
             return float(dur_str)
     except Exception as e:
         logger.debug(f"ffprobe duration check failed: {e}")
+        if proc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
     return 0.0
 
 
 async def extract_frame_ffmpeg(video_path: str, timestamp_sec: float, output_path: str) -> bool:
-    """Extract a single frame at timestamp using ffmpeg."""
+    """Extract a single frame at timestamp using ffmpeg with strict timeout and no hang."""
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-ss", f"{timestamp_sec:.2f}",
+            "ffmpeg", "-nostdin", "-y",
+            "-ss", f"{timestamp_sec:.2f}",
             "-i", video_path,
             "-vframes", "1",
             "-q:v", "2",
-            "-y", output_path,
+            "-loglevel", "error",
+            output_path,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await proc.communicate()
+        try:
+            await asyncio.wait_for(proc.communicate(), timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"ffmpeg frame extraction timed out at {timestamp_sec}s")
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return False
+
         return os.path.exists(output_path) and os.path.getsize(output_path) > 1000
     except Exception as e:
         logger.warning(f"ffmpeg frame extraction failed at {timestamp_sec}s: {e}")
+        if proc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         return False
 
 

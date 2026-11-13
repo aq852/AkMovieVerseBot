@@ -971,25 +971,45 @@ async def save_auto_gift_config(updates: dict):
 
 
 async def extract_sample_clip_ffmpeg(video_path: str, start_sec: float, duration_sec: int, output_path: str) -> bool:
-    """Extract a 2-4 second preview clip using ffmpeg with safe fallback."""
+    """Extract a 2-4 second preview clip using ffmpeg with safe fallback and strict timeout."""
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-ss", f"{start_sec:.2f}",
+            "ffmpeg", "-nostdin", "-y",
+            "-ss", f"{start_sec:.2f}",
             "-i", video_path,
             "-t", str(duration_sec),
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "28",
+            "-an",  # Strip audio for ultra-fast sample generation and avoid audio sync hangs
             "-movflags", "+faststart",
-            "-y", output_path,
+            "-loglevel", "error",
+            output_path,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await proc.communicate()
+        try:
+            await asyncio.wait_for(proc.communicate(), timeout=20.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"ffmpeg sample clip extraction timed out after 20s for {video_path}")
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return False
+
         if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
             return True
     except Exception as e:
         logger.warning(f"ffmpeg sample clip extraction error: {e}")
+        if proc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
     return False
 
 
@@ -1136,9 +1156,11 @@ async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMar
         queued_cursor = mongo.db["gift_post_queue"].find({"status": "queued"}).sort("queued_at", 1)
         queued_items = await queued_cursor.to_list(length=10)
         total_count = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+        failed_count = await mongo.db["gift_post_queue"].count_documents({"status": "failed"})
     except Exception:
         queued_items = []
         total_count = 0
+        failed_count = 0
 
     int_sec = cfg.get("interval_seconds", 0)
     if int_sec == 0:
@@ -1151,8 +1173,25 @@ async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMar
     is_paused = cfg.get("queue_paused", False)
     status_emoji = "⏸️ PAUSED" if is_paused else ("🟢 DRIP-FEED ACTIVE" if int_sec > 0 else "⚡ INSTANT MODE")
 
+    # Accurate IST Quiet Hours Status
+    now_utc = datetime.datetime.utcnow()
+    ist_hour = (now_utc.hour + 5 + (now_utc.minute + 30) // 60) % 24
+    q_start = int(cfg.get("quiet_start_hour", 0))
+    q_end = int(cfg.get("quiet_end_hour", 8))
     quiet_on = cfg.get("quiet_hours_enabled", False)
-    quiet_str = "🌙 Active (12 AM - 8 AM Pause)" if quiet_on else "☀️ 24/7 Drip Feed"
+    in_quiet = False
+    if quiet_on:
+        if q_start < q_end:
+            in_quiet = (q_start <= ist_hour < q_end)
+        elif q_start > q_end:
+            in_quiet = (ist_hour >= q_start or ist_hour < q_end)
+
+    if in_quiet:
+        quiet_str = f"🌙 Active & Sleeping ({q_start} to {q_end} IST)"
+    elif quiet_on:
+        quiet_str = f"🌙 Armed ({q_start} to {q_end} IST)"
+    else:
+        quiet_str = "☀️ Disabled (24/7 Drops)"
 
     clean_on = cfg.get("clean_previous_post", False)
     clean_str = "🧹 Clean (Single active post)" if clean_on else "📜 Archive (Keep all)"
@@ -1161,6 +1200,8 @@ async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMar
     time_since_last = now - _LAST_GIFT_POST_TIMESTAMP
     if _LAST_GIFT_POST_TIMESTAMP <= 0:
         next_in_str = "Immediately on trigger"
+    elif in_quiet:
+        next_in_str = f"⏸️ Sleeping until {q_end}:00 IST"
     elif time_since_last >= int_sec:
         next_in_str = "⚡ Ready now (on next tick)"
     else:
@@ -1175,13 +1216,18 @@ async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMar
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"• <b>Queue Status:</b> {status_emoji}",
         f"• <b>Pending in Queue:</b> <code>{total_count:,} posts</code>",
+    ]
+    if failed_count > 0:
+        lines.append(f"• <b>⚠️ Failed / Stuck Drops:</b> <code>{failed_count} posts</code> (Tap Retry below)")
+
+    lines.extend([
         f"• <b>Pacing Interval:</b> <code>{int_str}</code>",
         f"• <b>Next Drop In:</b> <code>{next_in_str}</code>",
         f"• <b>Est. Completion:</b> <code>{est_str}</code>",
         f"• <b>Night Mode:</b> {quiet_str}",
         f"• <b>Channel Mode:</b> {clean_str}",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ]
+    ])
 
     if queued_items:
         lines.append("📋 <b>Upcoming Next In Line:</b>")
@@ -1203,20 +1249,30 @@ async def format_gift_queue_dashboard(cfg: dict) -> tuple[str, InlineKeyboardMar
         [
             InlineKeyboardButton("⚡ Post Next Now", callback_data="agift_q_next"),
             InlineKeyboardButton(pause_btn_text, callback_data=pause_cb)
-        ],
+        ]
+    ]
+
+    if failed_count > 0:
+        keyboard.append([
+            InlineKeyboardButton(f"🔄 Retry {failed_count} Failed Drops", callback_data="agift_q_retry_failed"),
+            InlineKeyboardButton("🗑️ Clear Failed", callback_data="agift_q_clear_failed")
+        ])
+
+    keyboard.extend([
         [
             InlineKeyboardButton("🧹 Clear All Queue", callback_data="agift_q_clear"),
             InlineKeyboardButton("🔄 Refresh Queue", callback_data="agift_q_refresh")
         ],
         [
+            InlineKeyboardButton("🌙 Toggle Night Sleep", callback_data="agift_q_toggle_quiet"),
             InlineKeyboardButton("⚙️ Back to Gift Settings", callback_data="agift_back_settings")
         ]
-    ]
+    ])
     return "\n".join(lines), InlineKeyboardMarkup(keyboard)
 
 
 async def _dispatch_queued_gift(client: Client, item: dict, cfg: dict) -> bool:
-    """Publish a single queued gift drop to the public channel."""
+    """Publish a single queued gift drop to the target public channel with 4-tier resilient delivery."""
     try:
         post_ch = item["post_ch"]
         caption_text = item["caption_text"]
@@ -1231,6 +1287,8 @@ async def _dispatch_queued_gift(client: Client, item: dict, cfg: dict) -> bool:
         ])
 
         sent_pub_msg = None
+
+        # Tier 1: Try sending extracted 3s sample preview video if available
         if sample_video_path and os.path.exists(sample_video_path):
             try:
                 sent_pub_msg = await client.send_video(
@@ -1241,20 +1299,45 @@ async def _dispatch_queued_gift(client: Client, item: dict, cfg: dict) -> bool:
                     supports_streaming=True
                 )
             except Exception as e_vid:
-                logger.warning(f"Sending queued sample video failed: {e_vid}, falling back to photo")
+                logger.warning(f"Sending queued sample video failed: {e_vid}, falling back to poster photo")
+
+        # Tier 2: Try custom / local / cached poster photo
+        if not sent_pub_msg and poster_photo:
+            try:
                 sent_pub_msg = await client.send_photo(
                     chat_id=post_ch,
-                    photo=poster_photo or DEFAULT_GIFT_POSTER,
+                    photo=poster_photo,
                     caption=caption_text,
                     reply_markup=markup
                 )
-        else:
-            sent_pub_msg = await client.send_photo(
-                chat_id=post_ch,
-                photo=poster_photo or DEFAULT_GIFT_POSTER,
-                caption=caption_text,
-                reply_markup=markup
-            )
+            except Exception as e_photo:
+                logger.warning(f"Sending queued poster photo ({poster_photo}) failed: {e_photo}, trying default poster URL")
+
+        # Tier 3: Try official high-resolution fallback poster URL
+        if not sent_pub_msg:
+            from database.gifts import DEFAULT_GIFT_POSTER
+            try:
+                sent_pub_msg = await client.send_photo(
+                    chat_id=post_ch,
+                    photo=DEFAULT_GIFT_POSTER,
+                    caption=caption_text,
+                    reply_markup=markup
+                )
+            except Exception as e_def:
+                logger.warning(f"Sending default gift poster failed: {e_def}, falling back to text-only drop")
+
+        # Tier 4: Text message with inline claim button (100% resilient if photo permissions are restricted)
+        if not sent_pub_msg:
+            try:
+                sent_pub_msg = await client.send_message(
+                    chat_id=post_ch,
+                    text=caption_text,
+                    reply_markup=markup,
+                    disable_web_page_preview=False
+                )
+            except Exception as e_msg:
+                logger.error(f"Cannot dispatch queued gift to {post_ch} even via text message: {e_msg}")
+                return False
 
         if sent_pub_msg:
             try:
@@ -1310,7 +1393,13 @@ async def _gift_queue_worker(client: Client):
                 ist_hour = (now_utc.hour + 5 + (now_utc.minute + 30) // 60) % 24
                 q_start = int(cfg.get("quiet_start_hour", 0))
                 q_end = int(cfg.get("quiet_end_hour", 8))
-                if q_start <= ist_hour < q_end:
+                in_quiet = False
+                if q_start < q_end:
+                    in_quiet = (q_start <= ist_hour < q_end)
+                elif q_start > q_end:
+                    in_quiet = (ist_hour >= q_start or ist_hour < q_end)
+
+                if in_quiet:
                     continue
 
             # Pacing interval check
@@ -1473,6 +1562,10 @@ async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
 
     elif data == "agift_q_next":
         next_item = await mongo.db["gift_post_queue"].find_one({"status": "queued"}, sort=[("queued_at", 1)])
+        if not next_item:
+            # Fallback to oldest failed item if admin manually triggers Post Next
+            next_item = await mongo.db["gift_post_queue"].find_one({"status": "failed"}, sort=[("queued_at", 1)])
+
         if next_item:
             ok = await _dispatch_queued_gift(client, next_item, cfg)
             if ok:
@@ -1480,9 +1573,37 @@ async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
                 _LAST_GIFT_POST_TIMESTAMP = time.time()
                 await query.answer(f"⚡ Dropped '{next_item.get('title')}' now!", show_alert=True)
             else:
-                await query.answer("⚠️ Failed to post queued item.", show_alert=True)
+                attempts = next_item.get("attempts", 0) + 1
+                await mongo.db["gift_post_queue"].update_one(
+                    {"_id": next_item["_id"]},
+                    {"$set": {"status": "failed", "attempts": attempts}}
+                )
+                await query.answer("⚠️ Failed to post item. Check bot permissions in target channel.", show_alert=True)
         else:
             await query.answer("ℹ️ Queue is empty!", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_retry_failed":
+        res = await mongo.db["gift_post_queue"].update_many(
+            {"status": "failed"},
+            {"$set": {"status": "queued", "attempts": 0}}
+        )
+        await query.answer(f"🔄 Reset {res.modified_count} failed drops to active queue!", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_clear_failed":
+        res = await mongo.db["gift_post_queue"].delete_many({"status": "failed"})
+        await query.answer(f"🗑️ Removed {res.deleted_count} failed drops!", show_alert=True)
+        text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
+        return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+    elif data == "agift_q_toggle_quiet":
+        curr_q = cfg.get("quiet_hours_enabled", False)
+        await save_auto_gift_config({"quiet_hours_enabled": not curr_q})
+        state_str = "Disabled (24/7 Drops)" if curr_q else "Enabled (Night Pause 12AM-8AM)"
+        await query.answer(f"🌙 Night Sleep: {state_str}!", show_alert=True)
         text, markup = await format_gift_queue_dashboard(await get_auto_gift_config())
         return await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
 
@@ -1534,6 +1655,23 @@ async def gift_queue_command(client: Client, message: Message):
     cfg = await get_auto_gift_config()
     text, markup = await format_gift_queue_dashboard(cfg)
     await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
+
+
+@Client.on_message(filters.command(["giftretry", "retrygifts", "agiftretry"]) & filters.private)
+async def gift_retry_command(client: Client, message: Message):
+    """Admin command to recover any failed gift drops back to the active queue."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ Admin only.")
+    res = await mongo.db["gift_post_queue"].update_many(
+        {"status": "failed"},
+        {"$set": {"status": "queued", "attempts": 0}}
+    )
+    start_gift_queue_worker(client)
+    await message.reply_text(
+        f"✅ <b>Queue Recovered:</b> <code>{res.modified_count}</code> failed gift drops have been reset back to <code>queued</code>!\n"
+        f"⚡ <i>They will now be posted automatically according to the pacing interval.</i>",
+        quote=True
+    )
 
 
 @Client.on_message(filters.command(["setgiftinterval", "setgiftbreak", "setgiftpace"]) & filters.private)
@@ -2142,221 +2280,259 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         except asyncio.TimeoutError:
             pass
 
-    photo_id = pending_info.get("photo_id")
-    _PENDING_GIFT_VIDEOS.pop(message.id, None)
+    temp_dir = tempfile.mkdtemp(prefix="autogift_")
+    try:
+        photo_id = pending_info.get("photo_id")
 
-    # Step 2: Poster & Sample Video Resolution Hierarchy
-    poster_photo = None
-    sample_video_path = None
-    temp_dir = None
-    mode = cfg.get("poster_mode", "ss")
+        # Step 2: Poster & Sample Video Resolution Hierarchy
+        poster_photo = None
+        sample_video_path = None
+        mode = cfg.get("poster_mode", "ss")
 
-    if photo_id:
-        poster_photo = photo_id
-    else:
-        # No custom photo sent: check if we can extract auto-screenshot or 2-4s sample video
-        max_extract_bytes = 500 * 1024 * 1024  # 500 MB safeguard limit
-        if mode in ("ss", "sample") and file_size <= max_extract_bytes:
-            temp_dir = tempfile.mkdtemp(prefix="autogift_")
-            try:
-                if pending_info["status_msg"]:
-                    status_text = "📸 Extracting HD screenshot..." if mode == "ss" else "🎬 Extracting 3s sample video preview..."
-                    try:
-                        await pending_info["status_msg"].edit_text(f"⚙️ <b>{status_text}</b>")
-                    except Exception:
-                        pass
+        if photo_id:
+            poster_photo = photo_id
+        else:
+            # 1. Fast download of native media thumbnail (takes ~0.1s, avoids downloading huge video files)
+            thumb_local = None
+            if hasattr(media, "thumbs") and media.thumbs:
+                try:
+                    t_path = os.path.join(temp_dir, f"thumb_{message.id}.jpg")
+                    downloaded_t = await asyncio.wait_for(
+                        client.download_media(media.thumbs[0].file_id, file_name=t_path),
+                        timeout=10.0
+                    )
+                    if downloaded_t and os.path.exists(downloaded_t):
+                        from plugins.screenshots import apply_watermark
+                        watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
+                        apply_watermark(downloaded_t, watermark_text=watermark)
+                        thumb_local = downloaded_t
+                except Exception as e_th:
+                    logger.debug(f"Media thumbnail download skipped: {e_th}")
 
-                video_local = await asyncio.wait_for(
-                    client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
-                    timeout=90.0
-                )
-                if video_local and os.path.exists(video_local):
-                    from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
-                    duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
-                    if duration <= 2:
-                        duration = 10.0
-                    start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
+            # 2. Try sample video clip extraction if mode is 'sample' and file size <= 75 MB
+            max_sample_bytes = 75 * 1024 * 1024  # 75 MB safe cap for fast sample video download
+            if mode == "sample" and file_size <= max_sample_bytes:
+                try:
+                    if pending_info.get("status_msg"):
+                        try:
+                            await pending_info["status_msg"].edit_text("⚙️ 🎬 <b>Extracting 3s sample video preview...</b>")
+                        except Exception:
+                            pass
 
-                    if mode == "sample":
+                    video_local = await asyncio.wait_for(
+                        client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
+                        timeout=45.0
+                    )
+                    if video_local and os.path.exists(video_local):
+                        from plugins.screenshots import get_video_duration
+                        duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
+                        if duration <= 2:
+                            duration = 10.0
+                        start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
+
                         s_path = os.path.join(temp_dir, "sample_preview.mp4")
                         if await extract_sample_clip_ffmpeg(video_local, start_sec, 3, s_path):
                             sample_video_path = s_path
+                except Exception as e_proc:
+                    logger.warning(f"Auto-gift sample video extraction failed: {e_proc}")
 
-                    if not sample_video_path:
+            # 3. If mode is screenshot ('ss') and no thumbnail exists, extract frame via ffmpeg if video is small
+            if mode == "ss" and not thumb_local and file_size <= max_sample_bytes:
+                try:
+                    if pending_info.get("status_msg"):
+                        try:
+                            await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Extracting HD screenshot frame...</b>")
+                        except Exception:
+                            pass
+                    video_local = await asyncio.wait_for(
+                        client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
+                        timeout=45.0
+                    )
+                    if video_local and os.path.exists(video_local):
+                        from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
+                        duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
+                        if duration <= 2:
+                            duration = 10.0
+                        start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
                         f_path = os.path.join(temp_dir, "screenshot.jpg")
                         if await extract_frame_ffmpeg(video_local, start_sec, f_path):
                             watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
                             apply_watermark(f_path, watermark_text=watermark)
                             poster_photo = f_path
-            except Exception as e_proc:
-                logger.warning(f"Auto-gift media extraction failed: {e_proc}")
+                except Exception as e_proc:
+                    logger.warning(f"Auto-gift frame extraction failed: {e_proc}")
 
-        # Fallbacks if local media extraction was not performed or failed
-        if not poster_photo and not sample_video_path:
-            if hasattr(media, "thumbs") and media.thumbs:
-                poster_photo = media.thumbs[0].file_id
-            else:
-                tmdb_poster = await get_cached_poster_url(clean_title)
-                if tmdb_poster:
-                    poster_photo = tmdb_poster
+            # 4. Fallback hierarchy if sample video was not generated
+            if not sample_video_path and not poster_photo:
+                if thumb_local:
+                    poster_photo = thumb_local
+                    if pending_info.get("status_msg"):
+                        try:
+                            await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Applying high-definition poster...</b>")
+                        except Exception:
+                            pass
                 else:
-                    from database.gifts import DEFAULT_GIFT_POSTER
-                    poster_photo = DEFAULT_GIFT_POSTER
+                    tmdb_poster = await get_cached_poster_url(clean_title)
+                    if tmdb_poster:
+                        poster_photo = tmdb_poster
+                    else:
+                        from database.gifts import DEFAULT_GIFT_POSTER
+                        poster_photo = DEFAULT_GIFT_POSTER
 
-    # Step 3: Package file metadata for Gift Reward Engine (strictly isolated from search index)
-    file_doc = {
-        "file_id": file_id,
-        "file_unique_id": file_unique_id,
-        "file_name": file_name,
-        "file_size": file_size,
-        "file_type": "video" if message.video else "document",
-        "mime_type": mime_type,
-        "caption": caption,
-        "channel_id": message.chat.id,
-        "message_id": message.id
-    }
-
-    # Step 4: Create Gift in Database
-    gift_doc = await create_gift(
-        title=clean_title,
-        file_type="single",
-        file_doc=file_doc,
-        total_files=1,
-        total_size=file_size,
-        poster_url=(
-            poster_photo if isinstance(poster_photo, str) and (poster_photo.startswith("http") or not os.path.exists(poster_photo)) else None
-        ),
-        channels=cfg.get("channels", []),
-        require_shortener=cfg.get("require_shortener", False),
-        is_vip_only=False,
-        protect_content=cfg.get("protect_content", True),
-        auto_delete_seconds=cfg.get("auto_delete_seconds", 300),
-        max_claims=cfg.get("claims", 0),
-        duration_seconds=cfg.get("duration_seconds", 0),
-        created_by=0,
-        allow_reclaim=cfg.get("allow_reclaim", True),
-        ad_link=cfg.get("ad_link"),
-        ad_links=cfg.get("ad_links", []),
-        ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
-        ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
-    )
-
-    gift_id = gift_doc.get("gift_id")
-    if not gift_id:
-        logger.error("Failed to generate gift_id for auto-gift drop!")
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        return
-
-    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
-    claim_url = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
-
-    dur_val = cfg.get("duration_seconds", 0)
-    validity_str = "♾️ Lifetime Access" if dur_val == 0 else f"⏳ {dur_val // 3600} Hours"
-    
-    claims_val = cfg.get("claims", 0)
-    claims_str = "♾️ Unlimited Claims" if claims_val == 0 else f"🔥 First {claims_val} Users Only"
-
-    post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
-    post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
-
-    caption_text = (
-        f"<b>{post_hdr}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
-        f"📦 <b>Details:</b> <code>{quality or 'HD'} • {get_readable_size(file_size)}</code>\n"
-        f"⚡ <b>Availability:</b> <code>{claims_str}</code>\n"
-        f"⏳ <b>Validity:</b> <code>{validity_str}</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔗 <b>Download / Watch Online:</b>\n"
-        f"👉 <a href=\"{claim_url}\"><b>⚡ CLICK HERE TO GET FULL VIDEO ⚡</b></a>"
-    )
-
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton(post_btn, url=claim_url)]
-    ])
-
-    # Step 5: Route to Drip-Feed Queue or Post Immediately
-    interval_sec = int(cfg.get("interval_seconds", 0))
-    q_pending = 0
-    try:
-        q_pending = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
-    except Exception:
-        pass
-
-    if interval_sec > 0 or q_pending > 0:
-        queue_poster = poster_photo
-        queue_sample = sample_video_path
-        if isinstance(poster_photo, str) and os.path.exists(poster_photo):
-            queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
-            os.makedirs(queue_asset_dir, exist_ok=True)
-            new_p = os.path.join(queue_asset_dir, f"{gift_id}_poster.jpg")
-            try:
-                shutil.copy2(poster_photo, new_p)
-                queue_poster = new_p
-            except Exception:
-                pass
-
-        if sample_video_path and os.path.exists(sample_video_path):
-            queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
-            os.makedirs(queue_asset_dir, exist_ok=True)
-            new_v = os.path.join(queue_asset_dir, f"{gift_id}_sample.mp4")
-            try:
-                shutil.copy2(sample_video_path, new_v)
-                queue_sample = new_v
-            except Exception:
-                pass
-
-        queue_doc = {
-            "gift_id": gift_id,
-            "title": clean_title,
-            "quality": quality,
+        # Step 3: Package file metadata for Gift Reward Engine (strictly isolated from search index)
+        file_doc = {
+            "file_id": file_id,
+            "file_unique_id": file_unique_id,
+            "file_name": file_name,
             "file_size": file_size,
-            "post_ch": post_ch,
-            "poster_photo": queue_poster if queue_poster else DEFAULT_GIFT_POSTER,
-            "sample_video_path": queue_sample,
-            "caption_text": caption_text,
-            "claim_url": claim_url,
-            "post_btn": post_btn,
-            "status": "queued",
-            "queued_at": time.time(),
-            "attempts": 0
+            "file_type": "video" if message.video else "document",
+            "mime_type": mime_type,
+            "caption": caption,
+            "channel_id": message.chat.id,
+            "message_id": message.id
         }
-        await mongo.db["gift_post_queue"].insert_one(queue_doc)
-        total_q = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
-        est_mins = (total_q * interval_sec) // 60 if interval_sec > 0 else 0
-        est_str = f"~{est_mins // 60}h {est_mins % 60}m" if est_mins >= 60 else f"~{est_mins} mins"
 
-        int_lbl = f"{interval_sec // 3600}h" if interval_sec >= 3600 else f"{interval_sec // 60}m"
-        final_text = (
-            f"📥 <b>Added to Scheduled Auto-Gift Queue!</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
-            f"📊 <b>Queue Position:</b> <code>#{total_q}</code>\n"
-            f"⏱️ <b>Post Interval:</b> <code>{int_lbl}</code>\n"
-            f"⏳ <b>Est. Drop Time:</b> <code>In {est_str}</code>\n"
-            f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
-            f"🔗 <b>Claim Link:</b> {claim_url}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 <i>Will drop automatically to public channel in its turn!</i>"
+        # Step 4: Create Gift in Database
+        gift_doc = await create_gift(
+            title=clean_title,
+            file_type="single",
+            file_doc=file_doc,
+            total_files=1,
+            total_size=file_size,
+            poster_url=(
+                poster_photo if isinstance(poster_photo, str) and (poster_photo.startswith("http") or not os.path.exists(poster_photo)) else None
+            ),
+            channels=cfg.get("channels", []),
+            require_shortener=cfg.get("require_shortener", False),
+            is_vip_only=False,
+            protect_content=cfg.get("protect_content", True),
+            auto_delete_seconds=cfg.get("auto_delete_seconds", 300),
+            max_claims=cfg.get("claims", 0),
+            duration_seconds=cfg.get("duration_seconds", 0),
+            created_by=0,
+            allow_reclaim=cfg.get("allow_reclaim", True),
+            ad_link=cfg.get("ad_link"),
+            ad_links=cfg.get("ad_links", []),
+            ad_wait_seconds=cfg.get("ad_wait_seconds", 3),
+            ad_button_text=cfg.get("ad_button_text", "🌐 View Sponsored Offer ↗️")
         )
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
+        gift_id = gift_doc.get("gift_id")
+        if not gift_id:
+            logger.error("Failed to generate gift_id for auto-gift drop!")
+            return
+
+        bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+        claim_url = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
+
+        dur_val = cfg.get("duration_seconds", 0)
+        validity_str = "♾️ Lifetime Access" if dur_val == 0 else f"⏳ {dur_val // 3600} Hours"
+        
+        claims_val = cfg.get("claims", 0)
+        claims_str = "♾️ Unlimited Claims" if claims_val == 0 else f"🔥 First {claims_val} Users Only"
+
+        post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+        post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
+
+        caption_text = (
+            f"<b>{post_hdr}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
+            f"📦 <b>Details:</b> <code>{quality or 'HD'} • {get_readable_size(file_size)}</code>\n"
+            f"⚡ <b>Availability:</b> <code>{claims_str}</code>\n"
+            f"⏳ <b>Validity:</b> <code>{validity_str}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔗 <b>Download / Watch Online:</b>\n"
+            f"👉 <a href=\"{claim_url}\"><b>⚡ CLICK HERE TO GET FULL VIDEO ⚡</b></a>"
+        )
+
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(post_btn, url=claim_url)]
+        ])
+
+        # Step 5: Route to Drip-Feed Queue or Post Immediately
+        interval_sec = int(cfg.get("interval_seconds", 0))
+        q_pending = 0
         try:
-            if pending_info.get("status_msg"):
-                await pending_info["status_msg"].edit_text(final_text)
-            else:
-                await message.reply_text(final_text, quote=True)
+            q_pending = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
         except Exception:
             pass
 
-        start_gift_queue_worker(client)
-        return
+        if interval_sec > 0 or q_pending > 0:
+            queue_poster = poster_photo
+            queue_sample = sample_video_path
+            if isinstance(poster_photo, str) and os.path.exists(poster_photo):
+                queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
+                os.makedirs(queue_asset_dir, exist_ok=True)
+                new_p = os.path.join(queue_asset_dir, f"{gift_id}_poster.jpg")
+                try:
+                    shutil.copy2(poster_photo, new_p)
+                    queue_poster = new_p
+                except Exception:
+                    pass
+            elif not (isinstance(poster_photo, str) and (poster_photo.startswith("http://") or poster_photo.startswith("https://"))):
+                from database.gifts import DEFAULT_GIFT_POSTER
+                queue_poster = DEFAULT_GIFT_POSTER
 
-    # Instant Drop Execution (when interval is 0 and queue is empty)
-    sent_pub_msg = None
-    try:
+            if sample_video_path and os.path.exists(sample_video_path):
+                queue_asset_dir = os.path.join(os.getcwd(), "cache", "gift_queue")
+                os.makedirs(queue_asset_dir, exist_ok=True)
+                new_v = os.path.join(queue_asset_dir, f"{gift_id}_sample.mp4")
+                try:
+                    shutil.copy2(sample_video_path, new_v)
+                    queue_sample = new_v
+                except Exception:
+                    pass
+
+            from database.gifts import DEFAULT_GIFT_POSTER
+            queue_doc = {
+                "gift_id": gift_id,
+                "title": clean_title,
+                "quality": quality,
+                "file_size": file_size,
+                "post_ch": post_ch,
+                "poster_photo": queue_poster if queue_poster else DEFAULT_GIFT_POSTER,
+                "sample_video_path": queue_sample,
+                "caption_text": caption_text,
+                "claim_url": claim_url,
+                "post_btn": post_btn,
+                "status": "queued",
+                "queued_at": time.time(),
+                "attempts": 0
+            }
+            await mongo.db["gift_post_queue"].insert_one(queue_doc)
+            total_q = await mongo.db["gift_post_queue"].count_documents({"status": "queued"})
+            est_mins = (total_q * interval_sec) // 60 if interval_sec > 0 else 0
+            est_str = f"~{est_mins // 60}h {est_mins % 60}m" if est_mins >= 60 else f"~{est_mins} mins"
+
+            int_lbl = f"{interval_sec // 3600}h" if interval_sec >= 3600 else f"{interval_sec // 60}m"
+            final_text = (
+                f"📥 <b>Added to Scheduled Auto-Gift Queue!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🏷️ <b>Title:</b> <code>{html.escape(clean_title)}</code>\n"
+                f"📊 <b>Queue Position:</b> <code>#{total_q}</code>\n"
+                f"⏱️ <b>Post Interval:</b> <code>{int_lbl}</code>\n"
+                f"⏳ <b>Est. Drop Time:</b> <code>In {est_str}</code>\n"
+                f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+                f"🔗 <b>Claim Link:</b> {claim_url}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💡 <i>Will drop automatically to public channel in its turn!</i>"
+            )
+
+            try:
+                if pending_info.get("status_msg"):
+                    await pending_info["status_msg"].edit_text(final_text)
+                else:
+                    await message.reply_text(final_text, quote=True)
+            except Exception:
+                pass
+
+            start_gift_queue_worker(client)
+            return
+
+        # Instant Drop Execution (when interval is 0 and queue is empty)
+        sent_pub_msg = None
+        # Tier 1: Try sample video if present
         if sample_video_path and os.path.exists(sample_video_path):
             try:
                 sent_pub_msg = await client.send_video(
@@ -2369,66 +2545,89 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                 logger.info(f"Auto-gift published with sample video preview to {post_ch} (Gift ID: {gift_id})")
             except Exception as e_vid:
                 logger.warning(f"Sending sample video failed: {e_vid}, falling back to photo")
+
+        # Tier 2: Try custom / local / cached poster
+        if not sent_pub_msg and poster_photo:
+            try:
                 sent_pub_msg = await client.send_photo(
                     chat_id=post_ch,
-                    photo=poster_photo or DEFAULT_GIFT_POSTER,
+                    photo=poster_photo,
                     caption=caption_text,
                     reply_markup=markup
                 )
-        else:
-            sent_pub_msg = await client.send_photo(
-                chat_id=post_ch,
-                photo=poster_photo,
-                caption=caption_text,
-                reply_markup=markup
-            )
-            logger.info(f"Auto-gift successfully published to {post_ch} (Gift ID: {gift_id})")
-    except Exception as e_post:
-        logger.error(f"Failed to publish auto-gift to {post_ch}: {e_post}")
+                logger.info(f"Auto-gift successfully published to {post_ch} (Gift ID: {gift_id})")
+            except Exception as e_p:
+                logger.warning(f"Sending poster photo failed: {e_p}, trying default poster")
+
+        # Tier 3: Try official default high-resolution poster URL
+        if not sent_pub_msg:
+            from database.gifts import DEFAULT_GIFT_POSTER
+            try:
+                sent_pub_msg = await client.send_photo(
+                    chat_id=post_ch,
+                    photo=DEFAULT_GIFT_POSTER,
+                    caption=caption_text,
+                    reply_markup=markup
+                )
+            except Exception as e_def:
+                logger.warning(f"Sending default poster failed: {e_def}, falling back to text")
+
+        # Tier 4: Text-only drop with inline claim button
+        if not sent_pub_msg:
+            try:
+                sent_pub_msg = await client.send_message(
+                    chat_id=post_ch,
+                    text=caption_text,
+                    reply_markup=markup,
+                    disable_web_page_preview=False
+                )
+            except Exception as e_txt:
+                logger.error(f"Failed to publish auto-gift text drop to {post_ch}: {e_txt}")
+
+        if sent_pub_msg:
+            try:
+                await mongo.db["gift_rewards"].update_one(
+                    {"gift_id": gift_id},
+                    {"$set": {"post_chat_id": post_ch, "post_msg_id": sent_pub_msg.id}}
+                )
+            except Exception:
+                pass
+
+            # Channel Clean Mode: Auto-delete previous active gift post
+            if cfg.get("clean_previous_post", False):
+                prev_id = cfg.get("last_posted_msg_id")
+                if prev_id and prev_id != sent_pub_msg.id:
+                    try:
+                        await client.delete_messages(chat_id=post_ch, message_ids=[prev_id])
+                        logger.info(f"Cleaned previous gift post msg {prev_id} from {post_ch}")
+                    except Exception as e_del:
+                        logger.debug(f"Could not delete previous gift post {prev_id}: {e_del}")
+
+            await save_auto_gift_config({"last_posted_msg_id": sent_pub_msg.id})
+
+        # Step 6: Update status message or reply in DB channel
+        final_text = (
+            f"✅ <b>Gift Drop Published!</b>\n"
+            f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
+            f"🔗 <b>Link:</b> {claim_url}"
+        )
         try:
-            sent_pub_msg = await client.send_message(
-                chat_id=post_ch,
-                text=caption_text,
-                reply_markup=markup,
-                disable_web_page_preview=True
-            )
+            if pending_info.get("status_msg"):
+                await pending_info["status_msg"].edit_text(final_text)
+            else:
+                await message.reply_text(final_text, quote=True)
+        except Exception:
+            pass
+    except Exception as e_worker:
+        logger.error(f"Error in auto gift video worker: {e_worker}", exc_info=True)
+        try:
+            if pending_info.get("status_msg"):
+                await pending_info["status_msg"].edit_text(
+                    f"⚠️ <b>Auto-Gift Error:</b> <code>{html.escape(str(e_worker)[:120])}</code>"
+                )
         except Exception:
             pass
     finally:
-        if temp_dir:
+        _PENDING_GIFT_VIDEOS.pop(message.id, None)
+        if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
-
-    if sent_pub_msg:
-        try:
-            await mongo.db["gift_rewards"].update_one(
-                {"gift_id": gift_id},
-                {"$set": {"post_chat_id": post_ch, "post_msg_id": sent_pub_msg.id}}
-            )
-        except Exception:
-            pass
-
-        # Channel Clean Mode: Auto-delete previous active gift post
-        if cfg.get("clean_previous_post", False):
-            prev_id = cfg.get("last_posted_msg_id")
-            if prev_id and prev_id != sent_pub_msg.id:
-                try:
-                    await client.delete_messages(chat_id=post_ch, message_ids=[prev_id])
-                    logger.info(f"Cleaned previous gift post msg {prev_id} from {post_ch}")
-                except Exception as e_del:
-                    logger.debug(f"Could not delete previous gift post {prev_id}: {e_del}")
-
-        await save_auto_gift_config({"last_posted_msg_id": sent_pub_msg.id})
-
-    # Step 6: Update status message or reply in DB channel
-    final_text = (
-        f"✅ <b>Gift Drop Published!</b>\n"
-        f"🎁 <b>Gift ID:</b> <code>{gift_id}</code>\n"
-        f"🔗 <b>Link:</b> {claim_url}"
-    )
-    try:
-        if pending_info.get("status_msg"):
-            await pending_info["status_msg"].edit_text(final_text)
-        else:
-            await message.reply_text(final_text, quote=True)
-    except Exception:
-        pass

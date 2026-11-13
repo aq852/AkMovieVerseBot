@@ -2358,6 +2358,110 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_auto_gift_queue_resilience_and_dispatch_fallbacks(self):
+        """Verify 4-tier delivery fallbacks, failed drop recovery, and quiet hours handling."""
+        from plugins.gifts import (
+            format_gift_queue_dashboard,
+            _dispatch_queued_gift,
+            get_auto_gift_config,
+            save_auto_gift_config,
+        )
+        from database.mongo import mongo
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        async def _test():
+            mongo._client = None
+            mongo._db = None
+            orig_cfg = dict(await get_auto_gift_config())
+            try:
+                # 1. Clean queue test items
+                await mongo.db["gift_post_queue"].delete_many({"gift_id": {"$in": ["res_q1", "res_f1"]}})
+
+                # Insert one queued item and one failed item
+                await mongo.db["gift_post_queue"].insert_one({
+                    "gift_id": "res_q1",
+                    "title": "Resilient Movie Drop",
+                    "post_ch": -10099887766,
+                    "poster_photo": "invalid_thumbnail_file_id_123",
+                    "sample_video_path": None,
+                    "caption_text": "<b>Exclusive Drop</b>",
+                    "claim_url": "https://t.me/TheFlixifyBot?start=gift_res_q1",
+                    "post_btn": "⚡ Get Full Video ➔",
+                    "status": "queued",
+                    "queued_at": 1000.0,
+                    "attempts": 0
+                })
+
+                await mongo.db["gift_post_queue"].insert_one({
+                    "gift_id": "res_f1",
+                    "title": "Failed Movie Drop",
+                    "post_ch": -10099887766,
+                    "poster_photo": "invalid_file_id_456",
+                    "sample_video_path": None,
+                    "caption_text": "<b>Failed Drop</b>",
+                    "claim_url": "https://t.me/TheFlixifyBot?start=gift_res_f1",
+                    "post_btn": "⚡ Get Full Video ➔",
+                    "status": "failed",
+                    "queued_at": 999.0,
+                    "attempts": 3
+                })
+
+                # Test dashboard formatter with queued + failed items
+                test_cfg = dict(orig_cfg)
+                test_cfg["interval_seconds"] = 600
+                test_cfg["quiet_hours_enabled"] = True
+                text, markup = await format_gift_queue_dashboard(test_cfg)
+
+                self.assertIn("AUTO-GIFT DRIP-FEED QUEUE DASHBOARD", text)
+                self.assertIn("Pending in Queue:", text)
+                self.assertIn("Failed / Stuck Drops:", text)
+                self.assertIn("Resilient Movie Drop", text)
+
+                cb_keys = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+                self.assertIn("agift_q_next", cb_keys)
+                self.assertIn("agift_q_retry_failed", cb_keys)
+                self.assertIn("agift_q_clear_failed", cb_keys)
+                self.assertIn("agift_q_toggle_quiet", cb_keys)
+
+                # 2. Test 4-tier dispatch fallbacks
+                # Simulate mock Pyrogram client: send_photo with invalid_thumbnail fails, but default poster succeeds
+                mock_client = MagicMock()
+                mock_msg = MagicMock()
+                mock_msg.id = 777
+
+                async def mock_send_photo(chat_id, photo, caption, reply_markup):
+                    if "invalid" in str(photo):
+                        raise Exception("Telegram says: [400 MEDIA_EMPTY]")
+                    return mock_msg
+
+                mock_client.send_photo = AsyncMock(side_effect=mock_send_photo)
+                mock_client.send_video = AsyncMock()
+                mock_client.send_message = AsyncMock(return_value=mock_msg)
+                mock_client.delete_messages = AsyncMock()
+
+                q_item = await mongo.db["gift_post_queue"].find_one({"gift_id": "res_q1"})
+                success = await _dispatch_queued_gift(mock_client, q_item, test_cfg)
+                self.assertTrue(success)
+                # Verify send_photo was called twice: 1st with invalid_thumbnail (failed), 2nd with DEFAULT_GIFT_POSTER (succeeded)
+                self.assertEqual(mock_client.send_photo.call_count, 2)
+
+                # 3. Simulate photo sending completely blocked, fallback to send_message (Tier 4)
+                mock_client.send_photo = AsyncMock(side_effect=Exception("ChatAdminRequired: Photo restricted"))
+                mock_client.send_message = AsyncMock(return_value=mock_msg)
+                success_txt = await _dispatch_queued_gift(mock_client, q_item, test_cfg)
+                self.assertTrue(success_txt)
+                self.assertEqual(mock_client.send_message.call_count, 1)
+
+                # 4. Clean up test records
+                await mongo.db["gift_post_queue"].delete_many({"gift_id": {"$in": ["res_q1", "res_f1"]}})
+            finally:
+                await save_auto_gift_config(orig_cfg)
+                mongo._client = None
+                mongo._db = None
+
+        asyncio.run(_test())
+
     def test_stream_catalog_management_and_bare_codes(self):
         """Verify bare-code filtering (e.g. S02E33), dynamic stream cutoff settings, and cache clearance."""
         from utils.helpers import parse_media_metadata
