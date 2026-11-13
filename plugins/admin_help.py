@@ -35,9 +35,9 @@ CATEGORY_KEYS = [
 ]
 
 CATEGORY_TITLES = {
-    "gifts": "🎁 Gifts & Task Rewards",
+    "gifts": "🎁 Gifts & Drip Drops",
     "ads": "📢 Sponsor Ads & Monetization",
-    "promos": "🎟️ VIP Plans & Promo Coupons",
+    "promos": "🎟️ VIP Plans, Spin & Coins Store",
     "broadcast": "👑 Broadcasts & Hype Premiere",
     "releases": "📢 Releases & Auto-Post",
     "filestore": "📦 File Store & Batches",
@@ -168,7 +168,22 @@ CATEGORY_CONTENT = {
         "• <code>/setupiqr &lt;qr_image_url&gt;</code>\n"
         "<b>Usage:</b> Update UPI QR code image URL for automatic payment card display.\n\n"
         "• <code>/setusdt &lt;trc20_address&gt;</code>\n"
-        "<b>Usage:</b> Update USDT TRC-20 crypto wallet address for international VIPs."
+        "<b>Usage:</b> Update USDT TRC-20 crypto wallet address for international VIPs.\n\n"
+        "🎡 <b>Lucky Spin &amp; Coin Economy:</b>\n"
+        "• <code>/spin</code> (alias: <code>/luckyspin</code>)\n"
+        "<b>Usage:</b> Interactive 3D Lucky Wheel WebApp to win daily free coins, VIP days, and spins.\n\n"
+        "• <code>/store</code> (aliases: <code>/coins</code>, <code>/shop</code>)\n"
+        "<b>Usage:</b> Flixify Coin Store to redeem earned coins for VIP passes and subscriptions.\n\n"
+        "• <code>/givecoins &lt;user_id&gt; &lt;amount&gt;</code>\n"
+        "<b>Usage:</b> Credit Flixify coins to a user's wallet with instant DM notification.\n\n"
+        "• <code>/takecoins &lt;user_id&gt; &lt;amount&gt;</code>\n"
+        "<b>Usage:</b> Deduct coins from a user's wallet.\n\n"
+        "• <code>/additem &lt;id&gt; &lt;coins&gt; &lt;type&gt; &lt;val&gt; &lt;Title&gt; [| Desc]</code>\n"
+        "<b>Usage:</b> Add new purchasable reward to Store (types: <code>pass</code>, <code>vip</code>, <code>coupon</code>, <code>channel</code>).\n\n"
+        "• <code>/delitem &lt;item_id&gt;</code> | <code>/storeitems</code>\n"
+        "<b>Usage:</b> Remove or list all configured items in Flixify Store.\n\n"
+        "• <code>/profile</code> | <code>/leaderboard</code>\n"
+        "<b>Usage:</b> View user coin balance, badges, and top loyalty streaks."
     ),
 
     "broadcast": (
@@ -314,7 +329,13 @@ CATEGORY_CONTENT = {
         "• <code>/setskip &lt;number&gt;</code>\n"
         "<b>Usage:</b> Skip specified number of messages before indexing starts.\n\n"
         "• <code>/stopindex</code> (alias: <code>/cancelindex</code>)\n"
-        "<b>Usage:</b> Immediately aborts active indexing crawl."
+        "<b>Usage:</b> Immediately aborts active indexing crawl.\n\n"
+        "• <code>/channels</code> (aliases: <code>/storagechannels</code>, <code>/dbchannels</code>, <code>/listchannels</code>)\n"
+        "<b>Usage:</b> View all authorized media storage channels where uploads are auto-indexed.\n\n"
+        "• <code>/addchannel &lt;chat_id&gt;</code> (alias: <code>/addstorage</code>)\n"
+        "<b>Usage:</b> Authorize and whitelist a new channel for real-time auto-indexing.\n\n"
+        "• <code>/delchannel &lt;chat_id&gt;</code> (alias: <code>/removestorage</code>)\n"
+        "<b>Usage:</b> De-authorize a channel and stop auto-indexing uploads from it."
     ),
 
     "database": (
@@ -325,6 +346,8 @@ CATEGORY_CONTENT = {
         "<b>Usage:</b> Total indexed files, registered users, connected groups, uptime, and RAM.\n\n"
         "• <code>/targetdb [1|2|auto]</code> (alias: <code>/setwritedb</code>)\n"
         "<b>Usage:</b> Multi-cluster write routing (auto-switches to Secondary DB at 440MB).\n\n"
+        "• <code>/cleanupsampledb</code> (alias: <code>/dropsampledb</code>)\n"
+        "<b>Usage:</b> Clean up sample databases/collections and reclaim secondary cluster storage quota.\n\n"
         "• <code>/autoclean</code> (aliases: <code>/housekeeping</code>, <code>/cleanhouse</code>)\n"
         "<b>Usage:</b> Full database housekeeping: Purges dead groups, expired batches, share links, expired verifications, and expired ads/gifts!\n\n"
         "• <code>/deletecam</code> (aliases: <code>/purgecam</code>, <code>/deletefiles</code>)\n"
@@ -385,6 +408,8 @@ CATEGORY_CONTENT = {
         "<b>Usage:</b> Toggle the '🌐 BROWSE WEB CINEMA' button on /start menu (Default: OFF).\n\n"
         "• <code>/browse</code> (aliases: <code>/catalog</code>, <code>/webcinema</code>)\n"
         "<b>Usage:</b> Send interactive 1-click launch card for the Web Cinema Catalog.\n\n"
+        "• <code>/galaxy</code> (aliases: <code>/movieverse</code>, <code>/3d</code>)\n"
+        "<b>Usage:</b> Launch interactive 3D MovieVerse WebGL Mini App with horizontal CineFlow, official TMDB posters, and direct Telegram file delivery.\n\n"
         "• <code>/streamstart [now|all|reset|YYYY-MM-DD]</code> (aliases: <code>/startstream</code>, <code>/streamcutoff</code>)\n"
         "<b>Usage:</b> Start streaming catalog live! <code>/streamstart now</code> sets showroom start to right now (all incoming files go to website, past backlog hidden). <code>all</code> restores entire 588k library.\n\n"
         "• <code>/streamclear [all|now|YYYY-MM-DD]</code> (alias: <code>/clearstream</code>)\n"
@@ -442,7 +467,11 @@ CATEGORY_CONTENT = {
         "• <code>/commands</code>\n"
         "<b>Usage:</b> Syncs and registers all bot commands with Telegram autocomplete menu.\n\n"
         "• <code>/maintenance [on|off] [reason]</code> (alias: <code>/maint</code>)\n"
-        "<b>Usage:</b> Block normal users with scheduled maintenance notice while allowing admins full access."
+        "<b>Usage:</b> Block normal users with scheduled maintenance notice while allowing admins full access.\n\n"
+        "• <code>/restart</code> (alias: <code>/reboot</code>)\n"
+        "<b>Usage:</b> Systemd-aware service restart (triggers <code>systemctl restart akbot</code> or local reboot).\n\n"
+        "• <code>/update</code> (alias: <code>/gitpull</code>)\n"
+        "<b>Usage:</b> Pull latest git commits from GitHub repository and reload bot process seamlessly."
     ),
 }
 
@@ -451,7 +480,7 @@ CHEAT_SHEET_TEXT = (
     "📜 <b>Admin Commands Quick Reference</b>\n"
     "━━━━━━━━━━━━━━━━━━\n"
     "<blockquote expandable><b>🎁 GIFTS, SPIN &amp; STORE:</b>\n"
-    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /setgiftinterval | /setgiftquiet | /setgiftclean | /giftban | /giftunban | /giftsettings | /additem | /delitem | /storeitems | /givecoins | /takecoins</code>\n"
+    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /setgiftinterval | /setgiftquiet | /setgiftclean | /giftban | /giftunban | /giftsettings | /spin | /store | /profile | /leaderboard | /givecoins | /takecoins | /additem | /delitem | /storeitems</code>\n"
     "\n"
     "<b>📢 ADS &amp; SHORTENERS:</b>\n"
     "• <code>/setad | /ads | /delad | /shorteners | /shortenerstats | /set_web_url | /add_shortener | /del_shortener | /setfreelimit</code>\n"
@@ -477,18 +506,18 @@ CHEAT_SHEET_TEXT = (
     "<b>📥 DOWNLOADER &amp; THUMBNAILS:</b>\n"
     "• <code>/dl | /dlstats | /setthumb | /showthumb | /delthumb</code>\n"
     "\n"
-    "<b>🗂️ CHANNEL INDEXER &amp; CRAWLER:</b>\n"
-    "• <code>/index | /indexall | /stopindex | /checkpoints | /setskip</code>\n"
+    "<b>🗂️ CHANNEL INDEXER &amp; STORAGE:</b>\n"
+    "• <code>/index | /indexall | /stopindex | /checkpoints | /setskip | /channels | /addchannel | /delchannel</code>\n"
     "\n"
     "<b>🗄️ DATABASE &amp; CLEANUP:</b>\n"
-    "• <code>/stats | /targetdb | /backup | /autobackup | /autoclean | /restore | /clonechannel</code>\n"
+    "• <code>/stats | /targetdb | /cleanupsampledb | /backup | /autobackup | /autoclean | /restore | /clonechannel</code>\n"
     "• <code>/deletecam | /cleanduplicates | /cleanfiles | /delbyname | /addjunk | /deljunk | /junkwords | /deleteall | /cleandb | /autodelete</code>\n"
     "\n"
     "<b>🎨 CANVAS POSTER &amp; TMDB:</b>\n"
     "• <code>/poster | /styles | /ss | /tmdb_status | /set_poster_brand | /set_poster_channel | /set_tmdb_key | /set_tmdb_token</code>\n"
     "\n"
-    "<b>⚡ WEB STREAMING &amp; STREMIO:</b>\n"
-    "• <code>/streaming | /stream_download | /setstream | /browse | /streamstart | /streamclear | /streampause | /streamresume | /streamsettings | /streamadd | /streamremove | /streamchannels</code>\n"
+    "<b>⚡ WEB STREAMING, 3D &amp; STREMIO:</b>\n"
+    "• <code>/galaxy | /movieverse | /browse | /streaming | /stream_download | /setstream | /streamstart | /streamclear | /streampause | /streamresume | /streamsettings | /streamadd | /streamremove | /streamchannels</code>\n"
     "• <code>/gen_stremio | /reset_stremio | /del_stremio | /stremiostats</code>\n"
     "\n"
     "<b>⚙️ GROUP TOOLS &amp; UTILITIES:</b>\n"
@@ -504,11 +533,11 @@ def get_admin_hub_markup():
     """Build the main category selection keyboard for admins."""
     buttons = [
         [
-            InlineKeyboardButton("🎁 Gifts & Rewards", callback_data="ahelp_cat:gifts"),
+            InlineKeyboardButton("🎁 Gifts & Drops", callback_data="ahelp_cat:gifts"),
             InlineKeyboardButton("📢 Ads & Shorteners", callback_data="ahelp_cat:ads")
         ],
         [
-            InlineKeyboardButton("🎟️ VIP & Promo Codes", callback_data="ahelp_cat:promos"),
+            InlineKeyboardButton("🎟️ VIP Plans & Spin Store", callback_data="ahelp_cat:promos"),
             InlineKeyboardButton("👑 Broadcasts & Hype", callback_data="ahelp_cat:broadcast")
         ],
         [
@@ -520,12 +549,12 @@ def get_admin_hub_markup():
             InlineKeyboardButton("📥 Downloader Engine", callback_data="ahelp_cat:downloader")
         ],
         [
-            InlineKeyboardButton("🗂️ Channel Indexer", callback_data="ahelp_cat:indexer"),
+            InlineKeyboardButton("🗂️ Indexer & Storage", callback_data="ahelp_cat:indexer"),
             InlineKeyboardButton("🗄️ Database & Cleanup", callback_data="ahelp_cat:database")
         ],
         [
             InlineKeyboardButton("🎨 Poster & TMDB API", callback_data="ahelp_cat:poster"),
-            InlineKeyboardButton("⚡ Web Streaming", callback_data="ahelp_cat:streaming")
+            InlineKeyboardButton("⚡ Web Cinema & 3D", callback_data="ahelp_cat:streaming")
         ],
         [
             InlineKeyboardButton("⚙️ Group Tools & Utils", callback_data="ahelp_cat:utils"),
