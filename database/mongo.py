@@ -213,6 +213,22 @@ async def load_dynamic_settings():
         except Exception as ch_err:
             logger.debug(f"Could not hydrate dynamic storage channels: {ch_err}")
 
+        # Eagerly pre-warm auto-gift configuration and auto-post preferences
+        try:
+            from plugins.gifts import get_auto_gift_config, get_gift_channel
+            await get_auto_gift_config()
+            await get_gift_channel()
+        except Exception as gift_err:
+            logger.debug(f"Could not pre-warm auto-gift config: {gift_err}")
+
+        try:
+            from plugins.channel_post import is_auto_post_enabled, get_target_updates_channel, get_autopost_style
+            await is_auto_post_enabled()
+            await get_target_updates_channel()
+            await get_autopost_style()
+        except Exception as post_err:
+            logger.debug(f"Could not pre-warm auto-post prefs: {post_err}")
+
         logger.info(
             f"⚡ Persistent settings loaded from MongoDB: "
             f"SHORTENER_ENABLED={Config.SHORTENER_ENABLED}, "

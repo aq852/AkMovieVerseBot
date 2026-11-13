@@ -37,28 +37,36 @@ _GIFT_CHANNEL_CACHE = {"channel": None, "loaded": False}
 
 
 async def get_gift_channel():
-    """Retrieve target channel for auto-publishing gift drops."""
-    if _GIFT_CHANNEL_CACHE["loaded"]:
+    """Retrieve target channel for auto-publishing gift drops with dual-cluster resilience."""
+    if _GIFT_CHANNEL_CACHE.get("loaded") and _GIFT_CHANNEL_CACHE.get("channel"):
         return _GIFT_CHANNEL_CACHE["channel"]
     try:
+        from database.mongo import mongo
         doc = await mongo.db["bot_settings"].find_one({"key": "gift_channel"})
-        if doc and "channel" in doc:
+        if doc and "channel" in doc and doc["channel"]:
             val = doc["channel"]
             _GIFT_CHANNEL_CACHE["channel"] = val
             _GIFT_CHANNEL_CACHE["loaded"] = True
             return val
-    except Exception:
-        pass
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "gift_channel"})
+            if doc2 and "channel" in doc2 and doc2["channel"]:
+                val = doc2["channel"]
+                _GIFT_CHANNEL_CACHE["channel"] = val
+                _GIFT_CHANNEL_CACHE["loaded"] = True
+                return val
+    except Exception as e:
+        logger.debug(f"Error loading gift channel setting: {e}")
+
     default_ch = getattr(Config, "GIFT_CHANNEL", None)
-    _GIFT_CHANNEL_CACHE["channel"] = default_ch if default_ch and default_ch != 0 else None
-    _GIFT_CHANNEL_CACHE["loaded"] = True
-    return _GIFT_CHANNEL_CACHE["channel"]
+    return default_ch if default_ch and default_ch != 0 else None
 
 
 async def set_gift_channel(channel):
-    """Set target channel for auto-publishing gift drops."""
+    """Set target channel for auto-publishing gift drops synced to primary and secondary DB."""
     _GIFT_CHANNEL_CACHE["channel"] = channel
     _GIFT_CHANNEL_CACHE["loaded"] = True
+    from database.mongo import mongo
     try:
         await mongo.db["bot_settings"].update_one(
             {"key": "gift_channel"},
@@ -67,6 +75,16 @@ async def set_gift_channel(channel):
         )
     except Exception as e:
         logger.error(f"Error persisting gift channel setting: {e}")
+
+    if mongo.has_secondary:
+        try:
+            await mongo.db2["bot_settings"].update_one(
+                {"key": "gift_channel"},
+                {"$set": {"channel": channel, "updated_at": datetime.datetime.utcnow()}},
+                upsert=True
+            )
+        except Exception as e2:
+            logger.debug(f"Error syncing gift channel to secondary DB: {e2}")
 
 
 
@@ -903,7 +921,7 @@ async def set_gift_channel_command(client: Client, message: Message):
 
 _AUTO_GIFT_CONFIG_CACHE = {
     "loaded": False,
-    "enabled": False,
+    "enabled": True,
     "db_channel": None,
     "post_channel": None,
     "claims": 0,
@@ -914,7 +932,7 @@ _AUTO_GIFT_CONFIG_CACHE = {
     "auto_delete_seconds": 300,
     "protect_content": True,
     "photo_wait_seconds": 60,
-    "poster_mode": "ss",
+    "poster_mode": "sample",
     "post_header": "🔥 EXCLUSIVE DROP 🔥",
     "post_button": "⚡ Get Full Video ➔",
     "ad_link": None,
@@ -940,34 +958,64 @@ _PENDING_GIFT_VIDEOS: dict[int, dict] = {}
 
 
 async def get_auto_gift_config() -> dict:
-    """Retrieve auto-gift publisher configuration from MongoDB with in-memory caching."""
+    """Retrieve auto-gift publisher configuration from MongoDB with dual-cluster resilience."""
     global _AUTO_GIFT_CONFIG_CACHE
-    if _AUTO_GIFT_CONFIG_CACHE["loaded"]:
+    if _AUTO_GIFT_CONFIG_CACHE.get("loaded"):
         return _AUTO_GIFT_CONFIG_CACHE
     try:
+        from database.mongo import mongo
         doc = await mongo.db["bot_settings"].find_one({"key": "auto_gift_config"})
         if doc and "config" in doc:
             _AUTO_GIFT_CONFIG_CACHE.update(doc["config"])
+            _AUTO_GIFT_CONFIG_CACHE["loaded"] = True
+            return _AUTO_GIFT_CONFIG_CACHE
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "auto_gift_config"})
+            if doc2 and "config" in doc2:
+                _AUTO_GIFT_CONFIG_CACHE.update(doc2["config"])
+                _AUTO_GIFT_CONFIG_CACHE["loaded"] = True
+                return _AUTO_GIFT_CONFIG_CACHE
     except Exception as e:
-        logger.debug(f"Error loading auto gift config: {e}")
+        logger.warning(f"Error loading auto gift config from MongoDB: {e}")
+        # Return in-memory cache without setting loaded=True so future calls can retry loading
+        return _AUTO_GIFT_CONFIG_CACHE
+
     _AUTO_GIFT_CONFIG_CACHE["loaded"] = True
     return _AUTO_GIFT_CONFIG_CACHE
 
 
 async def save_auto_gift_config(updates: dict):
-    """Persist updated auto-gift publisher configuration to MongoDB."""
+    """Persist updated auto-gift publisher configuration to MongoDB with atomic field updates and cluster replication."""
     global _AUTO_GIFT_CONFIG_CACHE
-    cfg = await get_auto_gift_config()
-    cfg.update(updates)
-    _AUTO_GIFT_CONFIG_CACHE.update(cfg)
+    if not _AUTO_GIFT_CONFIG_CACHE.get("loaded"):
+        await get_auto_gift_config()
+
+    _AUTO_GIFT_CONFIG_CACHE.update(updates)
+    _AUTO_GIFT_CONFIG_CACHE["loaded"] = True
+
+    # Use atomic dot-notation ($set: {"config.key": val}) so other settings are NEVER wiped out
+    set_fields = {f"config.{k}": v for k, v in updates.items()}
+    set_fields["updated_at"] = datetime.datetime.utcnow()
+
+    from database.mongo import mongo
     try:
         await mongo.db["bot_settings"].update_one(
             {"key": "auto_gift_config"},
-            {"$set": {"config": cfg, "updated_at": datetime.datetime.utcnow()}},
+            {"$set": set_fields},
             upsert=True
         )
     except Exception as e:
-        logger.error(f"Error saving auto gift config: {e}")
+        logger.error(f"Error saving auto gift config to primary DB: {e}")
+
+    if mongo.has_secondary:
+        try:
+            await mongo.db2["bot_settings"].update_one(
+                {"key": "auto_gift_config"},
+                {"$set": set_fields},
+                upsert=True
+            )
+        except Exception as e2:
+            logger.debug(f"Error syncing auto gift config to secondary DB: {e2}")
 
 
 async def extract_sample_clip_ffmpeg(video_path: str, start_sec: float, duration_sec: int, output_path: str) -> bool:
@@ -1056,13 +1104,13 @@ def format_gift_settings_dashboard(cfg: dict, q_count: int = 0) -> tuple[str, In
     quiet_str = "🌙 ON (12 AM - 8 AM Pause)" if cfg.get("quiet_hours_enabled") else "☀️ OFF (24/7 Drip)"
     clean_str = "🧹 ON (Single Active Post)" if cfg.get("clean_previous_post") else "📜 OFF (Keep All)"
 
-    mode_val = cfg.get("poster_mode", "ss")
+    mode_val = cfg.get("poster_mode", "sample")
     if mode_val == "sample":
-        mode_str = "🎬 2-4s Sample Video"
+        mode_str = "🎬 2-4s Sample ➔ 📸 SS ➔ 🃏 Card (Auto-Cascade)"
     elif mode_val == "thumb":
-        mode_str = "📹 Video Thumbnail"
+        mode_str = "📹 Video Thumbnail ➔ 🃏 Card"
     else:
-        mode_str = "📸 Auto Screenshot (SS)"
+        mode_str = "📸 Auto Screenshot (SS) ➔ 🃏 Card"
 
     ad_links = cfg.get("ad_links", [])
     if not ad_links and cfg.get("ad_link"):
@@ -1092,7 +1140,7 @@ def format_gift_settings_dashboard(cfg: dict, q_count: int = 0) -> tuple[str, In
         f"• <b>Channel Clean Mode:</b> {clean_str}",
         f"• <b>Post Header:</b> <code>{html.escape(cfg.get('post_header', '🔥 EXCLUSIVE DROP 🔥'))}</code>",
         f"• <b>Post Button:</b> <code>{html.escape(cfg.get('post_button', '⚡ Get Full Video ➔'))}</code>",
-        "• <b>Fallback Chain:</b> Photo ➔ SS / Sample ➔ Thumb ➔ TMDB ➔ 3D Box",
+        "• <b>Poster Hierarchy:</b> 🎬 Sample (2-4s) ➔ 📸 HD Screenshot ➔ 📹 Native Thumb ➔ 🃏 3D Card",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "💡 <i>Any video dropped into your DB Channel will automatically be converted into a gift reward and published live!</i>\n",
         "<b>Commands to change settings:</b>",
@@ -1490,15 +1538,20 @@ async def gift_settings_callback_handler(client: Client, query: CallbackQuery):
         await query.answer(f"Shortener {'Enabled' if new_val else 'Disabled'}!")
 
     elif data == "agift_mode":
-        curr = cfg.get("poster_mode", "ss")
-        modes = ["ss", "sample", "thumb"]
+        curr = cfg.get("poster_mode", "sample")
+        modes = ["sample", "ss", "thumb"]
         try:
             next_idx = (modes.index(curr) + 1) % len(modes)
         except ValueError:
             next_idx = 0
         new_mode = modes[next_idx]
         await save_auto_gift_config({"poster_mode": new_mode})
-        await query.answer(f"Poster Mode set to {new_mode.upper()}!")
+        mode_labels = {
+            "sample": "SAMPLE (Cascade to SS/Card)",
+            "ss": "SCREENSHOT (Cascade to Card)",
+            "thumb": "THUMBNAIL (Direct)"
+        }
+        await query.answer(f"Mode set to {mode_labels.get(new_mode, new_mode.upper())}!")
 
     elif data == "agift_wait":
         curr = cfg.get("photo_wait_seconds", 60)
@@ -2285,14 +2338,18 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
         photo_id = pending_info.get("photo_id")
 
         # Step 2: Poster & Sample Video Resolution Hierarchy
+        # Priority 1: Sample Video (2-4s preview clip)
+        # Priority 2: HD Screenshot (Frame extracted from video)
+        # Priority 3: Native Thumbnail / Card Poster
         poster_photo = None
         sample_video_path = None
-        mode = cfg.get("poster_mode", "ss")
+        mode = cfg.get("poster_mode", "sample")
 
         if photo_id:
+            # Priority 0: Admin explicitly replied with a custom photo
             poster_photo = photo_id
         else:
-            # 1. Fast download of native media thumbnail (takes ~0.1s, avoids downloading huge video files)
+            # Baseline: Download native media thumbnail first
             thumb_local = None
             if hasattr(media, "thumbs") and media.thumbs:
                 try:
@@ -2309,60 +2366,74 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                 except Exception as e_th:
                     logger.debug(f"Media thumbnail download skipped: {e_th}")
 
-            # 2. Try sample video clip extraction if mode is 'sample' and file size <= 100 MB
-            max_sample_bytes = 100 * 1024 * 1024  # 100 MB cap for sample video preview
-            if mode == "sample" and file_size <= max_sample_bytes:
-                try:
-                    if pending_info.get("status_msg"):
-                        try:
-                            await pending_info["status_msg"].edit_text("⚙️ 🎬 <b>Extracting 3s sample video preview...</b>")
-                        except Exception:
-                            pass
+            # Support videos up to 300 MB for local sample & screenshot generation
+            max_media_bytes = 300 * 1024 * 1024
+            video_local = None
 
+            async def _download_video_once():
+                nonlocal video_local
+                if video_local and os.path.exists(video_local):
+                    return video_local
+                if file_size <= max_media_bytes:
+                    v_path = os.path.join(temp_dir, file_name)
                     video_local = await asyncio.wait_for(
-                        client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
-                        timeout=60.0
+                        client.download_media(message, file_name=v_path),
+                        timeout=75.0
                     )
-                    if video_local and os.path.exists(video_local):
-                        from plugins.screenshots import get_video_duration
-                        duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
-                        if duration <= 2:
-                            duration = 10.0
-                        start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
+                    return video_local
+                return None
 
-                        s_path = os.path.join(temp_dir, "sample_preview.mp4")
-                        if await extract_sample_clip_ffmpeg(video_local, start_sec, 3, s_path):
-                            sample_video_path = s_path
+            # Priority 1: Try sample video if mode is 'sample' (default)
+            if mode == "sample":
+                try:
+                    if file_size <= max_media_bytes:
+                        if pending_info.get("status_msg"):
+                            try:
+                                await pending_info["status_msg"].edit_text("⚙️ 🎬 <b>Extracting 3s sample video preview...</b>")
+                            except Exception:
+                                pass
+
+                        v_file = await _download_video_once()
+                        if v_file and os.path.exists(v_file):
+                            from plugins.screenshots import get_video_duration
+                            duration = getattr(media, "duration", 0) or await get_video_duration(v_file)
+                            if duration <= 2:
+                                duration = 10.0
+                            start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
+
+                            s_path = os.path.join(temp_dir, "sample_preview.mp4")
+                            if await extract_sample_clip_ffmpeg(v_file, start_sec, 3, s_path):
+                                sample_video_path = s_path
+                                logger.info(f"Sample video clip generated successfully for {file_name}")
                 except Exception as e_proc:
                     logger.warning(f"Auto-gift sample video extraction failed: {e_proc}")
 
-            # 3. If mode is screenshot ('ss') and no thumbnail exists, extract frame via ffmpeg if video is small
-            if mode == "ss" and not thumb_local and file_size <= max_sample_bytes:
+            # Priority 2: Try HD Screenshot (SS) if no sample generated (or if mode is 'ss')
+            if not sample_video_path and mode in ("sample", "ss"):
                 try:
                     if pending_info.get("status_msg"):
                         try:
                             await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Extracting HD screenshot frame...</b>")
                         except Exception:
                             pass
-                    video_local = await asyncio.wait_for(
-                        client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
-                        timeout=60.0
-                    )
-                    if video_local and os.path.exists(video_local):
+
+                    v_file = await _download_video_once()
+                    if v_file and os.path.exists(v_file):
                         from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
-                        duration = getattr(media, "duration", 0) or await get_video_duration(video_local)
+                        duration = getattr(media, "duration", 0) or await get_video_duration(v_file)
                         if duration <= 2:
                             duration = 10.0
                         start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
                         f_path = os.path.join(temp_dir, "screenshot.jpg")
-                        if await extract_frame_ffmpeg(video_local, start_sec, f_path):
+                        if await extract_frame_ffmpeg(v_file, start_sec, f_path):
                             watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
                             apply_watermark(f_path, watermark_text=watermark)
                             poster_photo = f_path
+                            logger.info(f"HD screenshot extracted successfully for {file_name}")
                 except Exception as e_proc:
                     logger.warning(f"Auto-gift frame extraction failed: {e_proc}")
 
-            # 4. Fallback hierarchy if sample video was not generated
+            # Priority 3: Fallback Card / Native Thumbnail / TMDB poster
             if not sample_video_path and not poster_photo:
                 if thumb_local:
                     poster_photo = thumb_local

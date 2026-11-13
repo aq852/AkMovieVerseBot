@@ -49,6 +49,11 @@ async def is_autopost_enabled() -> bool:
         if doc and "enabled" in doc:
             _AUTO_POST_PREFS["enabled"] = bool(doc["enabled"])
             return _AUTO_POST_PREFS["enabled"]
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "autopost"})
+            if doc2 and "enabled" in doc2:
+                _AUTO_POST_PREFS["enabled"] = bool(doc2["enabled"])
+                return _AUTO_POST_PREFS["enabled"]
     except Exception:
         pass
     return getattr(Config, "AUTO_POST_ENABLED", True)
@@ -63,6 +68,11 @@ async def get_target_updates_channel() -> int:
         if doc and doc.get("channel_id"):
             _AUTO_POST_PREFS["channel_id"] = int(doc["channel_id"])
             return _AUTO_POST_PREFS["channel_id"]
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "autopost"})
+            if doc2 and doc2.get("channel_id"):
+                _AUTO_POST_PREFS["channel_id"] = int(doc2["channel_id"])
+                return _AUTO_POST_PREFS["channel_id"]
     except Exception:
         pass
     return getattr(Config, "UPDATES_CHANNEL", -1003537939374)
@@ -85,6 +95,15 @@ async def set_autopost_state(enabled: bool = None, channel_id: int = None):
                 {"$set": updates},
                 upsert=True
             )
+            if mongo.has_secondary:
+                try:
+                    await mongo.db2["bot_settings"].update_one(
+                        {"key": "autopost"},
+                        {"$set": updates},
+                        upsert=True
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Error persisting autopost settings: {e}")
 
@@ -103,6 +122,11 @@ async def is_auto_reaction_enabled() -> bool:
         if doc and "enabled" in doc:
             _AUTO_REACTION_PREFS["enabled"] = bool(doc["enabled"])
             return _AUTO_REACTION_PREFS["enabled"]
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "auto_post_reactions"})
+            if doc2 and "enabled" in doc2:
+                _AUTO_REACTION_PREFS["enabled"] = bool(doc2["enabled"])
+                return _AUTO_REACTION_PREFS["enabled"]
     except Exception:
         pass
     return True  # Enabled by default
@@ -117,6 +141,11 @@ async def get_auto_reaction_emojis() -> list[str]:
         if doc and doc.get("emojis"):
             _AUTO_REACTION_PREFS["emojis"] = list(doc["emojis"])
             return _AUTO_REACTION_PREFS["emojis"]
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "auto_post_reactions"})
+            if doc2 and doc2.get("emojis"):
+                _AUTO_REACTION_PREFS["emojis"] = list(doc2["emojis"])
+                return _AUTO_REACTION_PREFS["emojis"]
     except Exception:
         pass
     return DEFAULT_REACTION_EMOJIS
@@ -139,6 +168,15 @@ async def set_auto_reaction_state(enabled: bool = None, emojis: list[str] = None
                 {"$set": updates},
                 upsert=True
             )
+            if mongo.has_secondary:
+                try:
+                    await mongo.db2["bot_settings"].update_one(
+                        {"key": "auto_post_reactions"},
+                        {"$set": updates},
+                        upsert=True
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Error persisting auto reaction settings: {e}")
 
@@ -156,6 +194,11 @@ async def is_auto_post_watch_enabled() -> bool:
         if doc and "enabled" in doc:
             _AUTO_POST_WATCH_PREF["enabled"] = bool(doc["enabled"])
             return _AUTO_POST_WATCH_PREF["enabled"]
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "auto_post_watch"})
+            if doc2 and "enabled" in doc2:
+                _AUTO_POST_WATCH_PREF["enabled"] = bool(doc2["enabled"])
+                return _AUTO_POST_WATCH_PREF["enabled"]
     except Exception:
         pass
     return False  # Disabled by default per user request
@@ -170,6 +213,15 @@ async def set_auto_post_watch_state(enabled: bool):
             {"$set": {"enabled": enabled}},
             upsert=True
         )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "auto_post_watch"},
+                    {"$set": {"enabled": enabled}},
+                    upsert=True
+                )
+            except Exception:
+                pass
     except Exception as e:
         logger.error(f"Error persisting auto_post_watch: {e}")
 
@@ -375,6 +427,10 @@ async def get_autopost_style() -> int:
         doc = await mongo.db["bot_settings"].find_one({"key": "autopost_style"})
         if doc and "style" in doc:
             return int(doc["style"])
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "autopost_style"})
+            if doc2 and "style" in doc2:
+                return int(doc2["style"])
     except Exception:
         pass
     return 4
@@ -382,11 +438,23 @@ async def get_autopost_style() -> int:
 
 async def set_autopost_style(style_id: int):
     """Set active auto-post style in MongoDB."""
-    await mongo.db["bot_settings"].update_one(
-        {"key": "autopost_style"},
-        {"$set": {"style": int(style_id)}},
-        upsert=True
-    )
+    try:
+        await mongo.db["bot_settings"].update_one(
+            {"key": "autopost_style"},
+            {"$set": {"style": int(style_id)}},
+            upsert=True
+        )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"key": "autopost_style"},
+                    {"$set": {"style": int(style_id)}},
+                    upsert=True
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error(f"Error persisting autopost_style: {e}")
 
 
 def format_episodes_range(episodes: list, has_complete_pack: bool = False) -> str:
@@ -618,6 +686,12 @@ async def get_autopost_custom_button() -> dict | None:
         doc = await mongo.db["bot_settings"].find_one({"key": "autopost_custom_btn"})
         if doc and doc.get("text") and doc.get("url"):
             _CUSTOM_BTN_CACHE["btn"] = {"text": doc["text"], "url": doc["url"]}
+        elif mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"key": "autopost_custom_btn"})
+            if doc2 and doc2.get("text") and doc2.get("url"):
+                _CUSTOM_BTN_CACHE["btn"] = {"text": doc2["text"], "url": doc2["url"]}
+            else:
+                _CUSTOM_BTN_CACHE["btn"] = None
         else:
             _CUSTOM_BTN_CACHE["btn"] = None
         _CUSTOM_BTN_CACHE["loaded"] = True
@@ -631,14 +705,34 @@ async def set_autopost_custom_button(text: str | None, url: str | None):
     _CUSTOM_BTN_CACHE["loaded"] = True
     if text and url:
         _CUSTOM_BTN_CACHE["btn"] = {"text": text, "url": url}
-        await mongo.db["bot_settings"].update_one(
-            {"key": "autopost_custom_btn"},
-            {"$set": {"text": text, "url": url}},
-            upsert=True
-        )
+        try:
+            await mongo.db["bot_settings"].update_one(
+                {"key": "autopost_custom_btn"},
+                {"$set": {"text": text, "url": url}},
+                upsert=True
+            )
+            if mongo.has_secondary:
+                try:
+                    await mongo.db2["bot_settings"].update_one(
+                        {"key": "autopost_custom_btn"},
+                        {"$set": {"text": text, "url": url}},
+                        upsert=True
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"Error persisting autopost_custom_btn: {e}")
     else:
         _CUSTOM_BTN_CACHE["btn"] = None
-        await mongo.db["bot_settings"].delete_one({"key": "autopost_custom_btn"})
+        try:
+            await mongo.db["bot_settings"].delete_one({"key": "autopost_custom_btn"})
+            if mongo.has_secondary:
+                try:
+                    await mongo.db2["bot_settings"].delete_one({"key": "autopost_custom_btn"})
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"Error deleting autopost_custom_btn: {e}")
 
 
 def build_post_buttons(group: dict, custom_btn: dict | None = None, enable_watch: bool | None = None) -> InlineKeyboardMarkup:

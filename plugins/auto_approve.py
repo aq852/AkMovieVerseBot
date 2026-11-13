@@ -40,6 +40,11 @@ async def get_auto_approve_channels() -> list[int]:
         if doc and "channels" in doc and isinstance(doc["channels"], list):
             AUTO_APPROVE_CHANNELS_CACHE = [int(c) for c in doc["channels"] if str(c).lstrip("-").isdigit()]
             return AUTO_APPROVE_CHANNELS_CACHE
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"setting": "auto_approve_channels"})
+            if doc2 and "channels" in doc2 and isinstance(doc2["channels"], list):
+                AUTO_APPROVE_CHANNELS_CACHE = [int(c) for c in doc2["channels"] if str(c).lstrip("-").isdigit()]
+                return AUTO_APPROVE_CHANNELS_CACHE
     except Exception:
         pass
 
@@ -67,6 +72,15 @@ async def add_auto_approve_channel(channel_id: int):
             {"$set": {"channels": channels}},
             upsert=True
         )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"setting": "auto_approve_channels"},
+                    {"$set": {"channels": channels}},
+                    upsert=True
+                )
+            except Exception:
+                pass
         global AUTO_APPROVE_CHANNELS_CACHE
         AUTO_APPROVE_CHANNELS_CACHE = channels
 
@@ -81,6 +95,15 @@ async def del_auto_approve_channel(channel_id: int):
             {"$set": {"channels": channels}},
             upsert=True
         )
+        if mongo.has_secondary:
+            try:
+                await mongo.db2["bot_settings"].update_one(
+                    {"setting": "auto_approve_channels"},
+                    {"$set": {"channels": channels}},
+                    upsert=True
+                )
+            except Exception:
+                pass
         global AUTO_APPROVE_CHANNELS_CACHE
         AUTO_APPROVE_CHANNELS_CACHE = channels
 
@@ -95,6 +118,11 @@ async def get_welcome_text() -> str:
         if doc and doc.get("text"):
             CUSTOM_WELCOME_TEXT = doc["text"]
             return CUSTOM_WELCOME_TEXT
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"setting": "auto_approve_welcome"})
+            if doc2 and doc2.get("text"):
+                CUSTOM_WELCOME_TEXT = doc2["text"]
+                return CUSTOM_WELCOME_TEXT
     except Exception:
         pass
     return DEFAULT_WELCOME_TEXT
@@ -125,6 +153,11 @@ async def get_welcome_pic() -> str:
         if doc and doc.get("pic"):
             CUSTOM_WELCOME_PIC = doc["pic"]
             return CUSTOM_WELCOME_PIC
+        if mongo.has_secondary:
+            doc2 = await mongo.db2["bot_settings"].find_one({"setting": "auto_approve_pic"})
+            if doc2 and doc2.get("pic"):
+                CUSTOM_WELCOME_PIC = doc2["pic"]
+                return CUSTOM_WELCOME_PIC
     except Exception:
         pass
     # Dynamic anime artwork with millisecond cache-buster
