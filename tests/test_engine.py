@@ -2773,6 +2773,70 @@ class TestAutoFilterEngine(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_get_cached_poster_url_year_and_type_scoring(self):
+        """Test that get_cached_poster_url accurately differentiates movies/series by year and type."""
+        import asyncio
+        from utils.helpers import get_cached_poster_url
+        from database.mongo import mongo
+
+        async def _test():
+            mongo._client = None
+            mongo._db = None
+
+            # Test 1: Vibe (2026) auto-extracts year and matches 2026 movie
+            p1 = await get_cached_poster_url("Vibe (2026)")
+            self.assertTrue(p1.startswith("https://image.tmdb.org/t/p/"))
+            self.assertIn("1K2cYaK42vcQkg1iITxF6xcbJrs.jpg", p1)
+
+            # Test 2: Passing year=2026 explicitly matches 2026 movie
+            p2 = await get_cached_poster_url("Vibe", year=2026, is_series=False)
+            self.assertEqual(p1, p2)
+
+            mongo._client = None
+            mongo._db = None
+
+        asyncio.run(_test())
+
+    def test_channel_post_style_4_landscape_backdrop(self):
+        """Test that Channel Post Style 4 chooses 16:9 landscape backdrop over vertical poster."""
+        from plugins.channel_post import format_post_caption
+
+        # 1. Format Style 4 caption
+        group = {
+            "title": "Ranabaali (2026)",
+            "clean_name": "Ranabaali",
+            "year": 2026,
+            "is_series": False,
+            "languages_list": ["Telugu", "Hindi"],
+            "qualities": ["1080p", "720p", "480p", "web-dl", "hevc"]
+        }
+        tmdb_meta = {
+            "title": "Ranabaali",
+            "year": 2026,
+            "rating": 4.7,
+            "genres": ["History", "Action", "Drama"],
+            "poster_url": "https://image.tmdb.org/t/p/w780/cXaCyYYbafVyMrs8rwKmxezBYPJ.jpg",
+            "backdrop_url": "https://image.tmdb.org/t/p/w1280/xpImgnsxuqb3VOp0QRtXTS5uBRi.jpg"
+        }
+        caption = format_post_caption(group, tmdb_meta, style=4)
+        self.assertIn("Ranabaali (2026)", caption)
+        self.assertIn("4.7/10 IMDb", caption)
+        self.assertIn("Dual Audio [Telugu + Hindi]", caption)
+
+        # 2. Check Photo Selection: Style 4 chooses backdrop (landscape)
+        active_style = 4
+        prefer_poster = False
+        custom_photo = None
+        if custom_photo:
+            photo_url = custom_photo
+        elif active_style == 2 or prefer_poster:
+            photo_url = tmdb_meta.get("poster_url") or tmdb_meta.get("backdrop_url")
+        else:
+            photo_url = tmdb_meta.get("backdrop_url") or tmdb_meta.get("poster_url")
+
+        self.assertEqual(photo_url, tmdb_meta["backdrop_url"])
+        self.assertIn("xpImgnsxuqb3VOp0QRtXTS5uBRi.jpg", photo_url)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -250,15 +250,31 @@ async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool
                                 valid_candidates.append(r)
 
                         if valid_candidates:
-                            chosen = valid_candidates[0]
-                            for r in valid_candidates:
+                            def _cand_score(r):
+                                s = 0.0
                                 m_type = r.get("media_type")
-                                if is_series and m_type == "tv":
-                                    chosen = r
-                                    break
-                                elif not is_series and m_type == "movie":
-                                    chosen = r
-                                    break
+                                if is_series and m_type == "tv": s += 50.0
+                                elif not is_series and m_type == "movie": s += 50.0
+                                elif is_series and m_type == "movie": s -= 50.0
+                                elif not is_series and m_type == "tv": s -= 50.0
+
+                                r_date = r.get("release_date") or r.get("first_air_date") or ""
+                                r_yr = int(r_date[:4]) if len(r_date) >= 4 and r_date[:4].isdigit() else None
+                                if year and r_yr:
+                                    diff = abs(year - r_yr)
+                                    if diff == 0: s += 80.0
+                                    elif diff == 1: s += 40.0
+                                    elif diff <= 3: s += 10.0
+                                    else: s -= 40.0
+                                elif year and not r_yr:
+                                    s -= 10.0
+                                v_cnt = r.get("vote_count", 0) or 0
+                                pop = r.get("popularity", 0) or 0
+                                s += min(v_cnt, 100) / 10.0 + min(pop, 100) / 20.0
+                                return s
+
+                            valid_candidates.sort(key=_cand_score, reverse=True)
+                            chosen = valid_candidates[0]
 
                             m_id = chosen.get("id")
                             m_type = chosen.get("media_type", "movie" if not is_series else "tv")
@@ -330,7 +346,7 @@ async def fetch_tmdb_post_metadata(title: str, year: int = None, is_series: bool
 
     # Fallback poster from poster cache if TMDB gave no image
     if not result_data["poster_url"] and not result_data["backdrop_url"]:
-        cached_p = await get_cached_poster_url(clean_q)
+        cached_p = await get_cached_poster_url(clean_q, year=year, is_series=is_series)
         if cached_p:
             result_data["poster_url"] = cached_p
             result_data["backdrop_url"] = cached_p
@@ -846,13 +862,15 @@ async def publish_or_upgrade_channel_post(
     # Use explicit custom_photo if chosen in admin preview, else default backdrop or poster
     if custom_photo:
         photo_url = custom_photo
-    elif active_style in (2, 4) or prefer_poster:
+    elif active_style == 2 or prefer_poster:
+        # Style 2: Single 2:3 vertical poster
         photo_url = tmdb_meta.get("poster_url") or tmdb_meta.get("backdrop_url")
     else:
+        # Style 1, Style 3, Style 4: 16:9 Landscape Widescreen Backdrop
         photo_url = tmdb_meta.get("backdrop_url") or tmdb_meta.get("poster_url")
 
     if not photo_url:
-        photo_url = await get_cached_poster_url(clean_name)
+        photo_url = await get_cached_poster_url(clean_name, year=group.get("year"), is_series=group.get("is_series", False))
     if not photo_url:
         photo_url = getattr(Config, "START_PIC", "https://api.aniwallpaper.workers.dev/random")
 
@@ -1146,8 +1164,20 @@ async def admin_post_command(client: Client, message: Message):
         if tmdb_meta.get("backdrop_url"): gallery.append(tmdb_meta["backdrop_url"])
         if tmdb_meta.get("poster_url") and tmdb_meta["poster_url"] not in gallery: gallery.append(tmdb_meta["poster_url"])
     if not gallery:
-        cached_p = await get_cached_poster_url(chosen_group["clean_name"])
+        cached_p = await get_cached_poster_url(chosen_group["clean_name"], year=chosen_group.get("year"), is_series=chosen_group.get("is_series", False))
         gallery = [cached_p] if cached_p else [getattr(Config, "START_PIC", "https://api.aniwallpaper.workers.dev/random")]
+
+    # If Style 2, prioritize vertical portrait; if Style 1, 3, 4, prioritize landscape backdrop
+    if active_style == 2 and tmdb_meta.get("poster_url"):
+        p_url = tmdb_meta["poster_url"]
+        if p_url in gallery:
+            gallery.remove(p_url)
+        gallery.insert(0, p_url)
+    elif active_style in (1, 3, 4) and tmdb_meta.get("backdrop_url"):
+        b_url = tmdb_meta["backdrop_url"]
+        if b_url in gallery:
+            gallery.remove(b_url)
+        gallery.insert(0, b_url)
 
     total_imgs = len(gallery)
     photo_url = gallery[0]
@@ -1222,7 +1252,7 @@ async def post_preview_callbacks(client: Client, callback_query: CallbackQuery):
         if tmdb_meta.get("backdrop_url"): gallery.append(tmdb_meta["backdrop_url"])
         if tmdb_meta.get("poster_url") and tmdb_meta["poster_url"] not in gallery: gallery.append(tmdb_meta["poster_url"])
     if not gallery:
-        cached_p = await get_cached_poster_url(chosen_group["clean_name"])
+        cached_p = await get_cached_poster_url(chosen_group["clean_name"], year=chosen_group.get("year"), is_series=chosen_group.get("is_series", False))
         gallery = [cached_p] if cached_p else [getattr(Config, "START_PIC", "https://api.aniwallpaper.workers.dev/random")]
 
     total_imgs = len(gallery)
@@ -1476,7 +1506,7 @@ async def set_post_style_command(client: Client, message: Message):
         f"• <b>Current Active Style:</b> <b>Style {current}</b>\n\n"
         "<b>Available Styles:</b>\n"
         "✨ <b>Style 4: Ultra-Clean Compact 4-Line (Format 1 - Default)</b>\n"
-        "   • Official 2:3 vertical poster\n"
+        "   • Official 16:9 landscape widescreen backdrop\n"
         "   • Pure 4-line essentials (Title, Rating, Audio, Quality, Episodes) — zero fluff!\n\n"
         "1️⃣ <b>Style 1: Cinematic Widescreen</b>\n"
         "   • 16:9 Landscape backdrop\n"
@@ -1521,7 +1551,7 @@ async def post_style_callback(client: Client, query: CallbackQuery):
         f"• <b>Current Active Style:</b> <b>Style {current}</b>\n\n"
         "<b>Available Styles:</b>\n"
         "✨ <b>Style 4: Ultra-Clean Compact 4-Line (Format 1 - Default)</b>\n"
-        "   • Official 2:3 vertical poster\n"
+        "   • Official 16:9 landscape widescreen backdrop\n"
         "   • Pure 4-line essentials (Title, Rating, Audio, Quality, Episodes) — zero fluff!\n\n"
         "1️⃣ <b>Style 1: Cinematic Widescreen</b>\n"
         "   • 16:9 Landscape backdrop\n"

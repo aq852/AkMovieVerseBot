@@ -101,7 +101,7 @@ def format_clean_title(file_name: str) -> str:
 
 _POSTER_CACHE: dict[str, str] = {}
 
-async def get_cached_poster_url(title: str) -> str:
+async def get_cached_poster_url(title: str, year: int = None, is_series: bool = None) -> str:
     """Fetch poster URL from TMDB with memory and persistent MongoDB caching.
     Returns direct CDN image URL (e.g. https://image.tmdb.org/t/p/w500/...) or empty string.
     Zero VPS disk or bandwidth usage - images stream straight from TMDB CDN to user browser.
@@ -109,6 +109,15 @@ async def get_cached_poster_url(title: str) -> str:
     import urllib.parse
     import aiohttp
     from config import Config
+
+    # Auto-extract year from title if not explicitly passed
+    if year is None:
+        yr_m = re.search(r"\b(19\d{2}|20\d{2})\b", title)
+        if yr_m:
+            try:
+                year = int(yr_m.group(1))
+            except Exception:
+                pass
 
     clean_q = re.sub(r"\s*\((?:19|20)\d{2}\).*", "", title).strip()
     clean_q = re.sub(r"\s*Season.*", "", clean_q, flags=re.IGNORECASE).strip()
@@ -119,9 +128,16 @@ async def get_cached_poster_url(title: str) -> str:
     if not clean_q or len(clean_q) < 2 or clean_q.lower() in ["untitled", "movie video", "video", "none", "clip", "mediaclip"]:
         return ""
 
+    cache_key = f"{clean_q.lower()}:{year or ''}:{1 if is_series is True else (0 if is_series is False else '')}"
+    simple_key = f"{clean_q.lower()}:{year}" if year else clean_q.lower()
+
     # 1. Fast in-memory cache check
-    if clean_q in _POSTER_CACHE and _POSTER_CACHE[clean_q]:
-        return _POSTER_CACHE[clean_q]
+    if cache_key in _POSTER_CACHE and _POSTER_CACHE[cache_key]:
+        return _POSTER_CACHE[cache_key]
+    if simple_key in _POSTER_CACHE and _POSTER_CACHE[simple_key]:
+        return _POSTER_CACHE[simple_key]
+    if not year and is_series is None and clean_q.lower() in _POSTER_CACHE and _POSTER_CACHE[clean_q.lower()]:
+        return _POSTER_CACHE[clean_q.lower()]
 
     # 2. Custom manual poster check & Persistent MongoDB cache check
     try:
@@ -132,13 +148,31 @@ async def get_cached_poster_url(title: str) -> str:
         })
         if custom_doc and custom_doc.get("poster_url"):
             url = custom_doc["poster_url"]
-            _POSTER_CACHE[clean_q] = url
+            _POSTER_CACHE[cache_key] = url
+            _POSTER_CACHE[simple_key] = url
             return url
 
-        cached_doc = await mongo.db["poster_cache"].find_one({"title": clean_q})
+        # Check tmdb_post_cache if present (it holds rich metadata with verified poster)
+        if year or is_series is not None:
+            tpc_key = f"{clean_q.lower()}:{year or ''}:{1 if is_series else 0}"
+            cached_tpc = await mongo.db["tmdb_post_cache"].find_one({"key": tpc_key})
+            if cached_tpc and cached_tpc.get("data", {}).get("poster_url"):
+                url = cached_tpc["data"]["poster_url"]
+                _POSTER_CACHE[cache_key] = url
+                _POSTER_CACHE[simple_key] = url
+                return url
+
+        cached_doc = await mongo.db["poster_cache"].find_one({
+            "$or": [
+                {"key": cache_key},
+                {"key": simple_key},
+                {"title": clean_q, "year": year} if year else {"title": clean_q}
+            ]
+        })
         if cached_doc and cached_doc.get("poster_url"):
             url = cached_doc["poster_url"]
-            _POSTER_CACHE[clean_q] = url
+            _POSTER_CACHE[cache_key] = url
+            _POSTER_CACHE[simple_key] = url
             return url
     except Exception:
         pass
@@ -170,19 +204,62 @@ async def get_cached_poster_url(title: str) -> str:
                     if resp.status == 200:
                         data = await resp.json()
                         results = data.get("results", [])
-                        best_match = None
-                        # 1. Prefer exact title match with poster
-                        for r in results:
+                        valid_results = [r for r in results if r.get("poster_path")]
+                        if not valid_results:
+                            continue
+
+                        # Score candidates intelligently considering Title match, Year, and Media Type
+                        def _score(r):
                             r_title = (r.get("title") or r.get("name") or "").lower()
-                            if r_title == clean_q.lower() and r.get("poster_path"):
-                                best_match = r
-                                break
-                        # 2. Prefer highest vote count / popularity among entries with a poster
-                        if not best_match:
-                            valid_results = [r for r in results if r.get("poster_path")]
-                            if valid_results:
-                                valid_results.sort(key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)), reverse=True)
-                                best_match = valid_results[0]
+                            r_orig = (r.get("original_title") or r.get("original_name") or "").lower()
+                            s = 0.0
+
+                            # Title match
+                            if r_title == clean_q.lower() or r_orig == clean_q.lower():
+                                s += 100.0
+                            elif r_title == q_term.lower() or r_orig == q_term.lower():
+                                s += 80.0
+                            elif clean_q.lower() in r_title:
+                                s += 40.0
+                            else:
+                                s += 10.0
+
+                            # Media type matching
+                            m_type = r.get("media_type")
+                            if is_series is not None:
+                                if is_series and m_type == "tv":
+                                    s += 50.0
+                                elif not is_series and m_type == "movie":
+                                    s += 50.0
+                                elif is_series and m_type == "movie":
+                                    s -= 50.0
+                                elif not is_series and m_type == "tv":
+                                    s -= 50.0
+
+                            # Year matching
+                            r_date = r.get("release_date") or r.get("first_air_date") or ""
+                            r_yr = int(r_date[:4]) if len(r_date) >= 4 and r_date[:4].isdigit() else None
+                            if year and r_yr:
+                                diff = abs(year - r_yr)
+                                if diff == 0:
+                                    s += 80.0
+                                elif diff == 1:
+                                    s += 40.0
+                                elif diff <= 3:
+                                    s += 10.0
+                                else:
+                                    s -= 40.0
+                            elif year and not r_yr:
+                                s -= 10.0
+
+                            # Popularity & Vote count bonus
+                            v_cnt = r.get("vote_count", 0) or 0
+                            pop = r.get("popularity", 0) or 0
+                            s += min(v_cnt, 100) / 10.0 + min(pop, 100) / 20.0
+                            return s
+
+                        valid_results.sort(key=_score, reverse=True)
+                        best_match = valid_results[0]
 
                         if best_match and best_match.get("poster_path"):
                             # If it's an unverified/fan entry with <= 2 votes and a broader query exists, continue to parent
@@ -190,26 +267,21 @@ async def get_cached_poster_url(title: str) -> str:
                                 continue
                             poster_path = best_match["poster_path"]
                             poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-                            _POSTER_CACHE[clean_q] = poster_url
-                            _POSTER_CACHE[q_term] = poster_url
+                            _POSTER_CACHE[cache_key] = poster_url
+                            _POSTER_CACHE[simple_key] = poster_url
+                            if not year and is_series is None:
+                                _POSTER_CACHE[clean_q.lower()] = poster_url
+
                             # Persist asynchronously to MongoDB
                             try:
                                 from database.mongo import mongo
                                 asyncio.create_task(
                                     mongo.db["poster_cache"].update_one(
-                                        {"title": clean_q},
-                                        {"$set": {"poster_url": poster_url}},
+                                        {"key": cache_key},
+                                        {"$set": {"key": cache_key, "title": clean_q, "year": year, "poster_url": poster_url}},
                                         upsert=True
                                     )
                                 )
-                                if q_term != clean_q:
-                                    asyncio.create_task(
-                                        mongo.db["poster_cache"].update_one(
-                                            {"title": q_term},
-                                            {"$set": {"poster_url": poster_url}},
-                                            upsert=True
-                                        )
-                                    )
                             except Exception:
                                 pass
                             return poster_url

@@ -5033,7 +5033,7 @@ async def _preload_catalog_posters(items: list):
         t = it.get("clean_name")
         if t:
             try:
-                await get_cached_poster_url(t)
+                await get_cached_poster_url(t, year=it.get("year"), is_series=it.get("is_series"))
             except Exception:
                 pass
             await asyncio.sleep(0.05)
@@ -5577,9 +5577,11 @@ async def browse_handler(request: web.Request):
     offset = (page - 1) * limit
     results = filtered_catalog[offset:offset+limit]
 
-    # Fetch posters concurrently using TMDB CDN cache
-    titles = [item["clean_name"] for item in results]
-    posters = await asyncio.gather(*[get_cached_poster_url(t) for t in titles], return_exceptions=True)
+    # Fetch posters concurrently using TMDB CDN cache with year and media type accuracy
+    posters = await asyncio.gather(*[
+        get_cached_poster_url(item["clean_name"], year=item.get("year"), is_series=item.get("is_series"))
+        for item in results
+    ], return_exceptions=True)
 
     movie_cards = []
     for item, poster in zip(results, posters):
@@ -7543,8 +7545,10 @@ async def galaxy_search_api(request: web.Request) -> web.Response:
     bot_username = Config.BOT_USERNAME or "bot"
 
     matching_items = await search_galaxy_catalog(q, limit=28)
-    titles = [item.get("clean_name", "") for item in matching_items]
-    posters = await asyncio.gather(*[get_cached_poster_url(t) for t in titles], return_exceptions=True)
+    posters = await asyncio.gather(*[
+        get_cached_poster_url(item.get("clean_name", ""), year=item.get("year"), is_series=item.get("is_series"))
+        for item in matching_items
+    ], return_exceptions=True)
 
     results = []
     for item, poster in zip(matching_items, posters):
@@ -7566,8 +7570,10 @@ async def galaxy_handler(request: web.Request) -> web.Response:
     q = request.query.get("q", "").strip()
 
     matching_items = await search_galaxy_catalog(q, limit=28)
-    titles = [item.get("clean_name", "") for item in matching_items]
-    posters = await asyncio.gather(*[get_cached_poster_url(t) for t in titles], return_exceptions=True)
+    posters = await asyncio.gather(*[
+        get_cached_poster_url(item.get("clean_name", ""), year=item.get("year"), is_series=item.get("is_series"))
+        for item in matching_items
+    ], return_exceptions=True)
 
     enriched_items = []
     for item, poster in zip(matching_items, posters):
