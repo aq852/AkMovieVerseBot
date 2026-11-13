@@ -2309,8 +2309,8 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                 except Exception as e_th:
                     logger.debug(f"Media thumbnail download skipped: {e_th}")
 
-            # 2. Try sample video clip extraction if mode is 'sample' and file size <= 75 MB
-            max_sample_bytes = 75 * 1024 * 1024  # 75 MB safe cap for fast sample video download
+            # 2. Try sample video clip extraction if mode is 'sample' and file size <= 100 MB
+            max_sample_bytes = 100 * 1024 * 1024  # 100 MB cap for sample video preview
             if mode == "sample" and file_size <= max_sample_bytes:
                 try:
                     if pending_info.get("status_msg"):
@@ -2321,7 +2321,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
 
                     video_local = await asyncio.wait_for(
                         client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
-                        timeout=45.0
+                        timeout=60.0
                     )
                     if video_local and os.path.exists(video_local):
                         from plugins.screenshots import get_video_duration
@@ -2346,7 +2346,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
                             pass
                     video_local = await asyncio.wait_for(
                         client.download_media(message, file_name=os.path.join(temp_dir, file_name)),
-                        timeout=45.0
+                        timeout=60.0
                     )
                     if video_local and os.path.exists(video_local):
                         from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
