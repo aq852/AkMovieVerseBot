@@ -245,7 +245,8 @@ async def start_command_handler(client: Client, message: Message):
             logger.debug(f"Error sending new user log: {e}")
 
     bot_username = client.me.username if client.me else Config.BOT_USERNAME
-    args = message.text.split()[1] if len(message.text.split()) > 1 else ""
+    parts = message.text.split(None, 1)
+    args = parts[1].strip() if len(parts) > 1 else ""
 
     # 1. Referral Deep-link: /start refer_<id> or /start spin_<id>
     if args.startswith("spin_"):
@@ -551,7 +552,8 @@ async def start_command_handler(client: Client, message: Message):
     # 5. Search Deep-link: /start search_<query>
     elif args.startswith("search_"):
         import urllib.parse
-        raw_query = urllib.parse.unquote_plus(args.split("search_", 1)[1]).replace("_", " ").strip()
+        raw_param = args.split("search_", 1)[1]
+        raw_query = urllib.parse.unquote_plus(raw_param).replace("+", " ").replace("_", " ").strip()
         # Attempt smart navigator session first so user gets quality / season buttons if available!
         try:
             from utils.smart_nav import create_nav_session, build_navigator_root_view
@@ -563,7 +565,7 @@ async def start_command_handler(client: Client, message: Message):
                 bot_username=bot_username
             )
             text, markup = await build_navigator_root_view(sid)
-            if "❌" not in text and "⚠️ No" not in text:
+            if "❌" not in text and "⚠️ No" not in text and not re.search(r"\b0 Files\b", text):
                 await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
                 return
         except Exception as nav_err:
@@ -577,7 +579,8 @@ async def start_command_handler(client: Client, message: Message):
     # 6. Filter Deep-link: /start filter_<query> (Direct Filter Trigger from Channel Post or Top Link)
     elif args.startswith("filter_"):
         import urllib.parse
-        raw_filter_q = urllib.parse.unquote_plus(args.split("filter_", 1)[1]).replace("_", " ").strip()
+        raw_param = args.split("filter_", 1)[1]
+        raw_filter_q = urllib.parse.unquote_plus(raw_param).replace("+", " ").replace("_", " ").strip()
         try:
             from utils.smart_nav import create_nav_session, build_navigator_root_view
             sid = create_nav_session(
@@ -588,7 +591,7 @@ async def start_command_handler(client: Client, message: Message):
                 bot_username=bot_username
             )
             text, markup = await build_navigator_root_view(sid)
-            if "❌" not in text and "⚠️ No" not in text and "0 Files" not in text:
+            if "❌" not in text and "⚠️ No" not in text and not re.search(r"\b0 Files\b", text):
                 await message.reply_text(text, reply_markup=markup, disable_web_page_preview=True)
                 return
         except Exception as nav_err:

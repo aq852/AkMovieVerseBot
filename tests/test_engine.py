@@ -1189,6 +1189,25 @@ class TestAutoFilterEngine(unittest.TestCase):
         get_file_btn_single = markup_single.inline_keyboard[0][0]
         self.assertIn("start=file_f1", get_file_btn_single.url)
 
+    def test_channel_post_deep_link_slug_and_start_filter(self):
+        import re
+        from plugins.channel_post import build_post_buttons
+
+        # Multi-file series with title containing parentheses & spaces
+        group = {
+            "is_series": True,
+            "clean_name": "The Empress (2013)",
+            "files": [{"file_unique_id": "u1"}, {"file_unique_id": "u2"}],
+            "qualities": {"720p", "1080p"}
+        }
+        mk = build_post_buttons(group)
+        btn_url = mk.inline_keyboard[0][0].url
+        self.assertIn("start=filter_The_Empress_2013", btn_url)
+        # Telegram deep link format strictly requires [a-zA-Z0-9_-] and len <= 64
+        param = btn_url.split("start=")[1]
+        self.assertTrue(bool(re.match(r"^[a-zA-Z0-9_-]{1,64}$", param)))
+        self.assertLessEqual(len(param), 64)
+
     def test_user_requests_and_alerts_enhancements(self):
         from database.requests import get_user_requests
         self.assertTrue(callable(get_user_requests))

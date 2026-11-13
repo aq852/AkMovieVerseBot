@@ -634,13 +634,15 @@ def build_post_buttons(group: dict, custom_btn: dict | None = None, enable_watch
     is_series = group.get("is_series", False)
     files = group.get("files", [])
     qualities = group.get("qualities", set())
-    encoded_name = urllib.parse.quote_plus(clean_name)
+
+    # Build clean alphanumeric slug strictly adhering to Telegram's 64-char deep link limit [A-Za-z0-9_]
+    clean_slug = re.sub(r"[^a-zA-Z0-9]+", "_", clean_name).strip("_")[:50] or "media"
 
     if is_series:
         slug = group.get("slug") or re.sub(r"[^\w\-]", "-", clean_name.lower())
         watch_url = f"{web_url}/series/{slug}"
         # Series: Route to Smart Navigator with Season and Episode picker
-        bot_file_url = f"https://t.me/{bot_username}?start=filter_{encoded_name}"
+        bot_file_url = f"https://t.me/{bot_username}?start=filter_{clean_slug}"
     else:
         pid = group.get("primary_file_id") or "0"
         watch_url = f"{web_url}/watch/{pid}"
@@ -648,7 +650,7 @@ def build_post_buttons(group: dict, custom_btn: dict | None = None, enable_watch
         # route to Smart Quality Navigator so user can pick their desired quality!
         # If only 1 file exists, link directly to file_{pid} for instant 1-click delivery.
         if len(files) > 1 or len(qualities) > 1:
-            bot_file_url = f"https://t.me/{bot_username}?start=filter_{encoded_name}"
+            bot_file_url = f"https://t.me/{bot_username}?start=filter_{clean_slug}"
         else:
             bot_file_url = f"https://t.me/{bot_username}?start=file_{pid}"
 
