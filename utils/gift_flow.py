@@ -408,7 +408,7 @@ async def render_gift_page(
                             show_alert=True
                         )
                     elapsed = (datetime.datetime.utcnow() - clicked_at).total_seconds()
-                    if elapsed < ad_wait_sec:
+                    if ad_wait_sec > 0 and elapsed < ad_wait_sec:
                         rem = int(ad_wait_sec - elapsed) + 1
                         label = f"Sponsor Offer #{a_idx}" if len(ad_links) > 1 else "the sponsor page"
                         return await callback_query.answer(
@@ -567,7 +567,7 @@ async def render_gift_page(
     web_gateway = Config.WEB_URL or Config.STREAM_URL
     for a_idx, is_a_done, a_token, a_url in ad_tasks_status:
         tick = "✅" if is_a_done else "❌"
-        status_txt = "Verified" if is_a_done else f"Pending ({ad_wait_sec}s visit)"
+        status_txt = "Verified" if is_a_done else (f"Pending ({ad_wait_sec}s visit)" if ad_wait_sec > 0 else "Pending")
         label = f"View Sponsor Offer #{a_idx}" if len(ad_tasks_status) > 1 else "View Sponsored Partner Offer"
         card_lines.append(f"{tick} <b>Task {task_num}:</b> {label} ({status_txt})")
         task_num += 1

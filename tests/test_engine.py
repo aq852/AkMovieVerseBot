@@ -2855,6 +2855,77 @@ class TestAutoFilterEngine(unittest.TestCase):
         self.assertEqual(photo_url, tmdb_meta["backdrop_url"])
         self.assertIn("xpImgnsxuqb3VOp0QRtXTS5uBRi.jpg", photo_url)
 
+    def test_verify_redirect_instant_for_setgiftad_and_countdown_for_shortener(self):
+        """Verify that /verify/{token} immediately redirects for setgiftad (ad_task) without 5s countdown,
+        while maintaining the 5s countdown gateway for shortener tasks."""
+        from utils.web_server import verify_redirect_handler
+        from unittest.mock import AsyncMock, MagicMock, patch
+        import asyncio
+        from aiohttp import web
+
+        async def _test():
+            from database.mongo import mongo
+            # 1. Test setgiftad (ad_task) token -> Instant 302 redirect to direct ad link
+            ad_req = MagicMock()
+            ad_req.match_info = {"token": "gtok_ad12345"}
+            ad_doc = {
+                "token": "gtok_ad12345",
+                "task_type": "ad_task",
+                "target_url": "https://adsterra-direct-offer.com/click"
+            }
+
+            mock_ad_coll = MagicMock()
+            mock_ad_coll.find_one = AsyncMock(return_value=ad_doc)
+            mock_ad_coll.update_one = AsyncMock()
+
+            mock_verify_coll = MagicMock()
+            mock_verify_coll.find_one = AsyncMock(return_value=None)
+
+            def get_coll_ad(name):
+                if name == "verify":
+                    return mock_verify_coll
+                return mock_ad_coll
+
+            mock_db_ad = MagicMock()
+            mock_db_ad.__getitem__.side_effect = get_coll_ad
+
+            with patch.object(mongo, "_db", mock_db_ad):
+                ad_resp = await verify_redirect_handler(ad_req)
+                self.assertIsInstance(ad_resp, web.HTTPFound)
+                self.assertEqual(ad_resp.headers["Location"], "https://adsterra-direct-offer.com/click")
+                mock_ad_coll.update_one.assert_called_once()
+                self.assertIn("clicked_at", mock_ad_coll.update_one.call_args[0][1]["$set"])
+
+            # 2. Test shortener token -> Still serves VERIFY_GATEWAY_HTML with 5s countdown
+            short_req = MagicMock()
+            short_req.match_info = {"token": "gtok_short123"}
+            short_doc = {
+                "token": "gtok_short123",
+                "task_type": "shortener",
+                "short_link": "https://shortener-domain.com/bypass"
+            }
+
+            mock_short_coll = MagicMock()
+            mock_short_coll.find_one = AsyncMock(return_value=short_doc)
+            mock_short_coll.update_one = AsyncMock()
+
+            def get_coll_short(name):
+                if name == "verify":
+                    return mock_verify_coll
+                return mock_short_coll
+
+            mock_db_short = MagicMock()
+            mock_db_short.__getitem__.side_effect = get_coll_short
+
+            with patch.object(mongo, "_db", mock_db_short):
+                short_resp = await verify_redirect_handler(short_req)
+                self.assertEqual(short_resp.status, 200)
+                self.assertIn("text/html", short_resp.content_type)
+                self.assertIn("Verification Gateway", short_resp.text)
+                self.assertIn("timer-circle", short_resp.text)
+
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()

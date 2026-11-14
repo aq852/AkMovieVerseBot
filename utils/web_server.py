@@ -6449,6 +6449,13 @@ async def verify_redirect_handler(request):
             else:
                 target_url = f"https://t.me/{bot_username}?start=verify_{token}"
 
+        # If this is specifically a setgiftad (ad_task) direct sponsor link,
+        # skip the 5-second countdown gateway and redirect immediately!
+        # For shorteners and general bot pass verifications, retain the full 5s gateway.
+        task_type = str(doc.get("task_type", ""))
+        if task_type == "ad_task" or task_type.startswith("ad_task_"):
+            return web.HTTPFound(location=target_url)
+
         import base64
         target_b64 = base64.b64encode(target_url.encode("utf-8")).decode("utf-8")
         html = VERIFY_GATEWAY_HTML.format(target_b64=target_b64, target_url=target_url)

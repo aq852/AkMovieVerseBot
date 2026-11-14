@@ -2375,9 +2375,10 @@ async def set_gift_ad_wait_command(client: Client, message: Message):
         )
 
     sec = int(parts[1].strip())
-    sec = max(1, min(60, sec))
+    sec = max(0, min(60, sec))
     await save_auto_gift_config({"ad_wait_seconds": sec})
-    await message.reply_text(f"✅ <b>Sponsor Ad Anti-Cheat Timer Set to:</b> <code>{sec} Seconds</code>")
+    wait_note = "Instant Verification (No wait)" if sec == 0 else f"{sec} Seconds"
+    await message.reply_text(f"✅ <b>Sponsor Ad Anti-Cheat Timer Set to:</b> <code>{wait_note}</code>")
 
 
 
