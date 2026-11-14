@@ -46,6 +46,15 @@ class TestMovieVerse3D(unittest.TestCase):
         self.assertIn("Get All Files / Episodes in Bot", html)
         self.assertIn("downloadQualityFile", html)
 
+        # Must have native Telegram Haptic Feedback
+        self.assertIn("HapticFeedback", html)
+        self.assertIn("selectionChanged", html)
+
+        # Must have 1-Click Share with Friends actions
+        self.assertIn("shareCurrentMovie", html)
+        self.assertIn("shareActiveFromHud", html)
+        self.assertIn("t.me/share/url", html)
+
     def test_format_galaxy_item(self):
         raw_group = {
             "title": "Leo (2023)",

@@ -227,23 +227,52 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             background: rgba(56, 189, 248, 0.15);
         }
 
+        .hud-actions-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
         .tap-prompt-badge {
             background: linear-gradient(135deg, rgba(244, 63, 94, 0.3) 0%, rgba(225, 29, 72, 0.45) 100%);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(244, 63, 94, 0.55);
             color: #ffffff;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 800;
-            padding: 7px 18px;
+            padding: 7px 15px;
             border-radius: 20px;
             box-shadow: 0 4px 20px rgba(244, 63, 94, 0.35);
             display: flex;
             align-items: center;
             gap: 6px;
             animation: pulseTap 2s infinite ease-in-out;
-            pointer-events: auto;
             cursor: pointer;
+        }
+
+        .share-prompt-badge {
+            background: rgba(56, 189, 248, 0.2);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            color: #38bdf8;
+            font-size: 11.5px;
+            font-weight: 800;
+            padding: 7px 14px;
+            border-radius: 20px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .share-prompt-badge:active {
+            transform: scale(0.95);
+            background: rgba(56, 189, 248, 0.35);
         }
 
         @keyframes pulseTap {
@@ -299,6 +328,32 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             gap: 6px;
+        }
+
+        .modal-top-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-share-icon-btn {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: #38bdf8;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+        }
+
+        .modal-share-icon-btn:active {
+            transform: scale(0.9);
+            background: rgba(56, 189, 248, 0.35);
         }
 
         .modal-close-btn {
@@ -597,18 +652,25 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 5px;
+            gap: 7px;
+        }
+
+        .modal-action-buttons {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .btn-all-in-bot {
-            width: 100%;
-            max-width: 500px;
+            flex: 1;
             padding: 13px;
             border-radius: 14px;
             border: none;
             background: linear-gradient(135deg, #f43f5e 0%, #e11d48 50%, #be123c 100%);
             color: #ffffff;
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 800;
             display: flex;
             align-items: center;
@@ -618,10 +680,35 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             box-shadow: 0 6px 22px rgba(225, 29, 72, 0.45);
             text-decoration: none;
             transition: transform 0.15s ease;
+            white-space: nowrap;
         }
 
         .btn-all-in-bot:active {
             transform: scale(0.97);
+        }
+
+        .btn-share-movie {
+            flex: 0 0 auto;
+            padding: 13px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(37, 99, 235, 0.5) 100%);
+            color: #38bdf8;
+            font-size: 13px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25);
+            white-space: nowrap;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .btn-share-movie:active {
+            transform: scale(0.95);
+            background: rgba(2, 132, 199, 0.65);
         }
 
         .bot-notice {
@@ -655,9 +742,15 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="bottom-hint-bar" id="bottomHintBar">
         <div class="movie-title-preview" id="movieTitlePreview">Loading Cosmos...</div>
         <div class="hud-sub-badges" id="hudSubBadges"></div>
-        <div class="tap-prompt-badge" onclick="triggerActiveModal()">
-            <span>🍿</span>
-            <span>Tap Poster to View Files &amp; Episodes</span>
+        <div class="hud-actions-row">
+            <div class="tap-prompt-badge" onclick="triggerActiveModal()">
+                <span>🍿</span>
+                <span>View Episodes &amp; Files</span>
+            </div>
+            <div class="share-prompt-badge" onclick="shareActiveFromHud()">
+                <span>🚀</span>
+                <span>Share</span>
+            </div>
         </div>
     </div>
 
@@ -670,7 +763,12 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="modal-brand">
                 <span>🍿</span> <span>AkMovieVerse Cinema</span>
             </div>
-            <button class="modal-close-btn" onclick="closeCinemaModal()">✕</button>
+            <div class="modal-top-actions">
+                <button class="modal-share-icon-btn" onclick="shareCurrentMovie()" title="Share with Friends">
+                    <span>🚀</span>
+                </button>
+                <button class="modal-close-btn" onclick="closeCinemaModal()" title="Close">✕</button>
+            </div>
         </div>
 
         <!-- 2. Smooth Scrollable Content Container -->
@@ -696,11 +794,16 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- 3. Pinned Bottom Delivery Button (Locked at bottom, never overlaps) -->
+        <!-- 3. Pinned Bottom Delivery Button & Share Row -->
         <div class="modal-bottom-bar">
-            <button id="modalBotAllBtn" class="btn-all-in-bot">
-                <span>🤖</span> <span>Get All Files / Episodes in Bot ↗️</span>
-            </button>
+            <div class="modal-action-buttons">
+                <button id="modalBotAllBtn" class="btn-all-in-bot">
+                    <span>🤖</span> <span>Get All Files / Episodes in Bot ↗️</span>
+                </button>
+                <button class="btn-share-movie" onclick="shareCurrentMovie()">
+                    <span>🚀</span> <span>Share</span>
+                </button>
+            </div>
             <div class="bot-notice">
                 🔒 Fast &amp; verified file delivery directly into your Telegram chat
             </div>
@@ -765,12 +868,24 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             } catch (e) {}
         }
 
+        const BOT_USERNAME = "__BOT_USERNAME__";
+        const BASE_URL = "__BASE_URL__";
+
         function triggerHaptic(style) {
             try {
                 if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
-                    if (style === "light") window.Telegram.WebApp.HapticFeedback.impactOccurred("light");
-                    else if (style === "medium") window.Telegram.WebApp.HapticFeedback.impactOccurred("medium");
-                    else if (style === "heavy") window.Telegram.WebApp.HapticFeedback.impactOccurred("heavy");
+                    const hf = window.Telegram.WebApp.HapticFeedback;
+                    if (style === "selection") {
+                        if (typeof hf.selectionChanged === "function") hf.selectionChanged();
+                        else hf.impactOccurred("light");
+                    } else if (style === "light" || style === "medium" || style === "heavy" || style === "rigid" || style === "soft") {
+                        hf.impactOccurred(style);
+                    } else if (style === "success" || style === "warning" || style === "error") {
+                        if (typeof hf.notificationOccurred === "function") hf.notificationOccurred(style);
+                        else hf.impactOccurred("medium");
+                    } else {
+                        hf.impactOccurred("light");
+                    }
                 }
             } catch (e) {}
         }
@@ -1246,10 +1361,57 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         // -------------------------------------------------------------
+        // 1-CLICK SHARE WITH FRIENDS (Native Telegram Share Sheet)
+        // -------------------------------------------------------------
+        let currentModalItem = null;
+
+        function shareMovie(title, year, isSeries, cleanName) {
+            triggerHaptic("success");
+            playChime();
+
+            const botUname = BOT_USERNAME || "TheFlixifyBot";
+            const safeTitle = (cleanName || title || "Movie").trim();
+            const encodedTitle = encodeURIComponent(safeTitle);
+            const movieDeepLink = `https://t.me/${botUname}?start=galaxy_${encodedTitle}`;
+
+            const yearStr = year ? ` (${year})` : "";
+            const shareText = `🍿 Hey! Watch & Download: ${title}${yearStr}\n⚡ High-Quality HD Prints Available on @${botUname}!\n👇 Tap to explore in 3D Galaxy:`;
+
+            const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(movieDeepLink)}&text=${encodeURIComponent(shareText)}`;
+
+            if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.openTelegramLink === "function") {
+                window.Telegram.WebApp.openTelegramLink(tgShareUrl);
+            } else {
+                window.open(tgShareUrl, "_blank");
+            }
+        }
+
+        function shareCurrentMovie() {
+            if (!currentModalItem) return;
+            shareMovie(
+                currentModalItem.title,
+                currentModalItem.year,
+                currentModalItem.is_series,
+                currentModalItem.clean_name
+            );
+        }
+
+        function shareActiveFromHud() {
+            if (cardMeshes.length === 0) return;
+            const activeIdx = isSingleHeroMode ? 0 : Math.round(currentScroll);
+            const targetMesh = cardMeshes[activeIdx] || cardMeshes[0];
+            if (targetMesh && targetMesh.userData && targetMesh.userData.item) {
+                const it = targetMesh.userData.item;
+                shareMovie(it.title, it.year, it.is_series, it.clean_name);
+            }
+        }
+
+        // -------------------------------------------------------------
         // OPEN FULL CINEMA POST MODAL (Styled like Website Post Page)
         // -------------------------------------------------------------
         function openCinemaModal(item) {
             const modal = document.getElementById("cinemaModal");
+            currentModalItem = item;
             const title = item.title || item.clean_name;
 
             // Set Title & Images
@@ -1535,7 +1697,7 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                 if (activeSnap !== lastSnapIndex && Math.abs(currentScroll - activeSnap) < 0.15) {
                     lastSnapIndex = activeSnap;
                     playOrbTick();
-                    triggerHaptic("light");
+                    triggerHaptic("selection");
                     if (cardMeshes[activeSnap]) {
                         updateBottomHud(cardMeshes[activeSnap].userData.item);
                     }
