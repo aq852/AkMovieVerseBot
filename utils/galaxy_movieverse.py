@@ -73,6 +73,15 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             background: linear-gradient(180deg, rgba(4, 6, 12, 0.96) 0%, rgba(4, 6, 12, 0.7) 75%, rgba(4, 6, 12, 0) 100%);
         }
 
+        .top-nav-row {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
         .brand-title {
             font-size: 17px;
             font-weight: 900;
@@ -82,7 +91,35 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             gap: 7px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
+            transition: all 0.3s ease;
+        }
+
+        .theme-switch-btn {
+            background: rgba(18, 24, 40, 0.78);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 18px;
+            padding: 5px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+        }
+
+        .theme-switch-btn:active {
+            transform: scale(0.93);
+        }
+
+        .theme-name-tag {
+            font-size: 11px;
+            font-weight: 700;
+            color: #e2e8f0;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
 
         /* Full-Width Search Bar directly beneath Brand */
@@ -726,9 +763,16 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- Top Navigation Header with Full-Width Search Bar Directly Below Title -->
     <div class="top-nav">
-        <div class="brand-title">
-            <span>🪐</span>
-            <span>MovieVerse 3D</span>
+        <div class="top-nav-row">
+            <div class="brand-title">
+                <span>🪐</span>
+                <span>MovieVerse 3D</span>
+            </div>
+            <!-- Cosmic Theme Switcher Button -->
+            <button class="theme-switch-btn" id="themeSwitchBtn" onclick="cycleTheme()" title="Switch Cosmic Theme">
+                <span id="themeIcon">🌌</span>
+                <span id="themeName" class="theme-name-tag">Cyber</span>
+            </button>
         </div>
         <div class="search-box-wrap">
             <span class="search-icon-left">🔍</span>
@@ -1008,6 +1052,182 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         const stardust = new THREE.Points(dustGeo, dustMat);
         stardust.position.set(0, 0.4, -0.6);
         scene.add(stardust);
+
+        // -------------------------------------------------------------
+        // FEATURE: DYNAMIC PROCEDURAL NEBULA GAS CLOUD
+        // -------------------------------------------------------------
+        const nebulaGeo = new THREE.BufferGeometry();
+        const nebulaCount = 400;
+        const nebulaPos = new Float32Array(nebulaCount * 3);
+        const nebulaColors = new Float32Array(nebulaCount * 3);
+        const nebulaPalette = [
+            new THREE.Color(0x38bdf8), // Cyan
+            new THREE.Color(0xf43f5e), // Rose
+            new THREE.Color(0xa855f7), // Purple
+            new THREE.Color(0x6366f1)  // Indigo
+        ];
+        for (let i = 0; i < nebulaCount; i++) {
+            const i3 = i * 3;
+            const r = 20 + Math.random() * 65;
+            const theta = Math.random() * Math.PI * 2;
+            nebulaPos[i3] = Math.cos(theta) * r;
+            nebulaPos[i3 + 1] = (Math.random() - 0.5) * 36;
+            nebulaPos[i3 + 2] = -12 - Math.random() * 55;
+
+            const c = nebulaPalette[Math.floor(Math.random() * nebulaPalette.length)];
+            nebulaColors[i3] = c.r;
+            nebulaColors[i3 + 1] = c.g;
+            nebulaColors[i3 + 2] = c.b;
+        }
+        nebulaGeo.setAttribute("position", new THREE.BufferAttribute(nebulaPos, 3));
+        nebulaGeo.setAttribute("color", new THREE.BufferAttribute(nebulaColors, 3));
+        const nebulaMat = new THREE.PointsMaterial({
+            size: 1.6,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.45,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const nebulaField = new THREE.Points(nebulaGeo, nebulaMat);
+        scene.add(nebulaField);
+
+        // -------------------------------------------------------------
+        // FEATURE: PERIODIC SHOOTING STAR / COMET STREAK
+        // -------------------------------------------------------------
+        const cometGeo = new THREE.BufferGeometry();
+        const cometPos = new Float32Array([0, 0, 0, -4.5, 2.2, -1.8]);
+        cometGeo.setAttribute("position", new THREE.BufferAttribute(cometPos, 3));
+        const cometMat = new THREE.LineBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.0,
+            blending: THREE.AdditiveBlending,
+            linewidth: 2
+        });
+        const cometMesh = new THREE.Line(cometGeo, cometMat);
+        scene.add(cometMesh);
+
+        let cometActive = false;
+        let cometTimer = 0;
+        let cometVX = 0, cometVY = 0;
+
+        function triggerComet() {
+            const startLeft = Math.random() > 0.5;
+            const sx = startLeft ? -35 : 35;
+            const sy = 12 + Math.random() * 12;
+            const sz = -22 - Math.random() * 18;
+            cometMesh.position.set(sx, sy, sz);
+            cometVX = (startLeft ? 1 : -1) * (1.1 + Math.random() * 0.7);
+            cometVY = -0.6 - Math.random() * 0.4;
+            cometMat.opacity = 0.9;
+            cometActive = true;
+        }
+
+        // -------------------------------------------------------------
+        // FEATURE: MOBILE GYROSCOPE PARALLAX
+        // -------------------------------------------------------------
+        let gyroTiltX = 0, gyroTiltY = 0;
+        let targetGyroX = 0, targetGyroY = 0;
+
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener("deviceorientation", (e) => {
+                if (e.gamma !== null && e.beta !== null) {
+                    targetGyroX = THREE.MathUtils.clamp(e.gamma / 28, -0.65, 0.65);
+                    targetGyroY = THREE.MathUtils.clamp((e.beta - 45) / 28, -0.65, 0.65);
+                }
+            }, false);
+        }
+
+        // -------------------------------------------------------------
+        // FEATURE: MULTI-COSMIC THEMES (CYBER, GARGANTUA, MATRIX, VAPOR)
+        // -------------------------------------------------------------
+        const COSMIC_THEMES = [
+            {
+                id: "cyber",
+                name: "Cyber",
+                icon: "🌌",
+                cyanLight: 0x38bdf8,
+                roseLight: 0xf43f5e,
+                halo: 0xf43f5e,
+                haloOuter: 0x38bdf8,
+                comet: 0x38bdf8,
+                brandColor: "#f43f5e"
+            },
+            {
+                id: "gold",
+                name: "Gargantua",
+                icon: "🪐",
+                cyanLight: 0xfbbf24,
+                roseLight: 0xf97316,
+                halo: 0xfbbf24,
+                haloOuter: 0xf43f5e,
+                comet: 0xfde047,
+                brandColor: "#fbbf24"
+            },
+            {
+                id: "matrix",
+                name: "Matrix",
+                icon: "🟢",
+                cyanLight: 0x10b981,
+                roseLight: 0x22c55e,
+                halo: 0x10b981,
+                haloOuter: 0x065f46,
+                comet: 0x86efac,
+                brandColor: "#10b981"
+            },
+            {
+                id: "vapor",
+                name: "Vaporwave",
+                icon: "🔮",
+                cyanLight: 0xec4899,
+                roseLight: 0x8b5cf6,
+                halo: 0xec4899,
+                haloOuter: 0x6366f1,
+                comet: 0xf472b6,
+                brandColor: "#ec4899"
+            }
+        ];
+        let currentThemeIdx = 0;
+
+        function applyTheme(idx) {
+            const th = COSMIC_THEMES[idx];
+            currentThemeIdx = idx;
+            const iconEl = document.getElementById("themeIcon");
+            const nameEl = document.getElementById("themeName");
+            if (iconEl) iconEl.textContent = th.icon;
+            if (nameEl) nameEl.textContent = th.name;
+
+            cyanRimLight.color.setHex(th.cyanLight);
+            roseRimLight.color.setHex(th.roseLight);
+            cosmicHalo.material.color.setHex(th.halo);
+            cosmicHaloOuter.material.color.setHex(th.haloOuter);
+            cometMat.color.setHex(th.comet);
+
+            const brandEl = document.querySelector(".brand-title");
+            if (brandEl) {
+                brandEl.style.color = th.brandColor;
+                brandEl.style.textShadow = `0 0 20px ${th.brandColor}99`;
+            }
+        }
+
+        function cycleTheme() {
+            const nextIdx = (currentThemeIdx + 1) % COSMIC_THEMES.length;
+            applyTheme(nextIdx);
+            triggerHaptic("impact");
+            playChime();
+        }
+
+        // -------------------------------------------------------------
+        // FEATURE: BATTERY SAVER / TAB SLEEP MODE
+        // -------------------------------------------------------------
+        let isTabActive = true;
+        document.addEventListener("visibilitychange", () => {
+            isTabActive = !document.hidden;
+            if (isTabActive) {
+                requestAnimationFrame(animate);
+            }
+        });
 
         // -------------------------------------------------------------
         // FEATURE 4: 3D HOLOGRAM PARTICLE BURST & SHOCKWAVE SYSTEM
@@ -1804,14 +2024,47 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         // Animation Loop with Smooth Floating Physics & CineFlow Arc
         let clock = 0;
         function animate() {
+            if (!isTabActive) return;
             requestAnimationFrame(animate);
             clock += 0.016;
 
             // Celestial rotations
             starField.rotation.y += 0.0003;
+            if (typeof nebulaField !== "undefined" && nebulaField) {
+                nebulaField.rotation.y += 0.00018;
+                nebulaField.rotation.z += 0.0001;
+            }
             cosmicHalo.rotation.z += 0.004;
             cosmicHaloOuter.rotation.z -= 0.003;
             stardust.rotation.z += 0.006;
+
+            // Shooting Comet streak animation
+            if (typeof cometActive !== "undefined") {
+                if (cometActive) {
+                    cometMesh.position.x += cometVX;
+                    cometMesh.position.y += cometVY;
+                    cometMat.opacity -= 0.018;
+                    if (cometMat.opacity <= 0.04) {
+                        cometActive = false;
+                        cometMat.opacity = 0;
+                    }
+                } else {
+                    cometTimer += 0.016;
+                    if (cometTimer > 5.5 && Math.random() < 0.03) {
+                        triggerComet();
+                        cometTimer = 0;
+                    }
+                }
+            }
+
+            // Mobile Gyroscope Parallax (smooth lerp)
+            if (typeof targetGyroX !== "undefined") {
+                gyroTiltX += (targetGyroX - gyroTiltX) * 0.06;
+                gyroTiltY += (targetGyroY - gyroTiltY) * 0.06;
+                camera.position.x = gyroTiltX * 1.4;
+                camera.position.y = 0.4 + gyroTiltY * 0.7;
+                camera.lookAt(0, 0.4, 0);
+            }
 
             if (isSingleHeroMode && cardMeshes.length > 0) {
                 // HERO MODE:
