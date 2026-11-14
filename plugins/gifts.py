@@ -1146,6 +1146,7 @@ _LAST_GIFT_POST_TIMESTAMP: float = 0.0
 # Pending queue of videos waiting for custom poster in GIFT_DB_CHANNEL
 # key: message_id -> dict: {"event": asyncio.Event, "photo_id": Optional[str], "chat_id": int, "file_name": str, "status_msg": Optional[Message]}
 _PENDING_GIFT_VIDEOS: dict[int, dict] = {}
+_GIFT_PROCESS_LOCK = asyncio.Lock()
 
 
 async def get_auto_gift_config() -> dict:
@@ -2492,7 +2493,7 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
     mime_type = getattr(media, "mime_type", "")
     caption = message.caption or ""
 
-    from utils.helpers import parse_media_metadata, get_readable_size, get_cached_poster_url
+    from utils.helpers import parse_media_metadata, get_readable_size
     meta = parse_media_metadata(file_name, caption=caption)
     clean_title = meta.get("clean_name") or file_name
     quality = meta.get("quality")
@@ -2541,103 +2542,115 @@ async def auto_gift_db_channel_listener(client: Client, message: Message):
             # Priority 0: Admin explicitly replied with a custom photo
             poster_photo = photo_id
         else:
-            # Baseline: Download native media thumbnail first
-            thumb_local = None
-            if hasattr(media, "thumbs") and media.thumbs:
-                try:
-                    t_path = os.path.join(temp_dir, f"thumb_{message.id}.jpg")
-                    downloaded_t = await asyncio.wait_for(
-                        client.download_media(media.thumbs[0].file_id, file_name=t_path),
-                        timeout=10.0
-                    )
-                    if downloaded_t and os.path.exists(downloaded_t):
-                        from plugins.screenshots import apply_watermark
-                        watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
-                        apply_watermark(downloaded_t, watermark_text=watermark)
-                        thumb_local = downloaded_t
-                except Exception as e_th:
-                    logger.debug(f"Media thumbnail download skipped: {e_th}")
+            async with _GIFT_PROCESS_LOCK:
+                # Baseline: Download native media thumbnail first
+                thumb_local = None
+                if hasattr(media, "thumbs") and media.thumbs:
+                    try:
+                        t_path = os.path.join(temp_dir, f"thumb_{message.id}.jpg")
+                        target_thumb = media.thumbs[0]
+                        downloaded_t = None
+                        try:
+                            downloaded_t = await asyncio.wait_for(
+                                client.download_media(target_thumb, file_name=t_path),
+                                timeout=15.0
+                            )
+                        except Exception:
+                            pass
+                        if not downloaded_t and hasattr(target_thumb, "file_id"):
+                            try:
+                                downloaded_t = await asyncio.wait_for(
+                                    client.download_media(target_thumb.file_id, file_name=t_path),
+                                    timeout=15.0
+                                )
+                            except Exception:
+                                pass
+                        if downloaded_t and os.path.exists(downloaded_t):
+                            from plugins.screenshots import apply_watermark
+                            watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
+                            apply_watermark(downloaded_t, watermark_text=watermark)
+                            thumb_local = downloaded_t
+                    except Exception as e_th:
+                        logger.debug(f"Media thumbnail download skipped: {e_th}")
 
-            # Support videos up to 300 MB for local sample & screenshot generation
-            max_media_bytes = 300 * 1024 * 1024
-            video_local = None
+                # Support videos up to 350 MB for local sample & screenshot generation
+                max_media_bytes = 350 * 1024 * 1024
+                video_local = None
 
-            async def _download_video_once():
-                nonlocal video_local
-                if video_local and os.path.exists(video_local):
-                    return video_local
-                if file_size <= max_media_bytes:
-                    v_path = os.path.join(temp_dir, file_name)
-                    video_local = await asyncio.wait_for(
-                        client.download_media(message, file_name=v_path),
-                        timeout=75.0
-                    )
-                    return video_local
-                return None
-
-            # Priority 1: Try sample video if mode is 'sample' (default)
-            if mode == "sample":
-                try:
+                async def _download_video_once():
+                    nonlocal video_local
+                    if video_local and os.path.exists(video_local):
+                        return video_local
                     if file_size <= max_media_bytes:
+                        v_path = os.path.join(temp_dir, file_name)
+                        # Adaptive timeout: 150s to 360s based on file size (~1MB/s MTProto rate)
+                        dl_timeout = max(150.0, min(360.0, (file_size / (1024 * 1024)) * 2.0))
+                        video_local = await asyncio.wait_for(
+                            client.download_media(message, file_name=v_path),
+                            timeout=dl_timeout
+                        )
+                        return video_local
+                    return None
+
+                # Priority 1: Try sample video if mode is 'sample' (default)
+                if mode == "sample":
+                    try:
+                        if file_size <= max_media_bytes:
+                            if pending_info.get("status_msg"):
+                                try:
+                                    await pending_info["status_msg"].edit_text("⚙️ 🎬 <b>Extracting 3s sample video preview...</b>")
+                                except Exception:
+                                    pass
+
+                            v_file = await _download_video_once()
+                            if v_file and os.path.exists(v_file):
+                                from plugins.screenshots import get_video_duration
+                                duration = getattr(media, "duration", 0) or await get_video_duration(v_file)
+                                if duration <= 2:
+                                    duration = 10.0
+                                start_sec = max(0.5, min(duration * 0.2, max(0.5, duration - 3.5))) if duration > 3.0 else 0.0
+
+                                s_path = os.path.join(temp_dir, "sample_preview.mp4")
+                                if await extract_sample_clip_ffmpeg(v_file, start_sec, 3, s_path):
+                                    sample_video_path = s_path
+                                    logger.info(f"Sample video clip generated successfully for {file_name}")
+                    except Exception as e_proc:
+                        logger.warning(f"Auto-gift sample video extraction failed: {e_proc}")
+
+                # Priority 2: Try HD Screenshot (SS) if no sample generated (or if mode is 'ss')
+                if not sample_video_path and mode in ("sample", "ss"):
+                    try:
                         if pending_info.get("status_msg"):
                             try:
-                                await pending_info["status_msg"].edit_text("⚙️ 🎬 <b>Extracting 3s sample video preview...</b>")
+                                await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Extracting HD screenshot frame...</b>")
                             except Exception:
                                 pass
 
                         v_file = await _download_video_once()
                         if v_file and os.path.exists(v_file):
-                            from plugins.screenshots import get_video_duration
+                            from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
                             duration = getattr(media, "duration", 0) or await get_video_duration(v_file)
                             if duration <= 2:
                                 duration = 10.0
-                            start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
+                            start_sec = max(0.5, min(duration * 0.2, max(0.5, duration - 3.5))) if duration > 3.0 else 0.0
+                            f_path = os.path.join(temp_dir, "screenshot.jpg")
+                            if await extract_frame_ffmpeg(v_file, start_sec, f_path):
+                                watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
+                                apply_watermark(f_path, watermark_text=watermark)
+                                poster_photo = f_path
+                                logger.info(f"HD screenshot extracted successfully for {file_name}")
+                    except Exception as e_proc:
+                        logger.warning(f"Auto-gift frame extraction failed: {e_proc}")
 
-                            s_path = os.path.join(temp_dir, "sample_preview.mp4")
-                            if await extract_sample_clip_ffmpeg(v_file, start_sec, 3, s_path):
-                                sample_video_path = s_path
-                                logger.info(f"Sample video clip generated successfully for {file_name}")
-                except Exception as e_proc:
-                    logger.warning(f"Auto-gift sample video extraction failed: {e_proc}")
-
-            # Priority 2: Try HD Screenshot (SS) if no sample generated (or if mode is 'ss')
-            if not sample_video_path and mode in ("sample", "ss"):
-                try:
-                    if pending_info.get("status_msg"):
-                        try:
-                            await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Extracting HD screenshot frame...</b>")
-                        except Exception:
-                            pass
-
-                    v_file = await _download_video_once()
-                    if v_file and os.path.exists(v_file):
-                        from plugins.screenshots import extract_frame_ffmpeg, apply_watermark, get_video_duration
-                        duration = getattr(media, "duration", 0) or await get_video_duration(v_file)
-                        if duration <= 2:
-                            duration = 10.0
-                        start_sec = max(2.0, min(duration * 0.2, duration - 4.0))
-                        f_path = os.path.join(temp_dir, "screenshot.jpg")
-                        if await extract_frame_ffmpeg(v_file, start_sec, f_path):
-                            watermark = getattr(Config, "DEFAULT_POSTER_BRAND", "@AkMovieVerse") or "@AkMovieVerse"
-                            apply_watermark(f_path, watermark_text=watermark)
-                            poster_photo = f_path
-                            logger.info(f"HD screenshot extracted successfully for {file_name}")
-                except Exception as e_proc:
-                    logger.warning(f"Auto-gift frame extraction failed: {e_proc}")
-
-            # Priority 3: Fallback Card / Native Thumbnail / TMDB poster
-            if not sample_video_path and not poster_photo:
-                if thumb_local:
-                    poster_photo = thumb_local
-                    if pending_info.get("status_msg"):
-                        try:
-                            await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Applying high-definition poster...</b>")
-                        except Exception:
-                            pass
-                else:
-                    tmdb_poster = await get_cached_poster_url(clean_title)
-                    if tmdb_poster:
-                        poster_photo = tmdb_poster
+                # Priority 3: Fallback Card / Native Thumbnail (NEVER TMDB for auto-gift drops)
+                if not sample_video_path and not poster_photo:
+                    if thumb_local:
+                        poster_photo = thumb_local
+                        if pending_info.get("status_msg"):
+                            try:
+                                await pending_info["status_msg"].edit_text("⚙️ 📸 <b>Applying high-definition poster...</b>")
+                            except Exception:
+                                pass
                     else:
                         from database.gifts import DEFAULT_GIFT_POSTER
                         poster_photo = DEFAULT_GIFT_POSTER
