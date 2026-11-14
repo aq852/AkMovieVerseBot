@@ -301,8 +301,8 @@ CATEGORY_CONTENT = {
         "<b>Usage:</b> Set custom welcome DM template (supports <code>{mention}</code>, <code>{title}</code>, <code>{first_name}</code>).\n\n"
         "• <code>/acceptall [chat_id]</code> | <code>/declineall [chat_id]</code>\n"
         "<b>Usage:</b> Instantly approve or decline all backlog join requests.\n\n"
-        "• <code>/sharelink [chat_id]</code> (alias: <code>/createlink</code>)\n"
-        "<b>Usage:</b> Generates an admin join-request invite link."
+        "• <code>/sharelink [chat_id]</code> (alias: <code>/createlink</code>, <code>/smartlink</code>)\n"
+        "<b>Usage:</b> Generates permanent anti-DMCA smart gatekeeper & invite links."
     ),
 
     "downloader": (

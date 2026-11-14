@@ -1,6 +1,7 @@
 import asyncio
 import time
 import logging
+import html
 try:
     from hydrogram import Client, filters
     from hydrogram.types import ChatJoinRequest, InlineKeyboardMarkup, InlineKeyboardButton, Message
@@ -280,8 +281,8 @@ async def auto_approve_join_request(client: Client, request: ChatJoinRequest):
 
 # --- Admin Commands for Auto-Approve & Link-Share Management ---
 
-# 1. /sharelink [chat_id] [duration] [limit] (Aliases: /createlink, /link, /smartlink)
-@Client.on_message(filters.command(["sharelink", "createlink", "link", "smartlink"]))
+# 1. /sharelink [chat_id] [duration] [limit] (Aliases: /createlink, /smartlink, /gatelink, /channellink)
+@Client.on_message(filters.command(["sharelink", "createlink", "smartlink", "gatelink", "channellink"]))
 async def create_share_link_command(client: Client, message: Message):
     """Generate copyright-protected smart gatekeeper links or direct invite links for any channel."""
     if not Config.is_admin(message.from_user.id):
@@ -307,8 +308,6 @@ async def create_share_link_command(client: Client, message: Message):
         idx += 1
     elif get_chat_type_str(message.chat.type) in ["group", "supergroup", "channel"]:
         target_chat = message.chat.id
-    elif Config.CHANNELS:
-        target_chat = Config.CHANNELS[0]
 
     # Parse remaining arguments (time and/or limit)
     while idx < len(args):
@@ -323,85 +322,89 @@ async def create_share_link_command(client: Client, message: Message):
         idx += 1
 
     if not target_chat:
-        await message.reply_text(
-            "🛡️ <b>Smart Protected Channel Link Generator:</b>\n\n"
+        return await message.reply_text(
+            "🛡️ <b>Smart Protected Channel Link Generator:</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "<b>Usage:</b>\n"
-            "• <code>/sharelink [chat_id]</code> — Permanent Anti-DMCA Smart Link\n"
-            "• <code>/link [chat_id]</code> — Short alias for quick generation\n"
-            "• <code>/sharelink [chat_id] [time]</code> — Time-limited (e.g. <code>1h</code>, <code>24h</code>, <code>3d</code>)\n"
-            "• <code>/sharelink [chat_id] onetime</code> — 1-Person Single-Use link\n\n"
+            "• <code>/sharelink [channel_id]</code> — Permanent Anti-DMCA Smart Link\n"
+            "• <code>/sharelink [channel_id] [time]</code> — Time-limited (e.g. <code>1h</code>, <code>24h</code>, <code>3d</code>)\n"
+            "• <code>/sharelink [channel_id] onetime</code> — 1-Person Single-Use link\n\n"
             "<b>Examples:</b>\n"
-            "<code>/sharelink -1002331917822</code>\n"
-            "<code>/link -1002331917822</code>\n"
-            "<code>/sharelink -1002331917822 24h</code>"
+            "<code>/sharelink -1003843941702</code>\n"
+            "<code>/sharelink -1003843941702 24h</code>\n"
+            "<code>/sharelink @MyChannel onetime</code>\n\n"
+            "💡 <i>Tip: Make sure the bot is added as Admin in the channel with 'Invite Users via Link' permission!</i>"
         )
-        return
 
     try:
-        chat = await client.get_chat(target_chat)
-        target_chat_id = chat.id
-        chat_title = chat.title or str(target_chat_id)
-        # Ensure channel is registered for instant auto-approval (<1s)
-        await add_auto_approve_channel(target_chat_id)
-    except Exception as e_chat:
-        logger.warning(f"Could not fetch chat for {target_chat}: {e_chat}")
-        target_chat_id = int(target_chat) if str(target_chat).startswith("-100") else target_chat
-        chat_title = str(target_chat)
+        try:
+            chat = await client.get_chat(target_chat)
+            target_chat_id = chat.id
+            chat_title = chat.title or str(target_chat_id)
+            # Ensure channel is registered for instant auto-approval (<1s)
+            await add_auto_approve_channel(target_chat_id)
+        except Exception as e_chat:
+            logger.warning(f"Could not fetch chat for {target_chat}: {e_chat}")
+            target_chat_id = int(target_chat) if str(target_chat).startswith("-100") else target_chat
+            chat_title = str(target_chat)
 
-    # Encode channel ID in URL-safe Base64 for Permanent Smart Link
-    raw_bytes = str(target_chat_id).encode("utf-8")
-    b64_code = base64.urlsafe_b64encode(raw_bytes).decode("utf-8").rstrip("=")
-    bot_uname = client.me.username if client.me and client.me.username else Config.BOT_USERNAME
-    smart_link = f"https://t.me/{bot_uname}?start=req_{b64_code}"
+        # Encode channel ID in URL-safe Base64 for Permanent Smart Link
+        raw_bytes = str(target_chat_id).encode("utf-8")
+        b64_code = base64.urlsafe_b64encode(raw_bytes).decode("utf-8").rstrip("=")
+        bot_uname = client.me.username if client.me and client.me.username else Config.BOT_USERNAME
+        smart_link = f"https://t.me/{bot_uname}?start=req_{b64_code}"
 
-    # Generate Direct Telegram Invite Link as well
-    expire_dt = None
-    duration_label = "Permanent (No Expiry)"
-    if duration_str:
-        sec = parse_duration(duration_str)
-        if sec:
-            expire_dt = datetime.datetime.utcnow() + datetime.timedelta(seconds=sec)
-            duration_label = f"Expires in {duration_str} ({expire_dt.strftime('%d %b, %H:%M UTC')})"
+        # Generate Direct Telegram Invite Link as well
+        expire_dt = None
+        duration_label = "Permanent (No Expiry)"
+        if duration_str:
+            sec = parse_duration(duration_str)
+            if sec:
+                expire_dt = datetime.datetime.utcnow() + datetime.timedelta(seconds=sec)
+                duration_label = f"Expires in {duration_str} ({expire_dt.strftime('%d %b, %H:%M UTC')})"
 
-    limit_label = "Unlimited Users (Auto-Approved in <1s)"
-    if limit_val is not None:
-        limit_label = "Single-Use (1 Person Only 🔥)" if limit_val == 1 else f"Max {limit_val} Users"
+        limit_label = "Unlimited Users (Auto-Approved in <1s)"
+        if limit_val is not None:
+            limit_label = "Single-Use (1 Person Only 🔥)" if limit_val == 1 else f"Max {limit_val} Users"
 
-    try:
-        kwargs = {"chat_id": target_chat_id, "name": f"LinkShare ({duration_str or 'perm'})"}
-        if expire_dt:
-            kwargs["expire_date"] = expire_dt
-        if limit_val:
-            kwargs["member_limit"] = limit_val
-        else:
-            kwargs["creates_join_request"] = True
+        try:
+            kwargs = {"chat_id": target_chat_id, "name": f"LinkShare ({duration_str or 'perm'})"}
+            if expire_dt:
+                kwargs["expire_date"] = expire_dt
+            if limit_val:
+                kwargs["member_limit"] = limit_val
+            else:
+                kwargs["creates_join_request"] = True
 
-        invite_link = await client.create_chat_invite_link(**kwargs)
+            invite_link = await client.create_chat_invite_link(**kwargs)
 
-        await message.reply_text(
-            "🛡️ <b>SMART PROTECTED CHANNEL LINK GENERATED!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📢 <b>Target Channel:</b> <code>{html.escape(chat_title)}</code> (<code>{target_chat_id}</code>)\n\n"
-            f"🔗 <b>Permanent Smart Share Link (100% Anti-DMCA):</b>\n"
-            f"<code>{smart_link}</code>\n\n"
-            f"⚡ <b>How this protects your channel:</b>\n"
-            f"• <b>Asli channel link hamesha hidden rahega:</b> Scanners & reporting bots will never see the channel.\n"
-            f"• <b>Auto-Burner Engine:</b> User click karega toh bot Welcome Post + 1-Click Join Button bhejega.\n"
-            f"• <b>5-Minute Self-Destruct:</b> Ephemeral join link turns off automatically on join or after 5 mins.\n"
-            f"• <b>Instant Auto-Approval:</b> User is approved in &lt;1 second &amp; added to broadcast database.\n\n"
-            f"📎 <b>Direct Telegram Link (Backup):</b>\n"
-            f"<code>{invite_link.invite_link}</code>\n"
-            f"⏱️ <i>Validity: {duration_label} • Limit: {limit_label}</i>"
-        )
-    except Exception as e:
-        await message.reply_text(
-            f"🛡️ <b>SMART PROTECTED CHANNEL LINK GENERATED!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📢 <b>Target Channel:</b> <code>{html.escape(chat_title)}</code> (<code>{target_chat_id}</code>)\n\n"
-            f"🔗 <b>Permanent Smart Share Link (100% Anti-DMCA):</b>\n"
-            f"<code>{smart_link}</code>\n\n"
-            f"⚠️ <i>Note: Direct Telegram invite link could not be generated ({e}). Make sure bot is Admin with 'Invite Users' permission in the channel.</i>"
-        )
+            await message.reply_text(
+                "🛡️ <b>SMART PROTECTED CHANNEL LINK GENERATED!</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📢 <b>Target Channel:</b> <code>{html.escape(chat_title)}</code> (<code>{target_chat_id}</code>)\n\n"
+                f"🔗 <b>Permanent Smart Share Link (100% Anti-DMCA):</b>\n"
+                f"<code>{smart_link}</code>\n\n"
+                f"⚡ <b>How this protects your channel:</b>\n"
+                f"• <b>Asli channel link hamesha hidden rahega:</b> Scanners & reporting bots will never see the channel.\n"
+                f"• <b>Auto-Burner Engine:</b> User click karega toh bot Welcome Post + 1-Click Join Button bhejega.\n"
+                f"• <b>5-Minute Self-Destruct:</b> Ephemeral join link turns off automatically on join or after 5 mins.\n"
+                f"• <b>Instant Auto-Approval:</b> User is approved in &lt;1 second &amp; added to broadcast database.\n\n"
+                f"📎 <b>Direct Telegram Link (Backup):</b>\n"
+                f"<code>{invite_link.invite_link}</code>\n"
+                f"⏱️ <i>Validity: {duration_label} • Limit: {limit_label}</i>"
+            )
+        except Exception as e:
+            await message.reply_text(
+                f"🛡️ <b>SMART PROTECTED CHANNEL LINK GENERATED!</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📢 <b>Target Channel:</b> <code>{html.escape(chat_title)}</code> (<code>{target_chat_id}</code>)\n\n"
+                f"🔗 <b>Permanent Smart Share Link (100% Anti-DMCA):</b>\n"
+                f"<code>{smart_link}</code>\n\n"
+                f"⚠️ <i>Note: Direct Telegram invite link could not be generated ({e}). Make sure bot is Admin with 'Invite Users' permission in the channel.</i>"
+            )
+    except Exception as e_main:
+        logger.error(f"Error in sharelink command: {e_main}", exc_info=True)
+        await message.reply_text(f"❌ <b>Error generating share link:</b>\n<code>{html.escape(str(e_main))}</code>")
 
 
 # 2. /test_welcome (Preview what users see when accepted)

@@ -67,6 +67,52 @@ class TestStorageChannels(unittest.IsolatedAsyncioTestCase):
         decoded_cid = int(base64.urlsafe_b64decode(raw_b64.encode("utf-8")).decode("utf-8"))
         self.assertEqual(decoded_cid, channel_id)
 
+    async def test_sharelink_command_execution(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from plugins.auto_approve import create_share_link_command
+
+        # Test 1: Empty args in PM sends usage message
+        mock_msg_empty = MagicMock()
+        mock_msg_empty.from_user.id = 12345
+        mock_msg_empty.text = "/sharelink"
+        mock_msg_empty.chat.type.name = "PRIVATE"
+        mock_msg_empty.chat.type.value = "private"
+        mock_msg_empty.reply_text = AsyncMock()
+
+        mock_client = MagicMock()
+        mock_client.me.username = "TheFlixifyBot"
+
+        with patch("config.Config.is_admin", return_value=True):
+            await create_share_link_command(mock_client, mock_msg_empty)
+            self.assertTrue(mock_msg_empty.reply_text.called)
+            sent_text = mock_msg_empty.reply_text.call_args[0][0]
+            self.assertIn("Smart Protected Channel Link Generator", sent_text)
+
+        # Test 2: Passing channel ID generates smart link without NameError
+        mock_msg_cid = MagicMock()
+        mock_msg_cid.from_user.id = 12345
+        mock_msg_cid.text = "/sharelink -1003843941702"
+        mock_msg_cid.chat.type.name = "PRIVATE"
+        mock_msg_cid.chat.type.value = "private"
+        mock_msg_cid.reply_text = AsyncMock()
+
+        mock_chat = MagicMock()
+        mock_chat.id = -1003843941702
+        mock_chat.title = "Test Vault Channel"
+        mock_client.get_chat = AsyncMock(return_value=mock_chat)
+        mock_invite = MagicMock()
+        mock_invite.invite_link = "https://t.me/+AbCdEfGh"
+        mock_client.create_chat_invite_link = AsyncMock(return_value=mock_invite)
+
+        with patch("config.Config.is_admin", return_value=True), \
+             patch("plugins.auto_approve.add_auto_approve_channel", new=AsyncMock()):
+            await create_share_link_command(mock_client, mock_msg_cid)
+            self.assertTrue(mock_msg_cid.reply_text.called)
+            sent_text_2 = mock_msg_cid.reply_text.call_args[0][0]
+            self.assertIn("SMART PROTECTED CHANNEL LINK GENERATED", sent_text_2)
+            self.assertIn("https://t.me/TheFlixifyBot?start=req_", sent_text_2)
+            self.assertIn("https://t.me/+AbCdEfGh", sent_text_2)
+
 
 if __name__ == "__main__":
     unittest.main()

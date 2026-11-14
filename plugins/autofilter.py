@@ -54,7 +54,7 @@ COMMAND_EXCLUDES = [
     "request", "req", "acceptall", "approveall", "accept", "approve",
     "declineall", "rejectall", "decline", "reject", "autoapprove",
     "set_welcome", "setwelcome", "get_welcome", "getwelcome", "reset_welcome", "resetwelcome",
-    "sharelink", "createlink", "link", "smartlink", "share", "sharefile", "test_welcome", "testwelcome", "set_welcome_pic", "setwelcomepic", "del_welcome_pic", "delwelcomepic", "reset_welcome_pic",
+    "sharelink", "createlink", "link", "smartlink", "gatelink", "channellink", "share", "sharefile", "test_welcome", "testwelcome", "set_welcome_pic", "setwelcomepic", "del_welcome_pic", "delwelcomepic", "reset_welcome_pic",
     "thumbnail", "art", "styles", "posterstyles", "set_poster_brand", "setposterbrand", "setbrand", "set_poster_channel", "setposterchannel",
     "set_tmdb_key", "settmdbkey", "set_tmdb_token", "settmdbtoken", "tmdb_status", "tmdbstatus",
     "dl", "download", "watch", "streamonline"
