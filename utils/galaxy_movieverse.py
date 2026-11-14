@@ -868,6 +868,34 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             } catch (e) {}
         }
 
+        function playHologramWhoosh() {
+            try {
+                const actx = getAudioContext();
+                const now = actx.currentTime;
+                const osc = actx.createOscillator();
+                const gain = actx.createGain();
+                const filter = actx.createBiquadFilter();
+
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(880, now);
+                osc.frequency.exponentialRampToValueAtTime(220, now + 0.22);
+
+                filter.type = "lowpass";
+                filter.frequency.setValueAtTime(3200, now);
+                filter.frequency.exponentialRampToValueAtTime(400, now + 0.22);
+
+                gain.gain.setValueAtTime(0.09, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(actx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.22);
+            } catch (e) {}
+        }
+
         const BOT_USERNAME = "__BOT_USERNAME__";
         const BASE_URL = "__BASE_URL__";
 
@@ -980,6 +1008,108 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
         const stardust = new THREE.Points(dustGeo, dustMat);
         stardust.position.set(0, 0.4, -0.6);
         scene.add(stardust);
+
+        // -------------------------------------------------------------
+        // FEATURE 4: 3D HOLOGRAM PARTICLE BURST & SHOCKWAVE SYSTEM
+        // -------------------------------------------------------------
+        let activeBursts = [];
+        let activeShockwaves = [];
+        let targetCameraZ = 13.5;
+        const shockwaveRingGeo = new THREE.RingGeometry(0.8, 1.05, 48);
+
+        function triggerHologramBurst(originX, originY, originZ) {
+            try {
+                const ox = originX || 0;
+                const oy = (originY !== undefined) ? originY : 0.4;
+                const oz = (originZ !== undefined) ? originZ + 0.2 : 0.2;
+
+                const count = 140;
+                const geo = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                const colors = new Float32Array(count * 3);
+                const velocities = [];
+
+                const palette = [
+                    new THREE.Color(0x38bdf8), // Electric Cyan
+                    new THREE.Color(0xf43f5e), // Cyber Rose
+                    new THREE.Color(0xec4899), // Neon Pink
+                    new THREE.Color(0xfacc15), // Solar Gold
+                    new THREE.Color(0xffffff)  // Pure Starlight
+                ];
+
+                for (let i = 0; i < count; i++) {
+                    positions[i * 3] = ox;
+                    positions[i * 3 + 1] = oy;
+                    positions[i * 3 + 2] = oz;
+
+                    const col = palette[Math.floor(Math.random() * palette.length)];
+                    colors[i * 3] = col.r;
+                    colors[i * 3 + 1] = col.g;
+                    colors[i * 3 + 2] = col.b;
+
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos((Math.random() * 2) - 1);
+                    const speed = 0.16 + Math.random() * 0.32;
+
+                    velocities.push({
+                        vx: speed * Math.sin(phi) * Math.cos(theta),
+                        vy: speed * Math.sin(phi) * Math.sin(theta),
+                        vz: speed * Math.cos(phi) * 0.7 + (Math.random() * 0.12)
+                    });
+                }
+
+                geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+                geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+                const mat = new THREE.PointsMaterial({
+                    size: 0.55,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 1.0,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+
+                const burstPoints = new THREE.Points(geo, mat);
+                scene.add(burstPoints);
+
+                activeBursts.push({
+                    mesh: burstPoints,
+                    velocities: velocities,
+                    life: 1.0,
+                    decay: 0.038
+                });
+
+                // Holographic Expanding Shockwave Ring
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: 0.85,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                const shockRing = new THREE.Mesh(shockwaveRingGeo, ringMat);
+                shockRing.position.set(ox, oy, oz + 0.05);
+                shockRing.scale.set(0.4, 0.4, 0.4);
+                scene.add(shockRing);
+
+                activeShockwaves.push({
+                    mesh: shockRing,
+                    scale: 0.4,
+                    maxScale: 3.8,
+                    opacity: 0.85
+                });
+
+                // Camera Focus Surge
+                targetCameraZ = 12.2;
+                setTimeout(() => {
+                    targetCameraZ = 13.5;
+                }, 220);
+            } catch (err) {
+                console.debug("Hologram burst error:", err);
+            }
+        }
 
         // Group holding 3D Card(s)
         const cardsGroup = new THREE.Group();
@@ -1312,13 +1442,17 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
                 if (isSingleHeroMode) {
                     playChime();
+                    playHologramWhoosh();
                     triggerHaptic("medium");
+                    triggerHologramBurst(clickedMesh.position.x, clickedMesh.position.y, clickedMesh.position.z);
                     openCinemaModal(clickedMesh.userData.item);
                 } else {
                     const activeIdx = Math.round(currentScroll);
                     if (clickedIndex === activeIdx) {
                         playChime();
+                        playHologramWhoosh();
                         triggerHaptic("medium");
+                        triggerHologramBurst(clickedMesh.position.x, clickedMesh.position.y, clickedMesh.position.z);
                         openCinemaModal(clickedMesh.userData.item);
                     } else {
                         // Snap clicked card to center
@@ -1343,7 +1477,9 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
             const targetMesh = cardMeshes[activeIdx] || cardMeshes[0];
             if (targetMesh && targetMesh.userData.item) {
                 playChime();
+                playHologramWhoosh();
                 triggerHaptic("medium");
+                triggerHologramBurst(targetMesh.position.x, targetMesh.position.y, targetMesh.position.z);
                 openCinemaModal(targetMesh.userData.item);
             }
         }
@@ -1728,6 +1864,50 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
                     const sc = Math.max(0.68, 1.0 - Math.abs(offset) * 0.12);
                     mesh.scale.set(sc, sc, sc);
                 });
+            }
+
+            // Smooth Camera Focus Surge
+            camera.position.z += (targetCameraZ - camera.position.z) * 0.15;
+
+            // Animate Active Particle Bursts
+            for (let bIdx = activeBursts.length - 1; bIdx >= 0; bIdx--) {
+                const b = activeBursts[bIdx];
+                b.life -= b.decay;
+                if (b.life <= 0) {
+                    scene.remove(b.mesh);
+                    b.mesh.geometry.dispose();
+                    b.mesh.material.dispose();
+                    activeBursts.splice(bIdx, 1);
+                    continue;
+                }
+                b.mesh.material.opacity = Math.max(0, b.life);
+                const posAttr = b.mesh.geometry.attributes.position;
+                const posArr = posAttr.array;
+                for (let p = 0; p < b.velocities.length; p++) {
+                    const vel = b.velocities[p];
+                    posArr[p * 3] += vel.vx;
+                    posArr[p * 3 + 1] += vel.vy;
+                    posArr[p * 3 + 2] += vel.vz;
+                    vel.vx *= 0.94;
+                    vel.vy *= 0.94;
+                    vel.vz *= 0.94;
+                }
+                posAttr.needsUpdate = true;
+            }
+
+            // Animate Active Shockwave Rings
+            for (let sIdx = activeShockwaves.length - 1; sIdx >= 0; sIdx--) {
+                const sw = activeShockwaves[sIdx];
+                sw.scale += 0.22;
+                sw.opacity -= 0.045;
+                if (sw.opacity <= 0 || sw.scale >= sw.maxScale) {
+                    scene.remove(sw.mesh);
+                    sw.mesh.material.dispose();
+                    activeShockwaves.splice(sIdx, 1);
+                    continue;
+                }
+                sw.mesh.scale.set(sw.scale, sw.scale, sw.scale);
+                sw.mesh.material.opacity = Math.max(0, sw.opacity);
             }
 
             renderer.render(scene, camera);

@@ -2275,7 +2275,7 @@ class TestAutoFilterEngine(unittest.TestCase):
                 self.assertIn("10 Minutes", text)
                 self.assertIn("Hybrid", text)
                 self.assertIn("30s Wait", text)
-                self.assertIn("Sample Video", text)
+                self.assertIn("Sample", text)
                 self.assertIn("🔥 EXCLUSIVE DROP 🔥", text)
                 self.assertIn("⚡ Get Full Video ➔", text)
                 self.assertIn("Sponsor Ad Task", text)

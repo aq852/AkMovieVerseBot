@@ -55,6 +55,14 @@ class TestMovieVerse3D(unittest.TestCase):
         self.assertIn("shareActiveFromHud", html)
         self.assertIn("t.me/share/url", html)
 
+        # Must have Feature 4: 3D Hologram Particle Burst & Shockwave System
+        self.assertIn("triggerHologramBurst", html)
+        self.assertIn("playHologramWhoosh", html)
+        self.assertIn("activeBursts", html)
+        self.assertIn("activeShockwaves", html)
+        self.assertIn("RingGeometry", html)
+        self.assertIn("targetCameraZ", html)
+
     def test_format_galaxy_item(self):
         raw_group = {
             "title": "Leo (2023)",
