@@ -113,6 +113,51 @@ class TestStorageChannels(unittest.IsolatedAsyncioTestCase):
             self.assertIn("https://t.me/TheFlixifyBot?start=req_", sent_text_2)
             self.assertIn("https://t.me/+AbCdEfGh", sent_text_2)
 
+    async def test_gatekeeper_start_command_execution(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from plugins.start import start_command_handler
+
+        mock_client = MagicMock()
+        mock_client.me.username = "TheFlixifyBot"
+
+        mock_msg = MagicMock()
+        mock_msg.from_user.id = 99999
+        mock_msg.from_user.first_name = "Alex"
+        mock_msg.from_user.username = "alex"
+        mock_msg.text = "/start req_LTEwMDM4NDM5NDE3MDI"
+        mock_msg.command = ["start", "req_LTEwMDM4NDM5NDE3MDI"]
+        mock_msg.chat.type.name = "PRIVATE"
+        mock_msg.chat.type.value = "private"
+        mock_msg.reply_text = AsyncMock()
+        mock_msg.reply_photo = AsyncMock()
+
+        mock_chat = MagicMock()
+        mock_chat.id = -1003843941702
+        mock_chat.title = "Xclusive Vault"
+        mock_chat.username = None
+        mock_client.get_chat = AsyncMock(return_value=mock_chat)
+
+        mock_invite = MagicMock()
+        mock_invite.invite_link = "https://t.me/+TestGatekeeperLink"
+        mock_client.create_chat_invite_link = AsyncMock(return_value=mock_invite)
+        mock_client.get_chat_member = AsyncMock(side_effect=Exception("UserNotParticipant"))
+
+        with patch("database.users.add_user", new=AsyncMock()), \
+             patch("database.users.is_banned", new=AsyncMock(return_value=False)), \
+             patch("utils.fsub.check_fsub", new=AsyncMock(return_value=True)):
+            await start_command_handler(mock_client, mock_msg)
+            # Must reply with either photo or text containing the invite link
+            sent_url = None
+            if mock_msg.reply_photo.called:
+                markup = mock_msg.reply_photo.call_args[1].get("reply_markup")
+                sent_url = markup.inline_keyboard[0][0].url
+            elif mock_msg.reply_text.called:
+                markup = mock_msg.reply_text.call_args[1].get("reply_markup")
+                if markup:
+                    sent_url = markup.inline_keyboard[0][0].url
+
+            self.assertEqual(sent_url, "https://t.me/+TestGatekeeperLink")
+
 
 if __name__ == "__main__":
     unittest.main()
