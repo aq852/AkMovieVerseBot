@@ -170,6 +170,8 @@ ADMIN_COMMANDS = [
     BotCommand("gifts", "Active gift reward campaigns dashboard"),
     BotCommand("giftstats", "Live gift reward analytics: /giftstats [id]"),
     BotCommand("delgift", "Revoke gift campaign: /delgift <gift_id>"),
+    BotCommand("repostgifts", "Migrate/repost gifts to channel: /repostgifts [limit]"),
+    BotCommand("giftcatalog", "Master index list of all active gifts: /giftcatalog"),
     BotCommand("giftban", "Blacklist user from gifts: /giftban <user_id>"),
     BotCommand("giftunban", "Unban user from gifts: /giftunban <user_id>"),
     BotCommand("ss", "Capture video screenshots: reply /ss [count]"),

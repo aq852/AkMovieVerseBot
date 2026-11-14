@@ -486,7 +486,7 @@ CHEAT_SHEET_TEXT = (
     "📜 <b>Admin Commands Quick Reference</b>\n"
     "━━━━━━━━━━━━━━━━━━\n"
     "<blockquote expandable><b>🎁 GIFTS, SPIN &amp; STORE:</b>\n"
-    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /giftretry | /setgiftinterval | /setgiftquiet | /setgiftclean | /giftban | /giftunban | /giftsettings | /spin | /store | /profile | /leaderboard | /givecoins | /takecoins | /additem | /delitem | /storeitems</code>\n"
+    "• <code>/gift | /giftbatch | /setgiftchannel | /gifts | /giftstats | /delgift | /giftqueue | /giftretry | /setgiftinterval | /setgiftquiet | /setgiftclean | /repostgifts | /giftcatalog | /giftban | /giftunban | /giftsettings | /spin | /store | /profile | /leaderboard | /givecoins | /takecoins | /additem | /delitem | /storeitems</code>\n"
     "\n"
     "<b>📢 ADS &amp; SHORTENERS:</b>\n"
     "• <code>/setad | /ads | /delad | /shorteners | /shortenerstats | /set_web_url | /add_shortener | /del_shortener | /setfreelimit</code>\n"
