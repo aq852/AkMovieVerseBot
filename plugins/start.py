@@ -211,6 +211,57 @@ def get_time_greeting() -> str:
         return "🌙 Good Night"
 
 
+async def build_start_menu_content(user_id: int, name: str, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Generate consistent welcome text and interactive button markup for /start and Back-to-Home."""
+    hour = datetime.datetime.utcnow().hour + 5.5
+    if 5 <= hour < 12:
+        greeting_time = "GOOD MORNING 🌅"
+    elif 12 <= hour < 17:
+        greeting_time = "GOOD AFTERNOON 🌔"
+    elif 17 <= hour < 21:
+        greeting_time = "GOOD EVENING 🌆"
+    else:
+        greeting_time = "GOOD NIGHT 🌙"
+
+    welcome_text = (
+        f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
+        f"HEY <b>{html.escape(name)}</b>, {greeting_time}\n\n"
+        f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
+    )
+
+    markup_rows = [
+        [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
+        [
+            InlineKeyboardButton("HELP 📢", callback_data="help_menu"),
+            InlineKeyboardButton("ABOUT 📖", callback_data="about_menu")
+        ]
+    ]
+
+    from plugins.stream import get_effective_stream_base_url
+    stream_base = get_effective_stream_base_url()
+    if getattr(Config, "ENABLE_BROWSE_BUTTON", False) and Config.ENABLE_STREAMING and stream_base and not any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+        markup_rows.insert(1, [
+            InlineKeyboardButton("🌐 BROWSE WEB CINEMA ↗️", url=f"{stream_base}/browse")
+        ])
+
+    # Time-based sponsor ad for non-VIP users (Bottom button + caption link)
+    if not await is_premium(user_id):
+        try:
+            from database.ads import get_active_sponsor_ad
+            ad = await get_active_sponsor_ad()
+            if ad and ad.get("text") and ad.get("url"):
+                ad_title = ad["text"]
+                ad_url = ad["url"]
+                markup_rows.append([
+                    InlineKeyboardButton(f"🔥 {ad_title} ↗️", url=ad_url)
+                ])
+                welcome_text += f"\n\n📢 <i>Sponsored:</i> <a href=\"{ad_url}\">{html.escape(ad_title)}</a>"
+        except Exception as e:
+            logger.debug(f"Could not load sponsor ad for start: {e}")
+
+    return welcome_text, InlineKeyboardMarkup(markup_rows)
+
+
 @Client.on_message(filters.command("start") & filters.private)
 async def start_command_handler(client: Client, message: Message):
     """Handle /start command with greeting, deep-linking, FSub, and token verification."""
@@ -716,57 +767,6 @@ async def start_command_handler(client: Client, message: Message):
         markup = InlineKeyboardMarkup(buttons)
         await message.reply_text(success_text, reply_markup=markup, disable_web_page_preview=True)
         return
-
-async def build_start_menu_content(user_id: int, name: str, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
-    """Generate consistent welcome text and interactive button markup for /start and Back-to-Home."""
-    hour = datetime.datetime.utcnow().hour + 5.5
-    if 5 <= hour < 12:
-        greeting_time = "GOOD MORNING 🌅"
-    elif 12 <= hour < 17:
-        greeting_time = "GOOD AFTERNOON 🌔"
-    elif 17 <= hour < 21:
-        greeting_time = "GOOD EVENING 🌆"
-    else:
-        greeting_time = "GOOD NIGHT 🌙"
-
-    welcome_text = (
-        f"🚩<i>JAI SHRI RAM</i>🚩\n\n"
-        f"HEY <b>{html.escape(name)}</b>, {greeting_time}\n\n"
-        f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
-    )
-
-    markup_rows = [
-        [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
-        [
-            InlineKeyboardButton("HELP 📢", callback_data="help_menu"),
-            InlineKeyboardButton("ABOUT 📖", callback_data="about_menu")
-        ]
-    ]
-
-    from plugins.stream import get_effective_stream_base_url
-    stream_base = get_effective_stream_base_url()
-    if getattr(Config, "ENABLE_BROWSE_BUTTON", False) and Config.ENABLE_STREAMING and stream_base and not any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
-        markup_rows.insert(1, [
-            InlineKeyboardButton("🌐 BROWSE WEB CINEMA ↗️", url=f"{stream_base}/browse")
-        ])
-
-    # Time-based sponsor ad for non-VIP users (Bottom button + caption link)
-    if not await is_premium(user_id):
-        try:
-            from database.ads import get_active_sponsor_ad
-            ad = await get_active_sponsor_ad()
-            if ad and ad.get("text") and ad.get("url"):
-                ad_title = ad["text"]
-                ad_url = ad["url"]
-                markup_rows.append([
-                    InlineKeyboardButton(f"🔥 {ad_title} ↗️", url=ad_url)
-                ])
-                welcome_text += f"\n\n📢 <i>Sponsored:</i> <a href=\"{ad_url}\">{html.escape(ad_title)}</a>"
-        except Exception as e:
-            logger.debug(f"Could not load sponsor ad for start: {e}")
-
-    return welcome_text, InlineKeyboardMarkup(markup_rows)
-
 
     # 7. Standard /start Greeting
     welcome_text, markup = await build_start_menu_content(user_id, name, bot_username)

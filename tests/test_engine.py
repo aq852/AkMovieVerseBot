@@ -2500,6 +2500,24 @@ class TestAutoFilterEngine(unittest.TestCase):
             back_buttons = [btn.text for row in called_kwargs["reply_markup"].inline_keyboard for btn in row]
             self.assertEqual(buttons, back_buttons)
 
+            # 3. Test start_command_handler directly for plain /start
+            from plugins.start import start_command_handler
+            from unittest.mock import patch
+            mock_message = MagicMock()
+            mock_message.from_user.id = 12345
+            mock_message.from_user.first_name = "Amit"
+            mock_message.from_user.username = "AmitUser"
+            mock_message.text = "/start"
+            mock_message.reply_photo = AsyncMock()
+            mock_message.reply_text = AsyncMock()
+
+            with patch("plugins.start.is_banned", new=AsyncMock(return_value=False)), \
+                 patch("plugins.start.add_user", new=AsyncMock(return_value=({}, False))), \
+                 patch("plugins.start.get_random_start_pic", return_value="https://example.com/pic.jpg"):
+                await start_command_handler(mock_client, mock_message)
+                mock_message.reply_photo.assert_called_once()
+                self.assertIn("JAI SHRI RAM", mock_message.reply_photo.call_args.kwargs["caption"])
+
         asyncio.run(_test())
 
     def test_stream_catalog_management_and_bare_codes(self):
