@@ -229,8 +229,24 @@ async def build_start_menu_content(user_id: int, name: str, bot_username: str) -
         f"🤖 I AM <b>{bot_username}</b>, THE MOST POWERFUL AUTO FILTER BOT WITH PREMIUM FEATURES."
     )
 
+    try:
+        from hydrogram.types import WebAppInfo
+    except ImportError:
+        from pyrogram.types import WebAppInfo
+
+    from plugins.stream import get_effective_stream_base_url
+    stream_base = get_effective_stream_base_url()
+    if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
+        stream_base = "https://akmovieverse.duckdns.org"
+
+    galaxy_target_url = f"{stream_base}/galaxy"
+
     markup_rows = [
         [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
+        [
+            InlineKeyboardButton("🪐 3D GALAXY 🚀", web_app=WebAppInfo(url=galaxy_target_url)),
+            InlineKeyboardButton("🎰 LUCKY SPIN 🎁", callback_data="start_spin")
+        ],
         [
             InlineKeyboardButton("HELP 📢", callback_data="help_menu"),
             InlineKeyboardButton("ABOUT 📖", callback_data="about_menu")
@@ -658,7 +674,7 @@ async def start_command_handler(client: Client, message: Message):
     elif args.startswith("galaxy_") or args in ("galaxy", "movieverse", "3d"):
         import urllib.parse
         raw_galaxy_q = urllib.parse.unquote_plus(args.split("galaxy_", 1)[1]).strip() if args.startswith("galaxy_") else ""
-        from utils.web_server import get_effective_stream_base_url
+        from plugins.stream import get_effective_stream_base_url
         stream_base = get_effective_stream_base_url()
         if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
             stream_base = "https://akmovieverse.duckdns.org"
@@ -909,3 +925,12 @@ async def refer_command(client: Client, message: Message):
     ])
 
     await message.reply_text(text, reply_markup=markup)
+
+
+@Client.on_callback_query(filters.regex(r"^start_spin$"))
+async def start_spin_callback(client: Client, query: CallbackQuery):
+    """Trigger spin dashboard directly when tapping Lucky Spin on start menu."""
+    await query.answer("🎰 Opening Lucky Spin...")
+    from plugins.spin import spin_command_handler
+    query.message.from_user = query.from_user
+    await spin_command_handler(client, query.message)

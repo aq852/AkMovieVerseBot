@@ -2478,6 +2478,8 @@ class TestAutoFilterEngine(unittest.TestCase):
 
             buttons = [btn.text for row in markup.inline_keyboard for btn in row]
             self.assertIn("🔰 ADD ME TO YOUR GROUP 🔰", buttons)
+            self.assertIn("🪐 3D GALAXY 🚀", buttons)
+            self.assertIn("🎰 LUCKY SPIN 🎁", buttons)
             self.assertIn("HELP 📢", buttons)
             self.assertIn("ABOUT 📖", buttons)
             # Ensure "UPGRADE TO VIP" is NOT present on standard start menu
@@ -2517,6 +2519,20 @@ class TestAutoFilterEngine(unittest.TestCase):
                 await start_command_handler(mock_client, mock_message)
                 mock_message.reply_photo.assert_called_once()
                 self.assertIn("JAI SHRI RAM", mock_message.reply_photo.call_args.kwargs["caption"])
+
+            # 4. Test start_spin_callback triggers spin handler
+            from plugins.start import start_spin_callback
+            mock_spin_query = MagicMock()
+            mock_spin_query.from_user.id = 12345
+            mock_spin_query.from_user.first_name = "Amit"
+            mock_spin_query.message = MagicMock()
+            mock_spin_query.answer = AsyncMock()
+
+            with patch("plugins.spin.spin_command_handler", new=AsyncMock()) as mock_spin_handler:
+                await start_spin_callback(mock_client, mock_spin_query)
+                mock_spin_query.answer.assert_called_once()
+                mock_spin_handler.assert_called_once()
+                self.assertEqual(mock_spin_query.message.from_user.id, 12345)
 
         asyncio.run(_test())
 
