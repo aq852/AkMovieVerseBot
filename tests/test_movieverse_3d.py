@@ -54,6 +54,7 @@ class TestMovieVerse3D(unittest.TestCase):
         self.assertIn("shareCurrentMovie", html)
         self.assertIn("shareActiveFromHud", html)
         self.assertIn("t.me/share/url", html)
+        self.assertIn("galaxyDirectUrl", html)
 
         # Must have Feature 4: 3D Hologram Particle Burst & Shockwave System
         self.assertIn("triggerHologramBurst", html)

@@ -687,7 +687,8 @@ def build_filter_buttons(
     if is_pm:
         btn_3d = InlineKeyboardButton("🪐 MovieVerse 3D (Explore Results) 🚀", web_app=WebAppInfo(url=galaxy_search_url))
     else:
-        btn_3d = InlineKeyboardButton("🪐 MovieVerse 3D (Explore Results) 🚀", url=f"https://t.me/{bot_username}?start=galaxy_{urllib.parse.quote_plus(short_q)}")
+        safe_group_q = re.sub(r"[^a-zA-Z0-9_-]", "_", short_q)
+        btn_3d = InlineKeyboardButton("🪐 MovieVerse 3D (Explore Results) 🚀", url=f"https://t.me/{bot_username}?start=galaxy_{safe_group_q}")
 
     keyboard.append([btn_3d])
 

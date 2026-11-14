@@ -1507,13 +1507,16 @@ GALAXY_HTML_TEMPLATE = """<!DOCTYPE html>
 
             const botUname = BOT_USERNAME || "TheFlixifyBot";
             const safeTitle = (cleanName || title || "Movie").trim();
-            const encodedTitle = encodeURIComponent(safeTitle);
-            const movieDeepLink = `https://t.me/${botUname}?start=galaxy_${encodedTitle}`;
-
             const yearStr = year ? ` (${year})` : "";
-            const shareText = `🍿 Hey! Watch & Download: ${title}${yearStr}\n⚡ High-Quality HD Prints Available on @${botUname}!\n👇 Tap to explore in 3D Galaxy:`;
 
-            const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(movieDeepLink)}&text=${encodeURIComponent(shareText)}`;
+            const effectiveBase = (BASE_URL && !BASE_URL.includes("__BASE_URL__") && !BASE_URL.includes("127.0.0.1") && !BASE_URL.includes("localhost"))
+                ? BASE_URL.replace(/\/+$/, "")
+                : (window.location && window.location.origin ? window.location.origin.replace(/\/+$/, "") : "https://akmovieverse.duckdns.org");
+
+            const galaxyDirectUrl = `${effectiveBase}/galaxy?q=${encodeURIComponent(safeTitle)}`;
+            const shareText = `🍿 Hey! Watch & Download: ${title}${yearStr}\n⚡ High-Quality HD Prints Available on @${botUname}!\n\n👇 Tap to explore in 3D Galaxy:`;
+
+            const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(galaxyDirectUrl)}&text=${encodeURIComponent(shareText)}`;
 
             if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.openTelegramLink === "function") {
                 window.Telegram.WebApp.openTelegramLink(tgShareUrl);

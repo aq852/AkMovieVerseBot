@@ -673,7 +673,7 @@ async def start_command_handler(client: Client, message: Message):
     # 6b. MovieVerse 3D Deep-link: /start galaxy_<query> or /start movieverse
     elif args.startswith("galaxy_") or args in ("galaxy", "movieverse", "3d"):
         import urllib.parse
-        raw_galaxy_q = urllib.parse.unquote_plus(args.split("galaxy_", 1)[1]).strip() if args.startswith("galaxy_") else ""
+        raw_galaxy_q = urllib.parse.unquote_plus(args.split("galaxy_", 1)[1]).replace("_", " ").strip() if args.startswith("galaxy_") else ""
         from plugins.stream import get_effective_stream_base_url
         stream_base = get_effective_stream_base_url()
         if not stream_base or any(h in stream_base for h in ("127.0.0.1", "localhost", "0.0.0.0")):
