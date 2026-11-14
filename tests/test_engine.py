@@ -2229,12 +2229,38 @@ class TestAutoFilterEngine(unittest.TestCase):
             _PENDING_GIFT_VIDEOS
         )
         import asyncio
+        from unittest.mock import patch, MagicMock, AsyncMock
+        from database.mongo import mongo
+
+        fake_storage = {}
+
+        async def fake_update_one(filter_doc, update_doc, upsert=False):
+            if "$set" in update_doc:
+                for k, v in update_doc["$set"].items():
+                    if k.startswith("config."):
+                        sub = k.split("config.", 1)[1]
+                        fake_storage[sub] = v
+                    else:
+                        fake_storage[k] = v
+            return MagicMock()
+
+        async def fake_find_one(filter_doc):
+            return {"key": "auto_gift_config", "config": dict(fake_storage)}
+
+        mock_bot_settings_col = MagicMock()
+        mock_bot_settings_col.update_one = AsyncMock(side_effect=fake_update_one)
+        mock_bot_settings_col.find_one = AsyncMock(side_effect=fake_find_one)
+
+        orig_db_getitem = mongo.db.__class__.__getitem__
+        def intercepted_db_getitem(self, key):
+            if key == "bot_settings":
+                return mock_bot_settings_col
+            return orig_db_getitem(self, key)
 
         async def _test():
-            # 1. Backup original config so tests NEVER overwrite user's production settings
-            orig_cfg = dict(await get_auto_gift_config())
-            try:
-                # 2. Update config with test parameters
+            with patch.dict("plugins.gifts._AUTO_GIFT_CONFIG_CACHE", {"loaded": False}, clear=True), \
+                 patch.object(mongo.db.__class__, "__getitem__", intercepted_db_getitem):
+                # 2. Update config with test parameters (isolated in fake_storage)
                 await save_auto_gift_config({
                     "enabled": True,
                     "db_channel": -1001122334455,
@@ -2317,7 +2343,6 @@ class TestAutoFilterEngine(unittest.TestCase):
 
                 # 6. Test Adsterra / Sponsor Task Anti-Cheat Timer
                 from database.gifts import create_gift_task_token, is_gift_task_verified
-                from database.mongo import mongo
                 import datetime
                 ad_tok = await create_gift_task_token(
                     gift_id="test_ad_gift_99",
@@ -2352,9 +2377,6 @@ class TestAutoFilterEngine(unittest.TestCase):
                     )
                     self.assertTrue(await is_gift_task_verified("test_ad_gift_99", 77889900, "ad_task"))
                     await mongo.db["gift_task_tokens"].delete_many({"gift_id": "test_ad_gift_99"})
-            finally:
-                # Restore original user settings
-                await save_auto_gift_config(orig_cfg)
 
         asyncio.run(_test())
 
