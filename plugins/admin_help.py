@@ -100,7 +100,11 @@ CATEGORY_CONTENT = {
         "• <code>/setgiftquiet &lt;on|off&gt;</code>\n"
         "<b>Usage:</b> Toggle night sleep mode (12 AM - 8 AM IST) so users are not disturbed while sleeping.\n\n"
         "• <code>/setgiftclean &lt;on|off&gt;</code>\n"
-        "<b>Usage:</b> Toggle channel clean mode (auto-deletes previous gift post when new one drops)."
+        "<b>Usage:</b> Toggle channel clean mode (auto-deletes previous gift post when new one drops).\n\n"
+        "• <code>/repostgifts [limit]</code> (aliases: <code>/migrategifts</code>, <code>/repost_gifts</code>)\n"
+        "<b>Usage:</b> 1-Click channel migration: If your public channel gets banned or changed, this command automatically re-publishes all active gifts from database into your new channel!\n\n"
+        "• <code>/giftcatalog</code> (alias: <code>/giftindex</code>)\n"
+        "<b>Usage:</b> Generates a master clickable index list of all active gifts."
     ),
 
     "ads": (

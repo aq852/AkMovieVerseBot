@@ -912,8 +912,199 @@ async def set_gift_channel_command(client: Client, message: Message):
         f"✅ <b>GIFT AUTO-POST CHANNEL CONFIGURED!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📢 <b>Target Channel:</b> <code>{title}</code> (<code>{target}</code>)\n\n"
-        f"🚀 <i>Every new gift created with /gift or /giftbatch will now be automatically published directly to this channel!</i>"
+        f"🚀 <i>Every new gift created with /gift or /giftbatch will now be automatically published directly to this channel!</i>\n\n"
+        f"💡 <b>Channel Migration Tip:</b> If this is a new channel and you want to restore previous gift drops, send <code>/repostgifts</code> to auto-post all active gifts here!"
     )
+
+
+# ==============================================================================
+# Admin Command: /repostgifts [limit] (1-Click Channel Migration Tool)
+# ==============================================================================
+
+@Client.on_message(filters.command(["repostgifts", "migrategifts", "repost_gifts"]) & filters.private)
+async def repost_gifts_command(client: Client, message: Message):
+    """Admin command to automatically re-publish active gifts from MongoDB into a new channel."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied:</b> Admin only.")
+
+    target_channel = await get_gift_channel()
+    cfg = await get_auto_gift_config()
+    if not target_channel:
+        target_channel = cfg.get("post_channel")
+
+    if not target_channel:
+        return await message.reply_text(
+            "⚠️ <b>Target Channel Not Configured!</b>\n\n"
+            "Please first set your new channel using:\n"
+            "• <code>/setgiftchannel &lt;channel_id&gt;</code>\n"
+            "• or <code>/setgiftpost &lt;channel_id&gt;</code>\n\n"
+            "<i>Once set, run /repostgifts again to migrate all gifts!</i>"
+        )
+
+    # Check bot permissions in target channel
+    ch_title = str(target_channel)
+    try:
+        chat = await client.get_chat(target_channel)
+        if chat and chat.title:
+            ch_title = chat.title
+    except Exception as e:
+        return await message.reply_text(
+            f"❌ <b>Cannot access target channel:</b> <code>{target_channel}</code>\n"
+            f"Error: <code>{e}</code>\n\n"
+            "⚠️ Please ensure the bot is added to the channel as an Admin with <b>Post Messages</b> permission."
+        )
+
+    # Parse limit (default 100, max 500)
+    args = message.text.split()
+    limit = 100
+    if len(args) > 1 and args[1].isdigit():
+        limit = max(1, min(500, int(args[1])))
+
+    from database.gifts import DEFAULT_GIFT_POSTER
+
+    cursor = mongo.db["gift_rewards"].find({"is_active": True}).sort("created_at", 1).limit(limit)
+    gifts_list = await cursor.to_list(length=limit)
+
+    if not gifts_list:
+        return await message.reply_text("ℹ️ <b>No active gifts found in database to repost.</b>")
+
+    status_msg = await message.reply_text(
+        f"🔄 <b>Starting Gift Channel Migration...</b>\n\n"
+        f"📢 <b>Target Channel:</b> <code>{ch_title}</code>\n"
+        f"🎁 <b>Active Gifts to Repost:</b> <code>{len(gifts_list)}</code>\n"
+        f"⏱️ <b>Pacing:</b> Safe 2.5s delay per post (avoids floodwait)\n\n"
+        f"⏳ <i>Please wait while posts are being published...</i>"
+    )
+
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+    post_hdr = cfg.get("post_header", "🔥 EXCLUSIVE DROP 🔥")
+    post_btn = cfg.get("post_button", "⚡ Get Full Video ➔")
+
+    reposted_count = 0
+    failed_count = 0
+
+    for idx, gift in enumerate(gifts_list, start=1):
+        gift_id = gift.get("gift_id")
+        title = gift.get("title", "Exclusive Reward")
+        file_size = gift.get("total_size", 0)
+        auto_del_sec = gift.get("auto_delete_seconds", 300)
+        del_mins = auto_del_sec // 60
+        del_str = f"{del_mins} Mins" if del_mins > 0 else f"{auto_del_sec}s"
+        max_c = gift.get("max_claims", 0)
+        stock_str = f"First {max_c} Users" if max_c > 0 else "Unlimited"
+        validity_str = "Lifetime" if not gift.get("expires_at") else "Limited Time"
+        vip_badge = " • 👑 <b>VIP Only</b>" if gift.get("is_vip_only") else ""
+        gift_link = f"https://t.me/{bot_uname}?start=gift_{gift_id}"
+
+        clean_t = format_clean_title(title)
+        card_text = (
+            f"<b>{post_hdr}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📦 <b>Item:</b> <code>{html.escape(clean_t)}</code>\n"
+            f"💾 <b>Size:</b> <code>{get_readable_size(file_size)}</code>  •  👥 <b>Stock:</b> <code>{stock_str}</code>\n"
+            f"⏳ <b>Validity:</b> <code>{validity_str}</code>  •  ⏱️ <b>Auto-Delete:</b> <code>{del_str}</code>{vip_badge}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔗 <b>Download / Watch Online:</b>\n"
+            f"👉 <a href=\"{gift_link}\"><b>⚡ CLICK HERE TO GET FULL VIDEO ⚡</b></a>"
+        )
+
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(post_btn, url=gift_link)]
+        ])
+
+        poster = gift.get("poster_url") or DEFAULT_GIFT_POSTER
+        sent_msg = None
+        try:
+            sent_msg = await client.send_photo(
+                chat_id=target_channel,
+                photo=poster,
+                caption=card_text,
+                reply_markup=markup
+            )
+        except Exception:
+            try:
+                sent_msg = await client.send_message(
+                    chat_id=target_channel,
+                    text=card_text,
+                    reply_markup=markup,
+                    disable_web_page_preview=False
+                )
+            except Exception as e_send:
+                logger.warning(f"Error reposting gift {gift_id} to {target_channel}: {e_send}")
+
+        if sent_msg:
+            reposted_count += 1
+            try:
+                await mongo.db["gift_rewards"].update_one(
+                    {"gift_id": gift_id},
+                    {"$set": {"post_chat_id": target_channel, "post_msg_id": sent_msg.id}}
+                )
+            except Exception:
+                pass
+        else:
+            failed_count += 1
+
+        if idx % 5 == 0 or idx == len(gifts_list):
+            try:
+                await status_msg.edit_text(
+                    f"🔄 <b>Migrating Gifts to Channel:</b> <code>{ch_title}</code>\n\n"
+                    f"• <b>Progress:</b> <code>{idx}/{len(gifts_list)}</code>\n"
+                    f"• <b>Successfully Reposted:</b> <code>{reposted_count}</code>\n"
+                    f"• <b>Failed:</b> <code>{failed_count}</code>"
+                )
+            except Exception:
+                pass
+
+        await asyncio.sleep(2.5)
+
+    await status_msg.edit_text(
+        f"✅ <b>GIFT CHANNEL MIGRATION COMPLETED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📢 <b>Channel:</b> <code>{ch_title}</code>\n"
+        f"🎁 <b>Total Reposted:</b> <code>{reposted_count}</code> gifts\n"
+        f"⚠️ <b>Failed / Skipped:</b> <code>{failed_count}</code>\n\n"
+        f"🎉 <i>All old gifts have been published live into your new channel with active claim buttons!</i>"
+    )
+
+
+# ==============================================================================
+# Admin Command: /giftcatalog (Master Catalog / Pinned Index of All Gifts)
+# ==============================================================================
+
+@Client.on_message(filters.command(["giftcatalog", "giftindex"]) & filters.private)
+async def gift_catalog_command(client: Client, message: Message):
+    """Generate a master clickable catalog list of all active gifts."""
+    if not Config.is_admin(message.from_user.id):
+        return await message.reply_text("⛔ <b>Access Denied:</b> Admin only.")
+
+    cursor = mongo.db["gift_rewards"].find({"is_active": True}).sort("created_at", -1).limit(100)
+    gifts_list = await cursor.to_list(length=100)
+
+    if not gifts_list:
+        return await message.reply_text("ℹ️ <b>No active gifts found in database.</b>")
+
+    bot_uname = client.me.username if client.me else Config.BOT_USERNAME
+    lines = [
+        "📚 <b>MASTER GIFTS & REWARDS CATALOG</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🔥 <i>Total Active Drops: {len(gifts_list)}</i>\n"
+    ]
+
+    for idx, gift in enumerate(gifts_list, start=1):
+        gid = gift.get("gift_id")
+        title = format_clean_title(gift.get("title", "Reward"))
+        size_str = get_readable_size(gift.get("total_size", 0))
+        link = f"https://t.me/{bot_uname}?start=gift_{gid}"
+        lines.append(f"{idx}. <a href=\"{link}\"><b>{html.escape(title[:38])}</b></a> ({size_str})")
+
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("💡 <i>Click any title to instantly open and claim it in the bot!</i>")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...and more!</i>"
+
+    await message.reply_text(text, disable_web_page_preview=True)
 
 # ==============================================================================
 # 🎁 Automated Gift Drops Engine & Interactive Settings Dashboard
