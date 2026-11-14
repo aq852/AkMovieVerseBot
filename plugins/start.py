@@ -244,7 +244,7 @@ async def build_start_menu_content(user_id: int, name: str, bot_username: str) -
     markup_rows = [
         [InlineKeyboardButton("🔰 ADD ME TO YOUR GROUP 🔰", url=f"https://t.me/{bot_username}?startgroup=true")],
         [
-            InlineKeyboardButton("🪐 3D GALAXY 🚀", web_app=WebAppInfo(url=galaxy_target_url)),
+            InlineKeyboardButton("🍿 MOVIE HUB 🚀", web_app=WebAppInfo(url=galaxy_target_url)),
             InlineKeyboardButton("🎰 LUCKY SPIN 🎁", callback_data="start_spin")
         ],
         [

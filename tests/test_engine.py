@@ -2478,7 +2478,7 @@ class TestAutoFilterEngine(unittest.TestCase):
 
             buttons = [btn.text for row in markup.inline_keyboard for btn in row]
             self.assertIn("🔰 ADD ME TO YOUR GROUP 🔰", buttons)
-            self.assertIn("🪐 3D GALAXY 🚀", buttons)
+            self.assertIn("🍿 MOVIE HUB 🚀", buttons)
             self.assertIn("🎰 LUCKY SPIN 🎁", buttons)
             self.assertIn("HELP 📢", buttons)
             self.assertIn("ABOUT 📖", buttons)
