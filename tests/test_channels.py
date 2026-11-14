@@ -51,6 +51,22 @@ class TestStorageChannels(unittest.IsolatedAsyncioTestCase):
         val = await get_bot_setting("custom_test_key")
         self.assertEqual(val, "active_val")
 
+    def test_smart_protected_channel_link_encoding_and_decoding(self):
+        import base64
+        channel_id = -1002331917822
+        # Encode
+        raw_bytes = str(channel_id).encode("utf-8")
+        b64_code = base64.urlsafe_b64encode(raw_bytes).decode("utf-8").rstrip("=")
+        self.assertEqual(b64_code, "LTEwMDIzMzE5MTc4MjI")
+
+        # Decode (with padding restoration as done in start.py)
+        raw_b64 = b64_code
+        padding = len(raw_b64) % 4
+        if padding:
+            raw_b64 += "=" * (4 - padding)
+        decoded_cid = int(base64.urlsafe_b64decode(raw_b64.encode("utf-8")).decode("utf-8"))
+        self.assertEqual(decoded_cid, channel_id)
+
 
 if __name__ == "__main__":
     unittest.main()

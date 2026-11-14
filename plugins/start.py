@@ -704,6 +704,121 @@ async def start_command_handler(client: Client, message: Message):
         await message.reply_text(g_text, reply_markup=g_markup, disable_web_page_preview=True)
         return
 
+    # 6c. Smart Gatekeeper Channel Request Deep-link: /start req_<b64> or /start gate_<b64>
+    elif args.startswith("req_") or args.startswith("gate_"):
+        raw_b64 = args.split("_", 1)[1].strip()
+        padding = len(raw_b64) % 4
+        if padding:
+            raw_b64 += "=" * (4 - padding)
+        try:
+            import base64
+            decoded_cid_str = base64.urlsafe_b64decode(raw_b64.encode("utf-8")).decode("utf-8")
+            target_channel_id = int(decoded_cid_str)
+        except Exception as e:
+            logger.warning(f"Invalid gatekeeper base64 string: {args} ({e})")
+            await message.reply_text("❌ <b>Invalid or expired channel invite link.</b>")
+            return
+
+        bot_uname = client.me.username if client.me and client.me.username else Config.BOT_USERNAME
+
+        try:
+            chat = await client.get_chat(target_channel_id)
+        except Exception as e:
+            logger.error(f"Cannot get chat info for gatekeeper channel {target_channel_id}: {e}")
+            await message.reply_text("❌ <b>Channel is currently unavailable or bot was removed as admin.</b>")
+            return
+
+        # Check if user is ALREADY a participant in the channel
+        try:
+            from pyrogram.enums import ChatMemberStatus
+            member = await client.get_chat_member(target_channel_id, user_id)
+            if member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER):
+                c_title = chat.title or "Channel"
+                c_link = f"https://t.me/{chat.username}" if getattr(chat, "username", None) else None
+                btns = []
+                if c_link:
+                    btns.append([InlineKeyboardButton(f"• 📢 OPEN {c_title[:20]} • ↗️", url=c_link)])
+                btns.append([InlineKeyboardButton("• 🍿 SEARCH MOVIES IN BOT •", url=f"https://t.me/{bot_uname}?start=help")])
+                await message.reply_text(
+                    f"✅ <b>You are already a member of {html.escape(c_title)}!</b>\n\n"
+                    "You have full access to all posts and updates. Enjoy!",
+                    reply_markup=InlineKeyboardMarkup(btns)
+                )
+                return
+        except Exception:
+            pass
+
+        # Generate fresh ephemeral 5-minute join-request link for this user
+        invite_link = None
+        try:
+            invite = await client.create_chat_invite_link(
+                chat_id=target_channel_id,
+                creates_join_request=True,
+                expire_date=datetime.datetime.utcnow() + datetime.timedelta(minutes=5),
+                name=f"Req_{user_id}_{int(time.time())}"
+            )
+            invite_link = invite.invite_link
+        except Exception as e:
+            logger.error(f"Failed creating ephemeral gatekeeper invite link for {target_channel_id}: {e}")
+            if getattr(chat, "username", None):
+                invite_link = f"https://t.me/{chat.username}"
+
+        if not invite_link:
+            await message.reply_text("❌ <b>Could not generate channel access link. Please ensure bot is Admin with 'Invite Users' permission in the channel.</b>")
+            return
+
+        # Background task to revoke link after 5 minutes if unused
+        async def _auto_revoke_invite(cid: int, ilink: str):
+            await asyncio.sleep(300)
+            try:
+                await client.revoke_chat_invite_link(cid, ilink)
+            except Exception:
+                pass
+
+        asyncio.create_task(_auto_revoke_invite(target_channel_id, invite_link))
+
+        # Format custom welcome/join post
+        from plugins.auto_approve import get_welcome_text, get_welcome_pic, safe_format_welcome
+        template = await get_welcome_text()
+        user_mention = f"[{message.from_user.first_name}](tg://user?id={user_id})"
+        uname_val = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+
+        formatted_caption = safe_format_welcome(
+            template,
+            mention=user_mention,
+            name=message.from_user.first_name or "User",
+            first_name=message.from_user.first_name or "User",
+            title=chat.title or "Channel",
+            id=user_id,
+            username=uname_val,
+            bot=f"@{bot_uname}" if bot_uname else "Bot"
+        )
+
+        c_label = chat.title[:22] if chat.title else "CHANNEL"
+        gate_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"• ⚡ JOIN {c_label} NOW ↗️ •", url=invite_link)],
+            [InlineKeyboardButton("• 🍿 SEARCH MOVIES IN BOT •", url=f"https://t.me/{bot_uname}?start=help")]
+        ])
+
+        pic_url = await get_welcome_pic()
+
+        try:
+            await message.reply_photo(
+                photo=pic_url,
+                caption=formatted_caption,
+                reply_markup=gate_markup
+            )
+        except Exception:
+            try:
+                await message.reply_text(
+                    text=formatted_caption,
+                    reply_markup=gate_markup,
+                    disable_web_page_preview=True
+                )
+            except Exception as e_send:
+                logger.error(f"Error sending gatekeeper welcome post to {user_id}: {e_send}")
+        return
+
     # 7. Time-based & Single-Use Secret Share Deep-link: /start share_<token>
     elif args.startswith("share_"):
         token = args.split("share_")[1]
