@@ -360,7 +360,7 @@ async def create_share_link_command(client: Client, message: Message):
         if duration_str:
             sec = parse_duration(duration_str)
             if sec:
-                expire_dt = datetime.datetime.utcnow() + datetime.timedelta(seconds=sec)
+                expire_dt = datetime.datetime.now() + datetime.timedelta(seconds=sec)
                 duration_label = f"Expires in {duration_str} ({expire_dt.strftime('%d %b, %H:%M UTC')})"
 
         limit_label = "Unlimited Users (Auto-Approved in <1s)"

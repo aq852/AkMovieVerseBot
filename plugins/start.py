@@ -750,21 +750,38 @@ async def start_command_handler(client: Client, message: Message):
 
         # Generate fresh ephemeral 5-minute join-request link for this user
         invite_link = None
+        error_msg = None
         try:
             invite = await client.create_chat_invite_link(
                 chat_id=target_channel_id,
                 creates_join_request=True,
-                expire_date=datetime.datetime.utcnow() + datetime.timedelta(minutes=5),
+                expire_date=datetime.datetime.now() + datetime.timedelta(minutes=5),
                 name=f"Req_{user_id}_{int(time.time())}"
             )
             invite_link = invite.invite_link
         except Exception as e:
-            logger.error(f"Failed creating ephemeral gatekeeper invite link for {target_channel_id}: {e}")
-            if getattr(chat, "username", None):
-                invite_link = f"https://t.me/{chat.username}"
+            logger.warning(f"Failed creating ephemeral invite link with expire_date for {target_channel_id}: {e}")
+            error_msg = str(e)
+            try:
+                # Fallback: create without expire_date (our background task auto-revokes after 5 mins anyway)
+                invite = await client.create_chat_invite_link(
+                    chat_id=target_channel_id,
+                    creates_join_request=True,
+                    name=f"Req_{user_id}_{int(time.time())}"
+                )
+                invite_link = invite.invite_link
+            except Exception as e2:
+                logger.error(f"Failed fallback invite link for {target_channel_id}: {e2}")
+                error_msg = str(e2)
+                if getattr(chat, "username", None):
+                    invite_link = f"https://t.me/{chat.username}"
 
         if not invite_link:
-            await message.reply_text("❌ <b>Could not generate channel access link. Please ensure bot is Admin with 'Invite Users' permission in the channel.</b>")
+            await message.reply_text(
+                f"❌ <b>Could not generate channel access link.</b>\n\n"
+                f"<b>Reason:</b> <code>{html.escape(error_msg or 'Unknown Error')}</code>\n\n"
+                f"💡 <i>Please ensure the bot is an <b>Administrator</b> with 'Invite Users via Link' permission in the channel.</i>"
+            )
             return
 
         # Background task to revoke link after 5 minutes if unused
